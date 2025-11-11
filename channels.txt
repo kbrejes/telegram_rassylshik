@@ -1,0 +1,39 @@
+# Список чатов и групп для мониторинга
+# Формат: @username или ID чата (по одному на строку)
+# Комментарии начинаются с #
+
+# Примеры:
+# @pythonrujobs
+# @freelance_ru
+# -1001234567890
+
+@digital_jobster
+@morejobs
+@rabota_emik
+@freegolup
+@dnative_job
+@evacuatejobs
+@marketing_rabota_jobs
+@theyseeku
+@smmlancer
+@marketing_jobs
+@runello_rus_digitalmarketing
+@targetsmmvakansii
+@forallmarketing
+@seohr
+@work_from_lina
+@zdemcv
+@jobfortarget
+@normrabota
+@smm_msk1
+@workasap
+@dddwork
+@ingamejob_marketing
+@rabotavmsk2
+@vakansii_targetologi
+@tj_collega
+@mediajobs_ru
+@workinstajob
+@perezvonyu
+@Jobsdev_us
+@jobshunt_marketing

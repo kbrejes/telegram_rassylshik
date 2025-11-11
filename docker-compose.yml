@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: telegram_job_bot
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+      - ./channels.txt:/app/channels.txt:ro
+      - ./templates.json:/app/templates.json:ro
+    restart: unless-stopped
+    # Для первой авторизации используйте:
+    # docker-compose run --rm bot python main.py
+    stdin_open: true
+    tty: true
+
+# Если захотите добавить Ollama AI обратно, раскомментируйте:
+#  ollama:
+#    image: ollama/ollama:latest
+#    container_name: telegram_bot_ollama
+#    volumes:
+#      - ollama_data:/root/.ollama
+#    ports:
+#      - "11434:11434"
+#    restart: unless-stopped
+#
+#volumes:
+#  ollama_data:
+
