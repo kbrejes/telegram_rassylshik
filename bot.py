@@ -168,48 +168,55 @@ class JobMonitorBot:
     
     def _check_relevance(self, text: str, keywords: List[str]) -> bool:
         """
-        Проверка релевантности по маркетинговым ключевым словам
+        Проверка релевантности: ТОЛЬКО FB/IG таргет + performance marketing
         
         Args:
             text: Текст сообщения
             keywords: Найденные ключевые слова
         
         Returns:
-            True если сообщение релевантно (содержит маркетинговые термины)
+            True если сообщение релевантно (FB/IG + таргет/performance)
         """
         text_lower = text.lower()
         
-        # Обязательные маркетинговые термины (хотя бы один должен быть)
-        required_terms = [
-            'маркетолог', 'маркетинг',
-            'таргетолог', 'таргет', 'таргетинг',
-            'трафик', 'трафик-менеджер',
-            'smm', 'performance',
-            'фейсбук', 'facebook', 'meta ads',
-            'digital', 'диджитал'
+        # ОБЯЗАТЕЛЬНОЕ условие 1: Facebook / Instagram
+        fb_ig_terms = [
+            'facebook', 'fb', 'фейсбук', 'фб',
+            'instagram', 'инстаграм', 'инста', 'ig',
+            'meta', 'мета', 'meta ads'
         ]
         
-        # Проверяем наличие обязательных терминов
-        has_required = any(term in text_lower for term in required_terms)
+        has_fb_ig = any(term in text_lower for term in fb_ig_terms)
         
-        if not has_required:
-            logger.debug("Сообщение не содержит маркетинговых терминов")
+        # ОБЯЗАТЕЛЬНОЕ условие 2: Таргет / Performance
+        target_perf_terms = [
+            'таргет', 'таргетолог', 'таргетинг',
+            'performance', 'перформанс',
+            'ads manager', 'рекламный кабинет',
+            'facebook ads', 'fb ads', 'instagram ads'
+        ]
+        
+        has_target_perf = any(term in text_lower for term in target_perf_terms)
+        
+        # Должны быть оба условия
+        if not (has_fb_ig and has_target_perf):
+            logger.debug("Сообщение не содержит FB/IG + таргет/performance терминов")
             return False
         
-        # Если нашли маркетинговые ключевые слова из списка
+        # Если нашли ключевые слова из нашего списка
         if keywords:
-            logger.info(f"✓ Найдены маркетинговые ключевые слова: {', '.join(keywords[:5])}")
+            logger.info(f"✓ FB/IG + Таргет/Performance вакансия: {', '.join(keywords[:5])}")
             return True
         
-        # Дополнительная проверка на маркеры вакансий + маркетинг
+        # Дополнительная проверка на маркеры вакансий
         job_markers = [
             'вакансия', 'vacancy', 'ищем', 'требуется', 'нужен', 
             'hiring', 'looking for', 'работа', 'удаленно', 'remote'
         ]
         
         found_markers = [m for m in job_markers if m in text_lower]
-        if found_markers and has_required:
-            logger.info(f"✓ Найдены маркеры вакансий + маркетинг: {', '.join(found_markers[:3])}")
+        if found_markers:
+            logger.info(f"✓ FB/IG + Таргет вакансия найдена: {', '.join(found_markers[:2])}")
             return True
         
         return False
@@ -232,18 +239,10 @@ class JobMonitorBot:
         # Формируем ссылку на сообщение
         message_link = message_processor.get_message_link(message, chat)
         
-        # Форматируем уведомление
+        # Форматируем уведомление (компактный формат)
         lines = []
         lines.append("🎯 **Новая вакансия!**")
         lines.append("")
-        
-        # Оплата (если есть) - показываем первой!
-        if payment_info.get('raw'):
-            payment_line = f"💰 **Оплата:** {payment_info['raw']}"
-            if payment_info.get('type'):
-                payment_line += f" ({payment_info['type']})"
-            lines.append(payment_line)
-            lines.append("")
         
         # Чат
         lines.append(f"📍 **Чат:** {chat_title}")
@@ -261,9 +260,9 @@ class JobMonitorBot:
         
         # Контакт автора из метаданных
         if sender_info.get('username'):
-            contacts_list.append(f"👤 Автор: {sender_info['username']}")
+            contacts_list.append(f"✉️ {sender_info['username']}")
         elif sender_info.get('full_name'):
-            contacts_list.append(f"👤 Автор: {sender_info['full_name']}")
+            contacts_list.append(f"👤 {sender_info['full_name']}")
         
         # Контакты из текста
         if contacts.get('telegram') and contacts['telegram'] != sender_info.get('username'):
@@ -278,13 +277,6 @@ class JobMonitorBot:
             lines.append("**Контакты:**")
             for contact in contacts_list:
                 lines.append(f"   {contact}")
-        
-        # Текст сообщения
-        lines.append("")
-        lines.append("─" * 40)
-        preview = message.text[:800] + "..." if len(message.text) > 800 else message.text
-        lines.append(preview)
-        lines.append("─" * 40)
         
         notification_text = '\n'.join(lines)
         

@@ -158,73 +158,57 @@ class MessageProcessor:
     
     def extract_keywords(self, text: str) -> List[str]:
         """
-        Извлекает маркетинговые ключевые слова из текста
+        Извлекает ключевые слова специфичные для FB/IG таргет + performance marketing
         
         Returns:
             Список найденных ключевых слов
         """
-        # Список маркетинговых навыков и специализаций
+        # УЗКАЯ СПЕЦИАЛИЗАЦИЯ: только Facebook/Instagram таргет + performance
         keywords_db = [
-            # Основные специализации
-            'маркетолог', 'маркетинг', 'маркетолога', 'маркетологи',
-            'таргетолог', 'таргетолога', 'таргетологи', 'таргет',
-            'трафик', 'трафик-менеджер', 'трафикменеджер',
-            'performance', 'перформанс',
-            
-            # SMM и социальные сети
-            'smm', 'smm-менеджер', 'сммщик', 'сммщица',
-            'фейсбук', 'facebook', 'fb', 'мета', 'meta',
-            'инстаграм', 'instagram', 'инста', 'ig',
-            'вконтакте', 'vk', 'вк', 'вконтакт',
-            'telegram', 'телеграм', 'тг',
-            'тикток', 'tiktok', 'youtube', 'ютуб',
-            'социальные сети', 'соцсети',
-            
-            # Реклама и таргетинг
-            'таргетированная реклама', 'таргетинг',
-            'контекстная реклама', 'контекст',
-            'яндекс директ', 'директ', 'yandex direct',
-            'google ads', 'гугл адс', 'google adwords',
+            # Facebook & Instagram
+            'facebook', 'fb', 'фейсбук', 'фб',
+            'meta', 'мета', 'meta ads',
+            'instagram', 'инстаграм', 'инста', 'ig',
             'facebook ads', 'fb ads', 'meta ads',
-            'mytarget', 'майтаргет',
-            'vk ads', 'вк реклама',
+            'instagram ads', 'ig ads',
+            'ads manager', 'менеджер рекламы', 'рекламный кабинет',
+            'business manager',
             
-            # Метрики и аналитика
-            'яндекс метрика', 'метрика', 'yandex metrica',
-            'google analytics', 'ga4', 'аналитика',
-            'google tag manager', 'gtm',
-            'romi', 'roi', 'cpa', 'cpc', 'cpm', 'ctr', 'cr',
-            'конверсия', 'конверсии',
+            # Таргетинг
+            'таргет', 'таргетолог', 'таргетолога', 'таргетологи',
+            'таргетинг', 'таргетированная реклама',
+            'таргетолога', 'таргетированной рекламы',
             
-            # Email и контент
-            'email-маркетинг', 'емейл-маркетинг', 'email маркетинг',
-            'контент-маркетинг', 'контент',
-            'копирайтинг', 'копирайтер',
-            'seo', 'сео', 'поисковая оптимизация',
-            
-            # Инструменты
-            'майтаргет', 'alytics', 'smmplanner',
-            'calltouch', 'коллтач',
-            'roistat', 'ройстат',
-            'bitrix', 'битрикс', 'амо', 'amocrm',
-            
-            # Процессы
-            'лидогенерация', 'лиды', 'лидген',
-            'продвижение', 'pr', 'пиар',
-            'воронка продаж', 'воронка',
-            'ретаргетинг', 'ретаргет',
-            'кампания', 'рекламная кампания',
-            
-            # Performance маркетинг
+            # Performance Marketing
+            'performance', 'перформанс',
             'performance marketing', 'перформанс маркетинг',
-            'арбитраж', 'арбитраж трафика',
-            'медиабаинг', 'mediabuying',
-            'affiliate', 'партнерский маркетинг',
+            'performance маркетолог',
             
-            # Общие термины
-            'digital', 'диджитал', 'digital marketing',
-            'онлайн-маркетинг', 'интернет-маркетинг',
-            'performance', 'growth hacking', 'growth',
+            # Метрики FB/IG
+            'cpa', 'cpc', 'cpm', 'ctr', 'roas', 'roi',
+            'конверсия', 'конверсии', 'conversion',
+            'cpv', 'cpl', 'cpi',
+            
+            # Процессы таргетинга
+            'кампания', 'рекламная кампания', 'campaign',
+            'креатив', 'креативы', 'creative',
+            'аудитория', 'аудитории', 'audience',
+            'сегмент', 'сегментация', 'lookalike',
+            'пиксель', 'pixel', 'facebook pixel',
+            'ретаргетинг', 'ретаргет', 'retargeting',
+            
+            # Лидогенерация
+            'лиды', 'лид', 'lead', 'leads',
+            'лидогенерация', 'лидген', 'lead generation',
+            'лид-формы', 'lead forms',
+            
+            # Оптимизация
+            'масштабирование', 'scale', 'scaling',
+            'оптимизация', 'optimization',
+            'тестирование', 'a/b тест', 'сплит-тест',
+            
+            # Платформы (только FB/IG экосистема)
+            'whatsapp', 'messenger', 'мессенджер',
         ]
         
         text_lower = text.lower()
@@ -236,7 +220,7 @@ class MessageProcessor:
             if re.search(pattern, text_lower, re.IGNORECASE):
                 found_keywords.append(keyword)
         
-        return found_keywords
+        return list(set(found_keywords))  # Убираем дубликаты
     
     def get_message_link(self, message: Message, chat) -> str:
         """
