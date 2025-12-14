@@ -337,19 +337,81 @@ async def get_stats():
         raise HTTPException(500, str(e))
 
 
+# Глобальное состояние бота (устанавливается из main_multi.py)
+bot_state = {
+    "status": "unknown",
+    "error": None,
+    "user_info": None,
+    "flood_wait_until": None
+}
+
+
+# ==================== Bot Status Endpoints ====================
+
+@app.get("/api/bot/status")
+async def get_bot_status():
+    """Получить статус бота"""
+    import time
+
+    result = {
+        "status": bot_state.get("status", "unknown"),
+        "error": bot_state.get("error"),
+        "user_info": bot_state.get("user_info")
+    }
+
+    # Если FloodWait - показываем оставшееся время
+    flood_until = bot_state.get("flood_wait_until")
+    if flood_until:
+        remaining = int(flood_until - time.time())
+        if remaining > 0:
+            result["flood_wait_remaining"] = remaining
+            result["flood_wait_remaining_human"] = f"{remaining // 3600}ч {(remaining % 3600) // 60}м"
+        else:
+            result["flood_wait_remaining"] = 0
+
+    return result
+
+
+@app.post("/api/bot/upload-session")
+async def upload_session(request: Request):
+    """Загрузить файл сессии (base64)"""
+    try:
+        data = await request.json()
+        session_b64 = data.get("session_base64")
+
+        if not session_b64:
+            raise HTTPException(400, "session_base64 is required")
+
+        import base64
+        session_data = base64.b64decode(session_b64)
+
+        # Сохраняем сессию
+        session_path = Path("bot_session.session")
+        session_path.write_bytes(session_data)
+
+        logger.info("Сессия загружена через API")
+
+        return {"success": True, "message": "Сессия загружена. Бот перезапустится автоматически."}
+
+    except Exception as e:
+        logger.error(f"Ошибка загрузки сессии: {e}")
+        raise HTTPException(500, str(e))
+
+
 # Startup event
 @app.on_event("startup")
 async def startup_event():
     """Запуск веб-приложения"""
     logger.info("Web interface starting...")
-    
+
     # Создаем необходимые директории
     Path("configs").mkdir(exist_ok=True)
     Path("logs").mkdir(exist_ok=True)
-    
+    Path("sessions").mkdir(exist_ok=True)
+
     # Загружаем конфигурацию
     config_manager.load()
-    
+
     logger.info(f"Loaded {len(config_manager.channels)} channels")
 
 

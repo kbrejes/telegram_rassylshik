@@ -92,14 +92,41 @@ class MultiChannelJobMonitorBot:
         self.last_config_mtime = None
         
         self.is_running = False
-    
+
+    async def check_session_valid(self) -> bool:
+        """Проверяет существует ли валидная сессия"""
+        session_path = Path(f"{config.SESSION_NAME}.session")
+        if not session_path.exists():
+            return False
+
+        try:
+            if not self.client.is_connected():
+                await self.client.connect()
+            return await self.client.is_user_authorized()
+        except Exception as e:
+            logger.debug(f"Ошибка проверки сессии: {e}")
+            return False
+
     async def start(self):
-        """Запуск бота"""
+        """Запуск бота с проверкой сессии"""
         logger.info("Запуск Multi-Channel Telegram userbot...")
-        
-        # Подключение к Telegram
-        await self.client.start(phone=config.PHONE)
-        
+
+        # Проверяем есть ли валидная сессия
+        session_path = Path(f"{config.SESSION_NAME}.session")
+
+        if not self.client.is_connected():
+            await self.client.connect()
+
+        # Если уже авторизованы - не нужно отправлять код
+        if await self.client.is_user_authorized():
+            logger.info("Найдена существующая сессия, используем её")
+        else:
+            # Сессии нет - нужна авторизация
+            logger.info("Сессия не найдена, требуется авторизация")
+            # Это вызовет FloodWaitError если слишком много попыток
+            # Ошибка будет обработана в main_multi.py
+            await self.client.start(phone=config.PHONE)
+
         # Проверка авторизации
         me = await self.client.get_me()
         logger.info(f"Бот авторизован как: {me.first_name} ({me.phone})")

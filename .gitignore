@@ -58,3 +58,4 @@ configs/channels_config.json
 # Docker
 docker-compose.override.yml
 
+.cursor/
