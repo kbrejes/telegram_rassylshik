@@ -4,7 +4,7 @@
 import logging
 from telethon import TelegramClient, events
 from telethon.tl.types import User, Chat, Channel
-from typing import List, Set
+from typing import List, Set, Dict
 from config import config
 from database import db
 from message_processor import message_processor
@@ -12,6 +12,60 @@ from template_engine import template_engine
 
 logger = logging.getLogger(__name__)
 
+
+class ChannelNameLogFilter(logging.Filter):
+    """Фильтр для замены ID каналов на их имена в логах"""
+    
+    def __init__(self, channel_map: Dict[int, str]):
+        super().__init__()
+        self.channel_map = channel_map
+        self.unknown_channels = set()  # Кэш неизвестных каналов
+    
+    def filter(self, record):
+        """Заменяет ID каналов на имена в сообщениях логов"""
+        try:
+            # Форматируем сообщение вручную, чтобы получить итоговый текст
+            if record.args:
+                try:
+                    # Форматируем сообщение с оригинальными args
+                    formatted_message = record.msg % record.args
+                except:
+                    # Если форматирование не удалось, выходим
+                    return True
+            else:
+                formatted_message = str(record.msg)
+            
+            # Теперь ищем и заменяем ID каналов в отформатированном сообщении
+            import re
+            
+            # Паттерн для поиска "channel ЧИСЛО"
+            pattern = r'channel (\d+)'
+            
+            def replace_channel_id(match):
+                channel_id = int(match.group(1))
+                
+                # Ищем в наших отслеживаемых каналах
+                if channel_id in self.channel_map:
+                    return f'"{self.channel_map[channel_id]}" (ID: {channel_id})'
+                
+                # Если не нашли - ВСЕГДА показываем как Unknown
+                if channel_id not in self.unknown_channels:
+                    self.unknown_channels.add(channel_id)
+                
+                return f'[Unknown Channel] (ID: {channel_id})'
+            
+            # Заменяем все вхождения
+            formatted_message = re.sub(pattern, replace_channel_id, formatted_message)
+            
+            # Обновляем record - теперь это уже готовое сообщение
+            record.msg = formatted_message
+            record.args = ()  # Очищаем args, чтобы избежать повторного форматирования
+            
+        except Exception as e:
+            # Не ломаем логирование при ошибке
+            pass
+        
+        return True
 
 class JobMonitorBot:
     """Класс для мониторинга вакансий в Telegram чатах"""
@@ -24,6 +78,7 @@ class JobMonitorBot:
         )
         
         self.monitored_channels: Set[int] = set()
+        self.channel_names: Dict[int, str] = {}  # ID -> название
         self.is_running = False
     
     async def start(self):
@@ -40,11 +95,25 @@ class JobMonitorBot:
         # Загрузка списка каналов для мониторинга
         await self.load_channels()
         
+        # Настройка фильтра логов для Telethon
+        self._setup_log_filter()  # <--- ВОТ ТУТ ВЫЗЫВАЕТСЯ
+        
         # Регистрация обработчиков событий
         self.register_handlers()
+
+    # И САМ МЕТОД ВОТ ТУТ (строка ~77):
+    def _setup_log_filter(self):
+        """Настраивает фильтр для замены ID каналов на имена в логах Telethon"""
+        # Получаем логгер Telethon
+        telethon_logger = logging.getLogger('telethon.client.updates')
         
-        self.is_running = True
-        logger.info("Бот успешно запущен и готов к работе!")
+        # Создаем и добавляем фильтр
+        log_filter = ChannelNameLogFilter(self.channel_names)
+        telethon_logger.addFilter(log_filter)
+        
+        # Также добавляем к корневому логгеру Telethon
+        root_telethon = logging.getLogger('telethon')
+        root_telethon.addFilter(log_filter)
     
     async def load_channels(self):
         """Загружает список каналов из файла"""
@@ -63,13 +132,18 @@ class JobMonitorBot:
                     # Если это ID (число), преобразуем в int
                     if line.lstrip('-').isdigit():
                         channel_id = int(line)
+                        entity = await self.client.get_entity(channel_id)
                     else:
                         # Иначе это username, получаем entity
                         entity = await self.client.get_entity(line)
                         channel_id = entity.id
                     
+                    # Получаем название канала
+                    channel_title = self._get_chat_title(entity)
+                    
                     self.monitored_channels.add(channel_id)
-                    logger.info(f"Добавлен канал для мониторинга: {line} (ID: {channel_id})")
+                    self.channel_names[channel_id] = channel_title  # Сохраняем имя
+                    logger.info(f"Добавлен канал для мониторинга: {line} (ID: {channel_id}, название: {channel_title})")
                 
                 except Exception as e:
                     logger.error(f"Ошибка при загрузке канала '{line}': {e}")

@@ -52,6 +52,9 @@ Thumbs.db
 *.log
 logs/
 
+# Configuration
+configs/channels_config.json
+
 # Docker
 docker-compose.override.yml
 

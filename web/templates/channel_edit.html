@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if is_new %}Создание канала{% else %}Редактирование канала{% endif %} - Job Notification Bot</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{% if is_new %}➕ Создание канала{% else %}✏️ Редактирование канала{% endif %}</h1>
+            <p>Настройте канал для уведомлений о вакансиях</p>
+        </div>
+
+        <div class="card">
+            <a href="/" class="button button-secondary button-small" style="margin-bottom: 1rem;">
+                ← Назад к списку
+            </a>
+
+            <form id="channel-form">
+                <div class="form-group">
+                    <label for="name">Название канала *</label>
+                    <input 
+                        type="text" 
+                        id="name" 
+                        name="name" 
+                        class="input" 
+                        placeholder="Например: Python разработчики"
+                        value="{% if channel %}{{ channel.name }}{% endif %}"
+                        required
+                    >
+                    <span class="help-text">Удобное название для идентификации</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="telegram_id">ID Telegram канала/чата *</label>
+                    <input 
+                        type="text" 
+                        id="telegram_id" 
+                        name="telegram_id" 
+                        class="input" 
+                        placeholder="Например: -1001234567890"
+                        value="{% if channel %}{{ channel.telegram_id }}{% endif %}"
+                        required
+                    >
+                    <span class="help-text">
+                        ID канала куда будут отправляться уведомления. 
+                        Получить можно через @getmyid_bot
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label for="input_sources">Источники для мониторинга *</label>
+                    <textarea 
+                        id="input_sources" 
+                        name="input_sources" 
+                        class="input textarea" 
+                        placeholder="@channel1&#10;@channel2&#10;@channel3"
+                        required
+                    >{% if channel %}{{ channel.input_sources|join('\n') }}{% endif %}</textarea>
+                    <span class="help-text">
+                        Список каналов для мониторинга (по одному на строку).
+                        Можно использовать @username или ID канала.
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label for="include_keywords">Включающие ключевые слова</label>
+                    <textarea 
+                        id="include_keywords" 
+                        name="include_keywords" 
+                        class="input textarea" 
+                        placeholder="python&#10;django&#10;flask"
+                    >{% if channel %}{{ channel.filters.include_keywords|join('\n') }}{% endif %}</textarea>
+                    <span class="help-text">
+                        Если оставить пустым - будут приходить все сообщения из источников (не рекомендуется). 
+                        Если заполнить - сообщение должно содержать хотя бы одно из этих слов.
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label for="exclude_keywords">Исключающие ключевые слова</label>
+                    <textarea 
+                        id="exclude_keywords" 
+                        name="exclude_keywords" 
+                        class="input textarea" 
+                        placeholder="junior&#10;стажер&#10;trainee"
+                    >{% if channel %}{{ channel.filters.exclude_keywords|join('\n') }}{% endif %}</textarea>
+                    <span class="help-text">
+                        Сообщения с этими словами будут отфильтрованы (по одному на строку)
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input 
+                            type="checkbox" 
+                            id="enabled" 
+                            name="enabled" 
+                            {% if is_new or (channel and channel.enabled) %}checked{% endif %}
+                        >
+                        Канал активен
+                    </label>
+                    <span class="help-text">
+                        Отключите если хотите временно приостановить отправку уведомлений
+                    </span>
+                </div>
+
+                <hr style="margin: 2rem 0; border: none; border-top: 2px solid #e0e0e0;">
+
+                <h3 style="margin-bottom: 1rem;">🤖 CRM Функциональность</h3>
+
+                <div class="form-group">
+                    <label>
+                        <input 
+                            type="checkbox" 
+                            id="crm_enabled" 
+                            name="crm_enabled" 
+                            {% if channel and channel.crm_enabled %}checked{% endif %}
+                            onchange="toggleCrmFields()"
+                        >
+                        Включить CRM (автоответы + трансляция в топики)
+                    </label>
+                    <span class="help-text">
+                        Бот будет автоматически откликаться на вакансии и создавать топики в CRM группе
+                    </span>
+                </div>
+
+                <div id="crm-fields" style="display: none;">
+                    <div class="form-group">
+                        <label for="crm_group_id">ID CRM группы с топиками</label>
+                        <input 
+                            type="text" 
+                            id="crm_group_id" 
+                            name="crm_group_id" 
+                            class="input" 
+                            placeholder="-1001234567890"
+                            value="{% if channel %}{{ channel.crm_group_id if channel.crm_group_id else '' }}{% endif %}"
+                        >
+                        <span class="help-text">
+                            ID группы где будут создаваться топики для каждого контакта.
+                            Группа должна иметь включенные темы (Topics).
+                        </span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Агенты для автоответов</label>
+                        <div id="agents-list">
+                            {% if channel and channel.agents %}
+                                {% for agent in channel.agents %}
+                                <div class="agent-item" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px;">
+                                    <div style="display: flex; gap: 15px; align-items: end;">
+                                        <div style="flex: 1;">
+                                            <label>Телефон</label>
+                                            <input type="text" class="input agent-phone" placeholder="+79991234567" value="{{ agent.phone }}" required>
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <label>Имя сессии</label>
+                                            <input type="text" class="input agent-session" placeholder="agent_1" value="{{ agent.session_name }}" required>
+                                        </div>
+                                        <button type="button" class="btn btn-danger" onclick="removeAgent(this)">Удалить</button>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <!-- Backward compatibility: show old format if exists -->
+                                {% if channel and channel.agent_phone %}
+                                <div class="agent-item" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px;">
+                                    <div style="display: flex; gap: 15px; align-items: end;">
+                                        <div style="flex: 1;">
+                                            <label>Телефон</label>
+                                            <input type="text" class="input agent-phone" placeholder="+79991234567" value="{{ channel.agent_phone }}" required>
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <label>Имя сессии</label>
+                                            <input type="text" class="input agent-session" placeholder="agent_1" value="{{ channel.agent_session_name }}" required>
+                                        </div>
+                                        <button type="button" class="btn btn-danger" onclick="removeAgent(this)">Удалить</button>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                        <button type="button" class="btn btn-secondary" onclick="addAgent()" style="margin-top: 10px;">
+                            + Добавить агента
+                        </button>
+                        <span class="help-text">
+                            Несколько агентов позволяют избежать ограничений Telegram API. 
+                            При блокировке одного агента автоматически используется следующий.
+                        </span>
+                        
+                        <!-- Hidden fields for backward compatibility -->
+                        <input type="hidden" name="agent_phone" value="{% if channel %}{{ channel.agent_phone }}{% endif %}">
+                        <input type="hidden" name="agent_session_name" value="{% if channel %}{{ channel.agent_session_name }}{% endif %}">
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input 
+                                type="checkbox" 
+                                id="auto_response_enabled" 
+                                name="auto_response_enabled" 
+                                {% if channel and channel.auto_response_enabled %}checked{% endif %}
+                            >
+                            Включить автоответы
+                        </label>
+                        <span class="help-text">
+                            Агент будет автоматически отправлять приветственное сообщение на вакансию
+                        </span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="auto_response_template">Шаблон автоответа</label>
+                        <textarea 
+                            id="auto_response_template" 
+                            name="auto_response_template" 
+                            class="input textarea" 
+                            placeholder="Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?"
+                        >{% if channel %}{{ channel.auto_response_template }}{% endif %}</textarea>
+                        <span class="help-text">
+                            Текст сообщения который агент отправит работодателю
+                        </span>
+                    </div>
+                </div>
+
+                <div class="alert alert-info">
+                    <strong>💡 Совет:</strong> Начните с небольшого количества источников и фильтров,
+                    затем постепенно расширяйте список на основе полученных результатов.
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="button button-primary">
+                        {% if is_new %}✓ Создать канал{% else %}✓ Сохранить изменения{% endif %}
+                    </button>
+                    <a href="/" class="button button-secondary">Отмена</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+        <p>Сохранение...</p>
+    </div>
+
+    <script>
+        const isNew = {{ 'true' if is_new else 'false' }};
+        const channelId = {% if channel %}'{{ channel.id }}'{% else %}null{% endif %};
+
+        // Toggle CRM fields visibility
+        function toggleCrmFields() {
+            const crmEnabled = document.getElementById('crm_enabled').checked;
+            const crmFields = document.getElementById('crm-fields');
+            crmFields.style.display = crmEnabled ? 'block' : 'none';
+        }
+
+        let currentAgentAuth = null;
+
+        async function addAgent() {
+            const agentsList = document.getElementById('agents-list');
+            const agentCount = agentsList.children.length + 1;
+            
+            const phone = prompt("📱 Введите номер телефона агента (с кодом страны, например +79991234567):");
+            if (!phone) return;
+            
+            const sessionName = prompt("📁 Введите имя сессии для агента:", `agent_${agentCount}`);
+            if (!sessionName) return;
+            
+            currentAgentAuth = { phone, sessionName };
+            
+            // Показываем модальное окно
+            showAuthModal();
+            
+            // Инициируем аутентификацию
+            try {
+                const response = await fetch('/api/agents/init', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        phone: phone, 
+                        session_name: sessionName 
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.needs_code) {
+                        // Показываем форму для ввода кода
+                        showAuthStep2();
+                    } else if (data.already_authenticated) {
+                        // Уже авторизован
+                        showAuthStep3(data.user_info);
+                        setTimeout(() => {
+                            addAgentToList(phone, sessionName);
+                            closeAuthModal();
+                        }, 2000);
+                    }
+                } else {
+                    alert(`❌ ${data.message}`);
+                    closeAuthModal();
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('❌ Ошибка подключения к серверу');
+                closeAuthModal();
+            }
+        }
+        
+        function addAgentToList(phone, sessionName) {
+            const agentsList = document.getElementById('agents-list');
+            
+            const agentItem = document.createElement('div');
+            agentItem.className = 'agent-item';
+            agentItem.style.cssText = 'border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px;';
+            
+            agentItem.innerHTML = `
+                <div style="display: flex; gap: 15px; align-items: end;">
+                    <div style="flex: 1;">
+                        <label>Телефон</label>
+                        <input type="text" class="input agent-phone" placeholder="+79991234567" value="${phone}" readonly>
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Имя сессии</label>
+                        <input type="text" class="input agent-session" placeholder="agent_1" value="${sessionName}" readonly>
+                    </div>
+                    <button type="button" class="btn btn-danger" onclick="removeAgent(this)">Удалить</button>
+                </div>
+            `;
+            
+            agentsList.appendChild(agentItem);
+        }
+        
+        async function verifyAgentCode() {
+            const code = document.getElementById('authCode').value.trim();
+            if (!code) {
+                alert('Введите код');
+                return;
+            }
+            
+            const verifyBtn = event.target;
+            verifyBtn.disabled = true;
+            verifyBtn.textContent = 'Проверка...';
+            
+            try {
+                const response = await fetch('/api/agents/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_name: currentAgentAuth.sessionName,
+                        code: code
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.authenticated) {
+                    // Показываем успех
+                    showAuthStep3(data.user_info);
+                    
+                    // Добавляем агента в список
+                    setTimeout(() => {
+                        addAgentToList(currentAgentAuth.phone, currentAgentAuth.sessionName);
+                        closeAuthModal();
+                    }, 2000);
+                } else if (data.needs_password) {
+                    // Требуется 2FA пароль
+                    showAuthStep2_5();
+                } else {
+                    document.getElementById('authError').textContent = data.message;
+                    document.getElementById('authError').style.display = 'block';
+                    verifyBtn.disabled = false;
+                    verifyBtn.textContent = 'Подтвердить';
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                document.getElementById('authError').textContent = 'Ошибка подключения к серверу';
+                document.getElementById('authError').style.display = 'block';
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = 'Подтвердить';
+            }
+        }
+        
+        function showAuthModal() {
+            document.getElementById('agentAuthModal').style.display = 'flex';
+            document.getElementById('authPhone').textContent = currentAgentAuth.phone;
+            document.getElementById('authStep1').style.display = 'block';
+            document.getElementById('authStep2').style.display = 'none';
+            document.getElementById('authStep2_5').style.display = 'none';
+            document.getElementById('authStep3').style.display = 'none';
+        }
+        
+        function showAuthStep2() {
+            document.getElementById('authStep1').style.display = 'none';
+            document.getElementById('authStep2').style.display = 'block';
+            document.getElementById('authPhoneConfirm').textContent = currentAgentAuth.phone;
+            document.getElementById('authCode').value = '';
+            document.getElementById('authError').style.display = 'none';
+        }
+        
+        function showAuthStep2_5() {
+            document.getElementById('authStep1').style.display = 'none';
+            document.getElementById('authStep2').style.display = 'none';
+            document.getElementById('authStep2_5').style.display = 'block';
+            document.getElementById('authStep3').style.display = 'none';
+            document.getElementById('auth2FAPassword').value = '';
+            document.getElementById('auth2FAError').style.display = 'none';
+        }
+        
+        function showAuthStep3(userInfo) {
+            document.getElementById('authStep1').style.display = 'none';
+            document.getElementById('authStep2').style.display = 'none';
+            document.getElementById('authStep2_5').style.display = 'none';
+            document.getElementById('authStep3').style.display = 'block';
+            document.getElementById('authUserInfo').textContent = `${userInfo.name} (@${userInfo.username})`;
+        }
+        
+        async function verify2FAPassword() {
+            const password = document.getElementById('auth2FAPassword').value.trim();
+            if (!password) {
+                alert('Введите пароль');
+                return;
+            }
+            
+            const verifyBtn = event.target;
+            verifyBtn.disabled = true;
+            verifyBtn.textContent = 'Проверка...';
+            
+            try {
+                const response = await fetch('/api/agents/verify-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_name: currentAgentAuth.sessionName,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.authenticated) {
+                    // Показываем успех
+                    showAuthStep3(data.user_info);
+                    
+                    // Добавляем агента в список
+                    setTimeout(() => {
+                        addAgentToList(currentAgentAuth.phone, currentAgentAuth.sessionName);
+                        closeAuthModal();
+                    }, 2000);
+                } else {
+                    document.getElementById('auth2FAError').textContent = data.message;
+                    document.getElementById('auth2FAError').style.display = 'block';
+                    verifyBtn.disabled = false;
+                    verifyBtn.textContent = 'Подтвердить';
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                document.getElementById('auth2FAError').textContent = 'Ошибка подключения к серверу';
+                document.getElementById('auth2FAError').style.display = 'block';
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = 'Подтвердить';
+            }
+        }
+        
+        function closeAuthModal() {
+            document.getElementById('agentAuthModal').style.display = 'none';
+            currentAgentAuth = null;
+        }
+
+        async function removeAgent(button) {
+            if (!confirm('Удалить агента?')) {
+                return;
+            }
+            
+            const agentItem = button.closest('.agent-item');
+            const phone = agentItem.querySelector('.agent-phone').value.trim();
+            const sessionName = agentItem.querySelector('.agent-session').value.trim();
+            
+            // Удаляем из DOM
+            agentItem.remove();
+            
+            // Если канал уже сохранён, обновляем через API
+            // channelId определён в начале скрипта
+            if (channelId && channelId !== 'new') {
+                try {
+                    // Получаем текущие данные канала
+                    const response = await fetch(`/api/channels/${channelId}`);
+                    if (!response.ok) {
+                        throw new Error('Ошибка получения данных канала');
+                    }
+                    const channelData = await response.json();
+                    
+                    if (channelData.success && channelData.channel) {
+                        // Удаляем агента из списка
+                        const updatedAgents = (channelData.channel.agents || []).filter(
+                            a => !(a.phone === phone && a.session_name === sessionName)
+                        );
+                        
+                        // Обновляем канал через API
+                        const updateResponse = await fetch(`/api/channels/${channelId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                agents: updatedAgents
+                            })
+                        });
+                        
+                        if (!updateResponse.ok) {
+                            throw new Error('Ошибка обновления канала');
+                        }
+                        
+                        const updateData = await updateResponse.json();
+                        if (updateData.success) {
+                            // Показываем уведомление об успешном сохранении
+                            const notification = document.createElement('div');
+                            notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #4caf50; color: white; padding: 15px 20px; border-radius: 5px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
+                            notification.textContent = '✅ Агент удалён и изменения сохранены';
+                            document.body.appendChild(notification);
+                            
+                            setTimeout(() => {
+                                notification.remove();
+                            }, 3000);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Ошибка удаления агента:', error);
+                    // Показываем предупреждение, но не возвращаем элемент в DOM
+                    alert('⚠️ Агент удалён из формы, но не удалось сохранить изменения автоматически. Пожалуйста, нажмите "Сохранить" вручную.');
+                }
+            }
+        }
+
+        function collectAgents() {
+            const agents = [];
+            const agentItems = document.querySelectorAll('.agent-item');
+            
+            agentItems.forEach(item => {
+                const phone = item.querySelector('.agent-phone').value.trim();
+                const sessionName = item.querySelector('.agent-session').value.trim();
+                
+                if (phone && sessionName) {
+                    agents.push({
+                        phone: phone,
+                        session_name: sessionName
+                    });
+                }
+            });
+            
+            return agents;
+        }
+
+        // Initialize CRM fields visibility on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleCrmFields();
+            
+            // Если нет агентов, добавляем один по умолчанию
+            const agentsList = document.getElementById('agents-list');
+            if (agentsList.children.length === 0) {
+                addAgent();
+            }
+        });
+
+        document.getElementById('channel-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const loading = document.getElementById('loading');
+            loading.classList.add('active');
+
+            try {
+                // Собираем данные формы
+                const formData = {
+                    name: document.getElementById('name').value.trim(),
+                    telegram_id: parseInt(document.getElementById('telegram_id').value.trim()),
+                    input_sources: document.getElementById('input_sources').value
+                        .split('\n')
+                        .map(s => s.trim())
+                        .filter(s => s.length > 0),
+                    include_keywords: document.getElementById('include_keywords').value
+                        .split('\n')
+                        .map(s => s.trim())
+                        .filter(s => s.length > 0),
+                    exclude_keywords: document.getElementById('exclude_keywords').value
+                        .split('\n')
+                        .map(s => s.trim())
+                        .filter(s => s.length > 0),
+                    enabled: document.getElementById('enabled').checked,
+                    
+                    // CRM поля
+                    crm_enabled: document.getElementById('crm_enabled').checked,
+                    crm_group_id: parseInt(document.getElementById('crm_group_id').value.trim()) || 0,
+                    agents: collectAgents(),
+                    auto_response_enabled: document.getElementById('auto_response_enabled').checked,
+                    auto_response_template: document.getElementById('auto_response_template').value.trim(),
+                    
+                    // Backward compatibility - пустые значения, так как теперь используется agents[]
+                    agent_phone: "",
+                    agent_session_name: ""
+                };
+
+                // Валидация
+                if (!formData.name) {
+                    alert('Введите название канала');
+                    loading.classList.remove('active');
+                    return;
+                }
+
+                if (!formData.telegram_id || isNaN(formData.telegram_id)) {
+                    alert('Введите корректный ID Telegram канала');
+                    loading.classList.remove('active');
+                    return;
+                }
+
+                if (formData.input_sources.length === 0) {
+                    alert('Добавьте хотя бы один источник для мониторинга');
+                    loading.classList.remove('active');
+                    return;
+                }
+
+                // Валидация CRM агентов
+                if (formData.crm_enabled && formData.agents.length === 0) {
+                    alert('При включенном CRM необходимо добавить хотя бы одного агента');
+                    loading.classList.remove('active');
+                    return;
+                }
+
+                // Отправка запроса
+                const url = isNew ? '/api/channels' : `/api/channels/${channelId}`;
+                const method = isNew ? 'POST' : 'PUT';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(isNew ? 'Канал успешно создан!' : 'Изменения сохранены!');
+                    window.location.href = '/';
+                } else {
+                    alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+                    loading.classList.remove('active');
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Произошла ошибка при сохранении');
+                loading.classList.remove('active');
+            }
+        });
+    </script>
+    
+    <!-- Модальное окно для аутентификации агента -->
+    <div id="agentAuthModal" class="auth-modal">
+        <div class="auth-modal-content">
+            <h3 style="margin-top: 0;">🔐 Аутентификация агента</h3>
+            
+            <div id="authStep1" class="auth-step">
+                <p>Инициализация агента <strong id="authPhone"></strong>...</p>
+                <div class="loading-spinner">⏳</div>
+            </div>
+            
+            <div id="authStep2" class="auth-step" style="display: none;">
+                <p>✉️ Код подтверждения отправлен на <strong id="authPhoneConfirm"></strong></p>
+                <div class="form-group">
+                    <label>Введите код:</label>
+                    <input type="text" id="authCode" class="input" placeholder="12345" maxlength="6" style="text-align: center; font-size: 1.2rem;">
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button type="button" onclick="verifyAgentCode()" class="btn btn-primary" style="flex: 1;">
+                        Подтвердить
+                    </button>
+                    <button type="button" onclick="closeAuthModal()" class="btn btn-secondary" style="flex: 1;">
+                        Отмена
+                    </button>
+                </div>
+                <div id="authError" class="auth-error" style="display: none;"></div>
+            </div>
+            
+            <div id="authStep2_5" class="auth-step" style="display: none;">
+                <p>🔐 Требуется пароль двухфакторной аутентификации</p>
+                <div class="form-group">
+                    <label>Введите 2FA пароль:</label>
+                    <input type="password" id="auth2FAPassword" class="input" placeholder="Ваш пароль" style="text-align: center; font-size: 1.2rem;">
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button type="button" onclick="verify2FAPassword()" class="btn btn-primary" style="flex: 1;">
+                        Подтвердить
+                    </button>
+                    <button type="button" onclick="closeAuthModal()" class="btn btn-secondary" style="flex: 1;">
+                        Отмена
+                    </button>
+                </div>
+                <div id="auth2FAError" class="auth-error" style="display: none;"></div>
+            </div>
+            
+            <div id="authStep3" class="auth-step" style="display: none;">
+                <div style="text-align: center;">
+                    <div style="font-size: 3rem; margin: 20px 0;">✅</div>
+                    <p style="font-size: 1.1rem; margin: 10px 0;">Агент успешно авторизован!</p>
+                    <p style="font-weight: bold; color: #2ecc71;" id="authUserInfo"></p>
+                    <button type="button" onclick="closeAuthModal()" class="btn btn-primary" style="margin-top: 15px;">
+                        Закрыть
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

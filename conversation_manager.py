@@ -1,0 +1,318 @@
+"""
+Conversation Manager - управление топиками и трансляцией сообщений
+Адаптировано из crm_response_bot
+"""
+import asyncio
+import logging
+from typing import Optional, Dict
+from telethon import TelegramClient, events
+from telethon.tl.functions.messages import CreateForumTopicRequest
+from telethon import errors
+
+logger = logging.getLogger(__name__)
+
+
+class ConversationManager:
+    """Управление форум-топиками и трансляцией сообщений"""
+    
+    def __init__(self, client: TelegramClient, group_id: int, send_contact_message_cb=None, group_monitor_client=None):
+        """
+        Инициализация
+        
+        Args:
+            client: Telegram client instance (агент) - для создания топиков и отправки сообщений
+            group_id: ID группы с форум-топиками
+            send_contact_message_cb: Опциональный callback для отправки сообщений контакту
+                                    (contact_id, text, media, topic_id) -> None
+            group_monitor_client: Telegram client для мониторинга группы (если отличается от client)
+                                 Если не задан, используется client
+        """
+        self.client = client  # Клиент агента для создания топиков
+        self.group_monitor_client = group_monitor_client or client  # Клиент для мониторинга группы
+        self.group_id = group_id
+        self.send_contact_message_cb = send_contact_message_cb
+        
+        # Кэш: contact_id -> topic_id
+        self._topic_cache: Dict[int, int] = {}
+        
+        # Кэш: topic_id -> contact_id
+        self._reverse_topic_cache: Dict[int, int] = {}
+        
+        # Кэш: message_id -> topic_id (для сообщений, отправленных в топик)
+        self._message_to_topic_cache: Dict[int, int] = {}
+        
+        # Кэш: message_id сообщений, отправленных агентом контакту (чтобы не зеркалировать обратно)
+        self._agent_sent_messages: set = set()
+        
+        logger.info(f"ConversationManager инициализирован для группы: {group_id}")
+    
+    async def create_topic(
+        self,
+        title: str,
+        contact_id: int,
+        retry_count: int = 0,
+        max_retries: int = 3
+    ) -> Optional[int]:
+        """
+        Создание нового топика в форум-группе
+        
+        Args:
+            title: Название топика (обычно имя контакта)
+            contact_id: ID контакта в Telegram
+            retry_count: Текущая попытка (внутреннее использование)
+            max_retries: Максимум попыток
+            
+        Returns:
+            ID топика или None если не удалось создать
+        """
+        try:
+            logger.info(f"Создание топика '{title}' для контакта {contact_id}")
+            
+            # Создаем топик через Telethon API
+            result = await self.client(CreateForumTopicRequest(
+                peer=self.group_id,
+                title=title[:128],  # Ограничение Telegram
+                icon_color=None,
+                icon_emoji_id=None,
+                random_id=None
+            ))
+            
+            # Извлекаем topic_id из ответа
+            topic_id = result.updates[0].id
+            
+            # Кэшируем
+            self._topic_cache[contact_id] = topic_id
+            self._reverse_topic_cache[topic_id] = contact_id
+            
+            return topic_id
+            
+        except errors.FloodWaitError as e:
+            if retry_count < max_retries:
+                wait_time = min(e.seconds, 30)  # Макс 30 сек
+                logger.warning(f"FloodWait: ждем {wait_time} сек, попытка {retry_count + 1}/{max_retries}")
+                await asyncio.sleep(wait_time)
+                return await self.create_topic(title, contact_id, retry_count + 1, max_retries)
+            else:
+                logger.error(f"Не удалось создать топик после {max_retries} попыток")
+                return None
+                
+        except errors.ChatWriteForbiddenError:
+            logger.error("Нет прав на создание топиков в группе (ChatWriteForbiddenError)")
+            return None
+            
+        except errors.ChannelPrivateError:
+            logger.error("Группа приватная или агент не имеет доступа (ChannelPrivateError)")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Ошибка создания топика: {e}", exc_info=True)
+            return None
+    
+    def get_topic_id(self, contact_id: int) -> Optional[int]:
+        """Получить ID топика для контакта"""
+        return self._topic_cache.get(contact_id)
+    
+    def get_contact_id(self, topic_id: int) -> Optional[int]:
+        """Получить ID контакта по ID топика"""
+        return self._reverse_topic_cache.get(topic_id)
+    
+    async def send_to_topic(self, topic_id: int, text: str, file=None) -> bool:
+        """
+        Отправка сообщения в топик
+        
+        Args:
+            topic_id: ID топика
+            text: Текст сообщения
+            file: Опциональный медиа файл
+            
+        Returns:
+            True если отправлено успешно
+        """
+        try:
+            sent_message = await self.client.send_message(
+                self.group_id,
+                text,
+                file=file,
+                reply_to=topic_id  # Важно: reply_to для топика
+            )
+            # Сохраняем связь message_id -> topic_id для последующего определения топика
+            if sent_message and hasattr(sent_message, 'id'):
+                self._message_to_topic_cache[sent_message.id] = topic_id
+                logger.debug(f"Сохранена связь message_id={sent_message.id} -> topic_id={topic_id}")
+            logger.info(f"Сообщение отправлено в топик {topic_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка отправки в топик {topic_id}: {e}")
+            return False
+    
+    def save_message_to_topic(self, message_id: int, topic_id: int):
+        """
+        Сохранить связь message_id -> topic_id вручную
+        
+        Args:
+            message_id: ID сообщения
+            topic_id: ID топика
+        """
+        self._message_to_topic_cache[message_id] = topic_id
+    
+    def mark_agent_sent_message(self, message_id: int):
+        """
+        Пометить сообщение как отправленное агентом контакту (чтобы не зеркалировать обратно)
+        
+        Args:
+            message_id: ID сообщения
+        """
+        self._agent_sent_messages.add(message_id)
+    
+    def is_agent_sent_message(self, message_id: int) -> bool:
+        """
+        Проверить, было ли сообщение отправлено агентом контакту
+        
+        Args:
+            message_id: ID сообщения
+            
+        Returns:
+            True если сообщение было отправлено агентом
+        """
+        return message_id in self._agent_sent_messages
+    
+    def register_handlers(self):
+        """
+        Регистрация обработчиков для двусторонней трансляции сообщений
+        """
+        
+        @self.group_monitor_client.on(events.NewMessage(chats=self.group_id))
+        async def handle_message_from_topic(event):
+            """Обработка сообщения из топика → отправить контакту"""
+            try:
+                message = event.message
+                
+                # Проверяем, что сообщение из нужной группы
+                if message.chat_id != self.group_id:
+                    return
+                
+                # Игнорируем собственные сообщения
+                if message.out:
+                    return
+                
+                # Определяем topic_id
+                topic_id = None
+                
+                # Способ 1: через reply_to.reply_to_top_id
+                if message.reply_to:
+                    topic_id = getattr(message.reply_to, 'reply_to_top_id', None)
+                    if not topic_id:
+                        # Проверяем, является ли это форум-топиком
+                        is_forum_topic = getattr(message.reply_to, 'forum_topic', False)
+                        if is_forum_topic:
+                            reply_to_msg_id = getattr(message.reply_to, 'reply_to_msg_id', None)
+                            if reply_to_msg_id:
+                                topic_id = reply_to_msg_id
+                
+                # Способ 2: прямой атрибут сообщения
+                if not topic_id:
+                    topic_id = getattr(message, 'reply_to_top_id', None)
+                
+                # Способ 3: через message_thread_id
+                if not topic_id:
+                    topic_id = getattr(message, 'message_thread_id', None)
+                
+                # Способ 4: проверяем кэш message_id -> topic_id
+                if not topic_id:
+                    topic_id = self._message_to_topic_cache.get(message.id)
+                
+                # Способ 5: через API
+                if not topic_id and not message.reply_to:
+                    try:
+                        full_message = await self.group_monitor_client.get_messages(
+                            self.group_id,
+                            ids=message.id
+                        )
+                        if full_message and hasattr(full_message, 'reply_to') and full_message.reply_to:
+                            topic_id = getattr(full_message.reply_to, 'reply_to_top_id', None)
+                            if not topic_id:
+                                reply_to_msg_id = getattr(full_message.reply_to, 'reply_to_msg_id', None)
+                                if reply_to_msg_id:
+                                    topic_id = reply_to_msg_id
+                    except Exception:
+                        pass
+                
+                if not topic_id:
+                    return
+                
+                # Находим контакт для этого топика
+                contact_id = self.get_contact_id(topic_id)
+                if not contact_id:
+                    return
+                
+                # Отправляем сообщение контакту
+                try:
+                    message_text = message.text or ""
+                    
+                    # Игнорируем служебные сообщения
+                    if message_text.startswith("🤖 **Агент (") or message_text.startswith("📌 **Новый контакт:") or message_text.startswith("📋 **Вакансия из") or message_text.startswith("👤 **"):
+                        return
+                    
+                    # Если задан callback - используем его
+                    if self.send_contact_message_cb:
+                        await self.send_contact_message_cb(
+                            contact_id=contact_id,
+                            text=message_text,
+                            media=message.media,
+                            topic_id=topic_id
+                        )
+                    else:
+                        # Fallback: отправляем через текущего клиента
+                        if message.media:
+                            await self.client.send_message(
+                                contact_id,
+                                message_text,
+                                file=message.media
+                            )
+                        else:
+                            await self.client.send_message(
+                                contact_id,
+                                message_text
+                            )
+                except Exception as e:
+                    logger.error(f"Ошибка отправки контакту {contact_id}: {e}", exc_info=True)
+            
+            except Exception as e:
+                logger.error(f"Ошибка в handle_message_from_topic: {e}", exc_info=True)
+        
+        logger.info(f"Обработчики трансляции зарегистрированы для группы {self.group_id}")
+    
+    async def mirror_contact_message_to_topic(
+        self,
+        contact_id: int,
+        message_text: str,
+        topic_id: Optional[int] = None
+    ) -> bool:
+        """
+        Трансляция сообщения от контакта в топик
+        
+        Args:
+            contact_id: ID контакта
+            message_text: Текст сообщения
+            topic_id: ID топика (если уже известен)
+            
+        Returns:
+            True если отправлено успешно
+        """
+        try:
+            # Если топик не указан, ищем в кэше
+            if topic_id is None:
+                topic_id = self.get_topic_id(contact_id)
+            
+            if not topic_id:
+                logger.warning(f"Нет топика для контакта {contact_id}")
+                return False
+            
+            # Отправляем в топик
+            formatted_text = f"💬 **Сообщение от контакта:**\n\n{message_text}"
+            return await self.send_to_topic(topic_id, formatted_text)
+            
+        except Exception as e:
+            logger.error(f"Ошибка трансляции сообщения: {e}")
+            return False
+

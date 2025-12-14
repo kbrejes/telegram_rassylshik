@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Notification Bot - Управление каналами</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📢 Job Notification Bot</h1>
+            <p>Управление каналами уведомлений</p>
+        </div>
+
+        <div class="card">
+            <div class="channels-header">
+                <h2>Ваши каналы</h2>
+                <a href="/channel/new" class="button button-primary">
+                    ➕ Добавить канал
+                </a>
+            </div>
+
+            {% if channels %}
+                <div class="channels-list">
+                    {% for channel in channels %}
+                    <div class="channel-item">
+                        <div class="channel-header">
+                            <div class="channel-info">
+                                <h3>{{ channel.name }}</h3>
+                                <div>
+                                    <span class="channel-status {% if channel.enabled %}enabled{% else %}disabled{% endif %}">
+                                        {% if channel.enabled %}✓ Активен{% else %}✗ Отключен{% endif %}
+                                    </span>
+                                    {% if channel.crm_enabled %}
+                                    <span class="channel-status enabled" style="margin-left: 0.5rem;">
+                                        🤖 CRM ({{ channel.agents|length }})
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="channel-meta">
+                            <div class="channel-meta-item">
+                                <strong>ID:</strong> {{ channel.telegram_id }}
+                            </div>
+                            <div class="channel-meta-item">
+                                <strong>Источников:</strong> {{ channel.input_sources|length }}
+                            </div>
+                            {% if channel.crm_enabled %}
+                            <div class="channel-meta-item">
+                                <strong>🤖 Агентов:</strong> {{ channel.agents|length }}
+                            </div>
+                            <div class="channel-meta-item">
+                                <strong>📋 CRM группа:</strong> {{ channel.crm_group_id }}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="channel-filters">
+                            <strong>Включающие фильтры:</strong>
+                            <div class="filter-tags">
+                                {% if channel.filters.include_keywords %}
+                                    {% for keyword in channel.filters.include_keywords %}
+                                    <span class="filter-tag include">{{ keyword }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="help-text">Нет фильтров</span>
+                                {% endif %}
+                            </div>
+
+                            {% if channel.filters.exclude_keywords %}
+                            <strong style="margin-top: 0.5rem; display: block;">Исключающие фильтры:</strong>
+                            <div class="filter-tags">
+                                {% for keyword in channel.filters.exclude_keywords %}
+                                <span class="filter-tag exclude">{{ keyword }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="channel-actions">
+                            <a href="/channel/{{ channel.id }}" class="button button-secondary button-small">
+                                ✏️ Редактировать
+                            </a>
+                            <button onclick="deleteChannel('{{ channel.id }}')" class="button button-danger button-small">
+                                🗑️ Удалить
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">📭</div>
+                    <h3>Пока нет каналов</h3>
+                    <p>Создайте первый канал для уведомлений</p>
+                    <a href="/channel/new" class="button button-primary" style="margin-top: 1rem;">
+                        Создать канал
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <h2>📊 Статистика</h2>
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">{{ channels|length }}</div>
+                    <div class="stat-label">Всего каналов</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ channels|selectattr('enabled')|list|length }}</div>
+                    <div class="stat-label">Активных каналов</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-sources">0</div>
+                    <div class="stat-label">Уникальных источников</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-agents">0</div>
+                    <div class="stat-label">🤖 Агентов подключено</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="crm-channels">0</div>
+                    <div class="stat-label">CRM каналов</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Получаем статистику
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('total-sources').textContent = data.stats.total_input_sources;
+                    document.getElementById('total-agents').textContent = data.stats.total_agents;
+                    document.getElementById('crm-channels').textContent = data.stats.crm_enabled_channels;
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки статистики:', error);
+            }
+        }
+
+        // Удаление канала
+        async function deleteChannel(channelId) {
+            if (!confirm('Вы уверены, что хотите удалить этот канал?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/channels/${channelId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Канал успешно удален');
+                    window.location.reload();
+                } else {
+                    alert('Ошибка удаления канала');
+                }
+            } catch (error) {
+                console.error('Ошибка удаления канала:', error);
+                alert('Ошибка удаления канала');
+            }
+        }
+
+        // Загрузка статистики при загрузке страницы
+        loadStats();
+    </script>
+</body>
+</html>
+

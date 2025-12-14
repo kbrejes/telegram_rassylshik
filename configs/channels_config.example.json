@@ -1,0 +1,86 @@
+{
+  "output_channels": [
+    {
+      "id": "channel_example1",
+      "name": "Python Senior вакансии",
+      "telegram_id": -1001234567890,
+      "enabled": true,
+      "input_sources": [
+        "@python_jobs",
+        "@django_jobs",
+        "@backend_jobs"
+      ],
+      "filters": {
+        "include_keywords": [
+          "python",
+          "django",
+          "flask",
+          "fastapi",
+          "senior",
+          "lead"
+        ],
+        "exclude_keywords": [
+          "junior",
+          "стажер",
+          "trainee"
+        ],
+        "require_all_includes": false
+      }
+    },
+    {
+      "id": "channel_example2",
+      "name": "Remote JavaScript вакансии",
+      "telegram_id": -1009876543210,
+      "enabled": true,
+      "input_sources": [
+        "@js_jobs",
+        "@frontend_jobs",
+        "@remote_work"
+      ],
+      "filters": {
+        "include_keywords": [
+          "javascript",
+          "react",
+          "vue",
+          "node.js",
+          "remote",
+          "удаленно"
+        ],
+        "exclude_keywords": [
+          "офис",
+          "office",
+          "релокация"
+        ],
+        "require_all_includes": false
+      }
+    },
+    {
+      "id": "channel_example3",
+      "name": "FB/IG Таргетологи",
+      "telegram_id": -1001111222333,
+      "enabled": true,
+      "input_sources": [
+        "@smm_jobs",
+        "@marketing_jobs",
+        "@target_jobs"
+      ],
+      "filters": {
+        "include_keywords": [
+          "facebook",
+          "instagram",
+          "таргет",
+          "таргетолог",
+          "fb ads",
+          "meta"
+        ],
+        "exclude_keywords": [
+          "google",
+          "yandex",
+          "tiktok"
+        ],
+        "require_all_includes": false
+      }
+    }
+  ]
+}
+
