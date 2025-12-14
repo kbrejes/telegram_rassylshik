@@ -6,8 +6,13 @@ import asyncio
 import logging
 from typing import Optional, Dict
 from telethon import TelegramClient, events
-from telethon.tl.functions.messages import CreateForumTopicRequest
 from telethon import errors
+
+# Forum topics support (requires Telethon 1.37+)
+try:
+    from telethon.tl.functions.channels import CreateForumTopicRequest
+except ImportError:
+    CreateForumTopicRequest = None
 
 logger = logging.getLogger(__name__)
 
