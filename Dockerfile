@@ -18,13 +18,26 @@ COPY *.py ./
 COPY templates.json ./
 COPY channels.txt ./
 
-# Создаем директорию для данных
-RUN mkdir -p /app/data
+# Копируем веб-интерфейс
+COPY web/ ./web/
+
+# Копируем default configs
+COPY configs/ ./configs_default/
+
+# Копируем startup скрипт
+COPY start_flyio.sh ./
+RUN chmod +x start_flyio.sh
+
+# Создаем директории для данных (будут заменены симлинками при запуске)
+RUN mkdir -p /app/data /app/logs /app/configs /app/sessions
 
 # Переменные окружения по умолчанию
 ENV PYTHONUNBUFFERED=1
 ENV DATABASE_PATH=/app/data/jobs.db
 
-# Запуск бота
-CMD ["python", "main.py"]
+# Порт для веб-интерфейса
+EXPOSE 8080
 
+# Запуск через startup скрипт (для fly.io с persistent volume)
+# Для локального Docker можно переопределить: docker run ... python main_multi.py
+CMD ["./start_flyio.sh"]
