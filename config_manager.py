@@ -74,13 +74,7 @@ class ChannelConfig:
     agents: List[AgentConfig] = field(default_factory=list)  # Список агентов для автоответов
     auto_response_enabled: bool = False
     auto_response_template: str = "Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?"
-    # Опциональная пересылка исходного объявления в тему CRM
-    mirror_job_post_to_topic: bool = False  # По умолчанию пересылаем вакансию в топик
-    
-    # Backward compatibility fields (deprecated)
-    agent_phone: str = ""
-    agent_session_name: str = ""
-    
+
     def to_dict(self) -> dict:
         """Конвертация в словарь"""
         return {
@@ -94,12 +88,7 @@ class ChannelConfig:
             'crm_group_id': self.crm_group_id,
             'agents': [agent.to_dict() for agent in self.agents],
             'auto_response_enabled': self.auto_response_enabled,
-            'auto_response_template': self.auto_response_template,
-             # Поведение CRM-темы
-            'mirror_job_post_to_topic': self.mirror_job_post_to_topic,
-            # Backward compatibility
-            'agent_phone': self.agent_phone,
-            'agent_session_name': self.agent_session_name
+            'auto_response_template': self.auto_response_template
         }
     
     @classmethod
@@ -113,13 +102,6 @@ class ChannelConfig:
         for agent_data in agents_data:
             agents.append(AgentConfig.from_dict(agent_data))
         
-        # Backward compatibility: convert old single agent format to new list format
-        if not agents and data.get('agent_phone') and data.get('agent_session_name'):
-            agents.append(AgentConfig(
-                phone=data['agent_phone'],
-                session_name=data['agent_session_name']
-            ))
-        
         return cls(
             id=data['id'],
             name=data['name'],
@@ -131,11 +113,7 @@ class ChannelConfig:
             crm_group_id=data.get('crm_group_id', 0),
             agents=agents,
             auto_response_enabled=data.get('auto_response_enabled', False),
-            auto_response_template=data.get('auto_response_template', 'Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?'),
-            mirror_job_post_to_topic=data.get('mirror_job_post_to_topic', False),
-            # Backward compatibility
-            agent_phone=data.get('agent_phone', ''),
-            agent_session_name=data.get('agent_session_name', '')
+            auto_response_template=data.get('auto_response_template', 'Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?')
         )
 
 

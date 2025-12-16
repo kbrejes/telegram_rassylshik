@@ -13,7 +13,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from config_manager import ConfigManager, ChannelConfig, FilterConfig
-from agent_auth import agent_auth_manager
+from auth import agent_auth_manager, bot_auth_manager
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +49,6 @@ class ChannelCreateRequest(BaseModel):
     agents: List[AgentRequest] = []
     auto_response_enabled: bool = False
     auto_response_template: str = ""
-    
-    # Backward compatibility
-    agent_phone: str = ""
-    agent_session_name: str = ""
 
 
 class ChannelUpdateRequest(BaseModel):
@@ -69,10 +65,6 @@ class ChannelUpdateRequest(BaseModel):
     agents: Optional[List[AgentRequest]] = None
     auto_response_enabled: Optional[bool] = None
     auto_response_template: Optional[str] = None
-    
-    # Backward compatibility
-    agent_phone: Optional[str] = None
-    agent_session_name: Optional[str] = None
 
 
 # Routes
@@ -167,13 +159,6 @@ async def create_channel(data: ChannelCreateRequest):
                 session_name=agent_req.session_name
             ))
         
-        # Backward compatibility: если нет агентов в новом формате, используем старый
-        if not agents and data.agent_phone and data.agent_session_name:
-            agents.append(AgentConfig(
-                phone=data.agent_phone,
-                session_name=data.agent_session_name
-            ))
-        
         channel = ChannelConfig(
             id=channel_id,
             name=data.name,
@@ -185,10 +170,7 @@ async def create_channel(data: ChannelCreateRequest):
             crm_group_id=data.crm_group_id,
             agents=agents,
             auto_response_enabled=data.auto_response_enabled,
-            auto_response_template=data.auto_response_template,
-            # Backward compatibility
-            agent_phone=data.agent_phone,
-            agent_session_name=data.agent_session_name
+            auto_response_template=data.auto_response_template
         )
         
         # Добавляем
@@ -247,13 +229,7 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
                     session_name=agent_req.session_name
                 ))
             channel.agents = agents
-        
-        # Backward compatibility
-        if data.agent_phone is not None:
-            channel.agent_phone = data.agent_phone
-        if data.agent_session_name is not None:
-            channel.agent_session_name = data.agent_session_name
-            
+
         if data.auto_response_enabled is not None:
             channel.auto_response_enabled = data.auto_response_enabled
         if data.auto_response_template is not None:
@@ -395,6 +371,105 @@ async def upload_session(request: Request):
 
     except Exception as e:
         logger.error(f"Ошибка загрузки сессии: {e}")
+        raise HTTPException(500, str(e))
+
+
+# ==================== Bot Authentication Endpoints ====================
+
+class BotAuthInitRequest(BaseModel):
+    """Запрос на инициализацию аутентификации бота"""
+    phone: str
+
+
+class BotAuthVerifyCodeRequest(BaseModel):
+    """Запрос на проверку кода аутентификации"""
+    code: str
+
+
+class BotAuthVerifyPasswordRequest(BaseModel):
+    """Запрос на проверку 2FA пароля"""
+    password: str
+
+
+@app.get("/auth")
+async def auth_page(request: Request):
+    """Страница аутентификации бота"""
+    return templates.TemplateResponse(
+        "bot_auth.html",
+        {
+            "request": request,
+            "bot_state": bot_state
+        }
+    )
+
+
+@app.post("/api/bot/auth/init")
+async def init_bot_auth(request: BotAuthInitRequest):
+    """Инициирует аутентификацию основного бота"""
+    try:
+        logger.info(f"Инициализация аутентификации бота для {request.phone}")
+        result = await bot_auth_manager.init_auth(request.phone)
+        return result
+    except Exception as e:
+        logger.error(f"Ошибка инициализации аутентификации бота: {e}")
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/bot/auth/verify-code")
+async def verify_bot_code(request: BotAuthVerifyCodeRequest):
+    """Проверяет код подтверждения"""
+    try:
+        logger.info("Проверка кода для основного бота")
+        result = await bot_auth_manager.verify_code(request.code)
+
+        # Если успешно - обновляем bot_state чтобы main_multi.py увидел изменение
+        if result.get("authenticated"):
+            bot_state["status"] = "authenticated"
+            bot_state["error"] = None
+
+        return result
+    except Exception as e:
+        logger.error(f"Ошибка проверки кода бота: {e}")
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/bot/auth/verify-password")
+async def verify_bot_password(request: BotAuthVerifyPasswordRequest):
+    """Проверяет 2FA пароль"""
+    try:
+        logger.info("Проверка 2FA пароля для основного бота")
+        result = await bot_auth_manager.verify_password(request.password)
+
+        # Если успешно - обновляем bot_state чтобы main_multi.py увидел изменение
+        if result.get("authenticated"):
+            bot_state["status"] = "authenticated"
+            bot_state["error"] = None
+
+        return result
+    except Exception as e:
+        logger.error(f"Ошибка проверки 2FA пароля бота: {e}")
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/bot/auth/status")
+async def check_bot_auth_status():
+    """Проверяет статус аутентификации основного бота"""
+    try:
+        result = await bot_auth_manager.check_session_status()
+        return result
+    except Exception as e:
+        logger.error(f"Ошибка проверки статуса бота: {e}")
+        raise HTTPException(500, str(e))
+
+
+@app.delete("/api/bot/auth/pending")
+async def cleanup_bot_pending_auth():
+    """Очищает незавершенную аутентификацию бота"""
+    try:
+        await bot_auth_manager.cleanup()
+        return {"success": True, "message": "Pending auth cleaned up"}
+    except Exception as e:
+        logger.error(f"Ошибка очистки: {e}")
         raise HTTPException(500, str(e))
 
 
@@ -574,6 +649,167 @@ async def cleanup_pending_auth(session_name: str):
     except Exception as e:
         logger.error(f"Ошибка очистки: {e}")
         raise HTTPException(500, str(e))
+
+
+# ==================== Auto-create Telegram Entities ====================
+
+class CreateChannelRequest(BaseModel):
+    """Запрос на создание канала"""
+    title: str
+    about: str = ""
+
+
+class CreateCrmGroupRequest(BaseModel):
+    """Запрос на создание CRM группы с топиками"""
+    title: str
+    about: str = ""
+
+
+@app.post("/api/telegram/create-channel")
+async def create_telegram_channel(request: CreateChannelRequest):
+    """
+    Создаёт приватный канал в Telegram для уведомлений.
+    Требует авторизованную сессию бота.
+    """
+    try:
+        from telethon.tl.functions.channels import CreateChannelRequest as TgCreateChannel
+        from auth.base import TimeoutSQLiteSession
+        from telethon import TelegramClient
+        from config import config
+
+        # Проверяем что бот авторизован
+        session_status = await bot_auth_manager.check_session_status()
+        if not session_status.get("authenticated"):
+            return {
+                "success": False,
+                "message": "Бот не авторизован. Сначала пройдите авторизацию на странице /auth"
+            }
+
+        # Создаём клиент с таймаутом для SQLite
+        session = TimeoutSQLiteSession(config.SESSION_NAME)
+        client = TelegramClient(session, config.API_ID, config.API_HASH)
+        await client.connect()
+
+        if not await client.is_user_authorized():
+            await client.disconnect()
+            return {
+                "success": False,
+                "message": "Сессия бота недействительна. Пройдите авторизацию заново."
+            }
+
+        try:
+            # Создаём канал (megagroup=False для канала)
+            result = await client(TgCreateChannel(
+                title=request.title,
+                about=request.about,
+                broadcast=True,  # broadcast=True для канала
+                megagroup=False
+            ))
+
+            # Получаем ID созданного канала
+            channel = result.chats[0]
+            channel_id = -1000000000000 - channel.id  # Формат ID для каналов
+
+            logger.info(f"Канал '{request.title}' создан с ID {channel_id}")
+
+            return {
+                "success": True,
+                "message": f"Канал '{request.title}' успешно создан!",
+                "channel_id": channel_id,
+                "channel_title": request.title
+            }
+
+        finally:
+            await client.disconnect()
+
+    except Exception as e:
+        logger.error(f"Ошибка создания канала: {e}")
+        return {
+            "success": False,
+            "message": f"Ошибка создания канала: {str(e)}"
+        }
+
+
+@app.post("/api/telegram/create-crm-group")
+async def create_telegram_crm_group(request: CreateCrmGroupRequest):
+    """
+    Создаёт группу с включенными топиками для CRM.
+    Требует авторизованную сессию бота.
+    """
+    try:
+        from telethon.tl.functions.channels import CreateChannelRequest as TgCreateChannel
+        from telethon.tl.functions.channels import ToggleForumRequest
+        from auth.base import TimeoutSQLiteSession
+        from telethon import TelegramClient
+        from config import config
+
+        # Проверяем что бот авторизован
+        session_status = await bot_auth_manager.check_session_status()
+        if not session_status.get("authenticated"):
+            return {
+                "success": False,
+                "message": "Бот не авторизован. Сначала пройдите авторизацию на странице /auth"
+            }
+
+        # Создаём клиент с таймаутом для SQLite
+        session = TimeoutSQLiteSession(config.SESSION_NAME)
+        client = TelegramClient(session, config.API_ID, config.API_HASH)
+        await client.connect()
+
+        if not await client.is_user_authorized():
+            await client.disconnect()
+            return {
+                "success": False,
+                "message": "Сессия бота недействительна. Пройдите авторизацию заново."
+            }
+
+        try:
+            # Создаём супергруппу (megagroup=True)
+            result = await client(TgCreateChannel(
+                title=request.title,
+                about=request.about,
+                broadcast=False,
+                megagroup=True  # megagroup=True для группы
+            ))
+
+            # Получаем созданную группу
+            group = result.chats[0]
+
+            # Включаем форум (топики)
+            try:
+                await client(ToggleForumRequest(
+                    channel=group,
+                    enabled=True,
+                    tabs=[]  # Пустой список табов
+                ))
+                topics_enabled = True
+            except Exception as e:
+                logger.warning(f"Не удалось включить топики: {e}")
+                topics_enabled = False
+
+            # Формируем ID
+            group_id = -1000000000000 - group.id
+
+            logger.info(f"CRM группа '{request.title}' создана с ID {group_id}, топики: {topics_enabled}")
+
+            return {
+                "success": True,
+                "message": f"Группа '{request.title}' успешно создана!",
+                "group_id": group_id,
+                "group_title": request.title,
+                "topics_enabled": topics_enabled,
+                "note": "Топики включены автоматически" if topics_enabled else "Включите топики вручную в настройках группы"
+            }
+
+        finally:
+            await client.disconnect()
+
+    except Exception as e:
+        logger.error(f"Ошибка создания CRM группы: {e}")
+        return {
+            "success": False,
+            "message": f"Ошибка создания группы: {str(e)}"
+        }
 
 
 if __name__ == "__main__":

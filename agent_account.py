@@ -3,13 +3,13 @@ Agent account management for Telegram user accounts
 Адаптировано из crm_response_bot для job_notification_bot
 """
 import asyncio
-import time
 import logging
 from typing import Optional, Union
 from pathlib import Path
 from telethon import TelegramClient, errors
 from telethon.tl.types import User
 from config import config
+from utils.retry import FloodWaitTracker, format_wait_time
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,7 @@ class AgentAccount:
         self.phone = phone
         self.client: Optional[TelegramClient] = None
         self._is_connected = False
-        self._is_available = True
-        self.flood_wait_until: Optional[float] = None
+        self._flood_tracker = FloodWaitTracker()
     
     async def connect(self) -> bool:
         """
@@ -137,40 +136,58 @@ class AgentAccount:
             logger.error(f"Агент {self.session_name}: Ошибка отправки {user}: {e}")
             return False
     
+    @property
+    def flood_wait_until(self) -> Optional[float]:
+        """Время до которого действует FloodWait (для совместимости с AgentPool)"""
+        return self._flood_tracker.flood_wait_until
+
     def is_available(self) -> bool:
         """
         Проверка доступности агента для отправки сообщений
-        
+
         Returns:
             True если агент не в FloodWait и подключен
         """
         if not self._is_connected:
             return False
-        
-        if self.flood_wait_until:
-            if time.time() < self.flood_wait_until:
-                return False
-            else:
-                # FloodWait истек
-                self.flood_wait_until = None
-                self._is_available = True
-        
-        return self._is_available
-    
+        return not self._flood_tracker.is_blocked
+
     def handle_flood_wait(self, seconds: int) -> None:
         """
         Обработка FloodWait ошибки
-        
+
         Args:
             seconds: Количество секунд ожидания
         """
-        self.flood_wait_until = time.time() + seconds
-        self._is_available = False
-        logger.warning(f"Агент {self.session_name}: Недоступен {seconds} секунд")
+        self._flood_tracker.set_flood_wait(seconds)
+        logger.warning(
+            f"Агент {self.session_name}: Недоступен {format_wait_time(seconds)}"
+        )
     
     async def get_me(self):
         """Получить информацию о текущем пользователе"""
         if not self._is_connected or not self.client:
             return None
         return await self.client.get_me()
+
+    async def health_check(self) -> bool:
+        """
+        Проверяет, что сессия агента валидна и работает
+
+        Returns:
+            True если агент подключен и авторизован
+        """
+        if not self._is_connected or not self.client:
+            return False
+        try:
+            await self.client.get_me()
+            return True
+        except Exception as e:
+            logger.warning(f"Агент {self.session_name}: health check failed: {e}")
+            self._is_connected = False
+            return False
+
+    def get_remaining_flood_wait(self) -> int:
+        """Возвращает оставшееся время FloodWait в секундах"""
+        return self._flood_tracker.remaining_seconds
 

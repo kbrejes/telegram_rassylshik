@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Notification Bot - Авторизация</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .auth-container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .auth-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .auth-step {
+            display: none;
+        }
+
+        .auth-step.active {
+            display: block;
+        }
+
+        .auth-icon {
+            font-size: 4rem;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .auth-title {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .auth-title h2 {
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        .auth-title p {
+            color: var(--text-light);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+        }
+
+        .status-badge.waiting {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .status-badge.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status-badge.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .code-input {
+            text-align: center;
+            font-size: 1.5rem;
+            letter-spacing: 0.5rem;
+            font-weight: bold;
+        }
+
+        .user-info {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .user-info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .user-info-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-info-label {
+            color: var(--text-light);
+        }
+
+        .user-info-value {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-content {
+            text-align: center;
+        }
+
+        .nav-link {
+            display: block;
+            text-align: center;
+            margin-top: 1rem;
+            color: white;
+            text-decoration: none;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+
+        .flood-wait-timer {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--warning);
+            text-align: center;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container auth-container">
+        <div class="header">
+            <h1>Job Notification Bot</h1>
+            <p>Авторизация в Telegram</p>
+        </div>
+
+        <div class="auth-card">
+            <!-- Step 0: Check Status -->
+            <div id="step-check" class="auth-step active">
+                <div class="auth-icon">
+                    <div class="spinner"></div>
+                </div>
+                <div class="auth-title">
+                    <h2>Проверка статуса...</h2>
+                    <p>Подождите, проверяем состояние сессии</p>
+                </div>
+            </div>
+
+            <!-- Step 1: Enter Phone -->
+            <div id="step-phone" class="auth-step">
+                <div class="auth-icon">
+                    <span>📱</span>
+                </div>
+                <div class="auth-title">
+                    <h2>Вход в Telegram</h2>
+                    <p>Введите номер телефона для авторизации бота</p>
+                </div>
+
+                <form id="phone-form">
+                    <div class="form-group">
+                        <label for="phone">Номер телефона</label>
+                        <input type="tel" id="phone" class="input" placeholder="+79991234567" required>
+                        <span class="help-text">Введите номер в международном формате</span>
+                    </div>
+                    <button type="submit" class="button button-primary" style="width: 100%;">
+                        Отправить код
+                    </button>
+                </form>
+
+                <div id="phone-error" class="auth-error" style="display: none;"></div>
+            </div>
+
+            <!-- Step 2: Enter Code -->
+            <div id="step-code" class="auth-step">
+                <div class="auth-icon">
+                    <span>🔐</span>
+                </div>
+                <div class="auth-title">
+                    <h2>Код подтверждения</h2>
+                    <p>Введите код из Telegram</p>
+                </div>
+
+                <form id="code-form">
+                    <div class="form-group">
+                        <label for="code">Код из Telegram</label>
+                        <input type="text" id="code" class="input code-input" placeholder="12345" maxlength="6" required>
+                        <span class="help-text">Код отправлен в Telegram</span>
+                    </div>
+                    <button type="submit" class="button button-primary" style="width: 100%;">
+                        Подтвердить
+                    </button>
+                </form>
+
+                <div id="code-error" class="auth-error" style="display: none;"></div>
+            </div>
+
+            <!-- Step 3: Enter 2FA Password -->
+            <div id="step-password" class="auth-step">
+                <div class="auth-icon">
+                    <span>🔑</span>
+                </div>
+                <div class="auth-title">
+                    <h2>Двухфакторная аутентификация</h2>
+                    <p>Введите пароль 2FA</p>
+                </div>
+
+                <form id="password-form">
+                    <div class="form-group">
+                        <label for="password">Пароль 2FA</label>
+                        <input type="password" id="password" class="input" placeholder="Ваш пароль" required>
+                    </div>
+                    <button type="submit" class="button button-primary" style="width: 100%;">
+                        Войти
+                    </button>
+                </form>
+
+                <div id="password-error" class="auth-error" style="display: none;"></div>
+            </div>
+
+            <!-- Step 4: Success -->
+            <div id="step-success" class="auth-step">
+                <div class="auth-icon">
+                    <span>✅</span>
+                </div>
+                <div class="auth-title">
+                    <span class="status-badge success">Авторизован</span>
+                    <h2>Бот успешно авторизован!</h2>
+                    <p>Бот готов к работе</p>
+                </div>
+
+                <div class="user-info" id="user-info">
+                    <!-- User info will be populated here -->
+                </div>
+
+                <a href="/" class="button button-primary" style="width: 100%; margin-top: 1.5rem; text-align: center;">
+                    Перейти к управлению
+                </a>
+            </div>
+
+            <!-- Step 5: Flood Wait -->
+            <div id="step-flood" class="auth-step">
+                <div class="auth-icon">
+                    <span>⏳</span>
+                </div>
+                <div class="auth-title">
+                    <span class="status-badge waiting">Ожидание</span>
+                    <h2>Слишком много запросов</h2>
+                    <p>Telegram ограничил частоту запросов</p>
+                </div>
+
+                <div class="flood-wait-timer" id="flood-timer">
+                    <!-- Timer will be shown here -->
+                </div>
+
+                <p style="text-align: center; color: var(--text-light);">
+                    Попробуйте позже или загрузите существующую сессию
+                </p>
+            </div>
+        </div>
+
+        <a href="/" class="nav-link">← Вернуться к управлению каналами</a>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p style="margin-top: 1rem;">Подождите...</p>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentPhone = '';
+
+        // Helper functions
+        function showStep(stepId) {
+            document.querySelectorAll('.auth-step').forEach(step => {
+                step.classList.remove('active');
+            });
+            document.getElementById(stepId).classList.add('active');
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading-overlay').classList.toggle('active', show);
+        }
+
+        function showError(containerId, message) {
+            const container = document.getElementById(containerId);
+            container.textContent = message;
+            container.style.display = 'block';
+        }
+
+        function hideError(containerId) {
+            document.getElementById(containerId).style.display = 'none';
+        }
+
+        function displayUserInfo(userInfo) {
+            const container = document.getElementById('user-info');
+            container.innerHTML = `
+                <div class="user-info-item">
+                    <span class="user-info-label">Имя</span>
+                    <span class="user-info-value">${userInfo.name || 'N/A'}</span>
+                </div>
+                <div class="user-info-item">
+                    <span class="user-info-label">Username</span>
+                    <span class="user-info-value">@${userInfo.username || 'N/A'}</span>
+                </div>
+                <div class="user-info-item">
+                    <span class="user-info-label">Телефон</span>
+                    <span class="user-info-value">${userInfo.phone || 'N/A'}</span>
+                </div>
+                <div class="user-info-item">
+                    <span class="user-info-label">ID</span>
+                    <span class="user-info-value">${userInfo.id || 'N/A'}</span>
+                </div>
+            `;
+        }
+
+        function formatTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hours}ч ${minutes}м ${secs}с`;
+        }
+
+        // Check initial status
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/bot/auth/status');
+                const data = await response.json();
+
+                if (data.authenticated) {
+                    displayUserInfo(data.user_info);
+                    showStep('step-success');
+                } else {
+                    showStep('step-phone');
+                }
+            } catch (error) {
+                console.error('Error checking status:', error);
+                showStep('step-phone');
+            }
+        }
+
+        // Handle phone form submission
+        document.getElementById('phone-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError('phone-error');
+
+            const phone = document.getElementById('phone').value.trim();
+            if (!phone) return;
+
+            currentPhone = phone;
+            showLoading(true);
+
+            try {
+                const response = await fetch('/api/bot/auth/init', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: phone })
+                });
+
+                const data = await response.json();
+                showLoading(false);
+
+                if (data.success) {
+                    if (data.already_authenticated) {
+                        displayUserInfo(data.user_info);
+                        showStep('step-success');
+                    } else if (data.needs_code) {
+                        showStep('step-code');
+                    }
+                } else {
+                    if (data.flood_wait) {
+                        showFloodWait(data.flood_wait);
+                    } else {
+                        showError('phone-error', data.message || 'Ошибка отправки кода');
+                    }
+                }
+            } catch (error) {
+                showLoading(false);
+                console.error('Error:', error);
+                showError('phone-error', 'Ошибка соединения с сервером');
+            }
+        });
+
+        // Handle code form submission
+        document.getElementById('code-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError('code-error');
+
+            const code = document.getElementById('code').value.trim();
+            if (!code) return;
+
+            showLoading(true);
+
+            try {
+                const response = await fetch('/api/bot/auth/verify-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: code })
+                });
+
+                const data = await response.json();
+                showLoading(false);
+
+                if (data.success) {
+                    if (data.needs_password) {
+                        showStep('step-password');
+                    } else if (data.authenticated) {
+                        displayUserInfo(data.user_info);
+                        showStep('step-success');
+                    }
+                } else {
+                    showError('code-error', data.message || 'Неверный код');
+                }
+            } catch (error) {
+                showLoading(false);
+                console.error('Error:', error);
+                showError('code-error', 'Ошибка соединения с сервером');
+            }
+        });
+
+        // Handle password form submission
+        document.getElementById('password-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError('password-error');
+
+            const password = document.getElementById('password').value;
+            if (!password) return;
+
+            showLoading(true);
+
+            try {
+                const response = await fetch('/api/bot/auth/verify-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: password })
+                });
+
+                const data = await response.json();
+                showLoading(false);
+
+                if (data.success && data.authenticated) {
+                    displayUserInfo(data.user_info);
+                    showStep('step-success');
+                } else {
+                    showError('password-error', data.message || 'Неверный пароль');
+                }
+            } catch (error) {
+                showLoading(false);
+                console.error('Error:', error);
+                showError('password-error', 'Ошибка соединения с сервером');
+            }
+        });
+
+        // Show flood wait with timer
+        function showFloodWait(seconds) {
+            showStep('step-flood');
+
+            const timerEl = document.getElementById('flood-timer');
+            let remaining = seconds;
+
+            function updateTimer() {
+                if (remaining <= 0) {
+                    showStep('step-phone');
+                    return;
+                }
+
+                timerEl.textContent = formatTime(remaining);
+                remaining--;
+                setTimeout(updateTimer, 1000);
+            }
+
+            updateTimer();
+        }
+
+        // Initial check
+        checkStatus();
+    </script>
+</body>
+</html>

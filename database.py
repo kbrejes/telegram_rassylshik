@@ -57,7 +57,21 @@ class Database:
                 FOREIGN KEY (job_id) REFERENCES processed_jobs(id)
             )
         """)
-        
+
+        # Таблица для маппинга CRM топиков на контакты
+        await self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS crm_topic_contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                topic_id INTEGER NOT NULL,
+                contact_id INTEGER NOT NULL,
+                contact_name TEXT,
+                agent_session TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(group_id, topic_id)
+            )
+        """)
+
         await self._connection.commit()
         logger.info("Таблицы созданы/проверены")
     
@@ -143,19 +157,71 @@ class Database:
     async def get_statistics(self) -> Dict:
         """Возвращает статистику по обработанным вакансиям"""
         cursor = await self._connection.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN is_relevant = 1 THEN 1 ELSE 0 END) as relevant,
                 COUNT(DISTINCT chat_id) as unique_chats
             FROM processed_jobs
         """)
-        
+
         row = await cursor.fetchone()
         return {
             'total': row[0],
             'relevant': row[1],
             'unique_chats': row[2]
         }
+
+    # === CRM Topic-Contact методы ===
+
+    async def save_topic_contact(
+        self,
+        group_id: int,
+        topic_id: int,
+        contact_id: int,
+        contact_name: str = None,
+        agent_session: str = None
+    ):
+        """Сохраняет маппинг topic_id -> contact_id"""
+        await self._connection.execute("""
+            INSERT OR REPLACE INTO crm_topic_contacts
+            (group_id, topic_id, contact_id, contact_name, agent_session)
+            VALUES (?, ?, ?, ?, ?)
+        """, (group_id, topic_id, contact_id, contact_name, agent_session))
+        await self._connection.commit()
+        logger.debug(f"Сохранен маппинг: topic {topic_id} -> contact {contact_id}")
+
+    async def get_contact_by_topic(self, group_id: int, topic_id: int) -> Optional[Dict]:
+        """Находит contact_id по topic_id"""
+        cursor = await self._connection.execute("""
+            SELECT contact_id, contact_name, agent_session
+            FROM crm_topic_contacts
+            WHERE group_id = ? AND topic_id = ?
+        """, (group_id, topic_id))
+        row = await cursor.fetchone()
+        if row:
+            return {
+                'contact_id': row[0],
+                'contact_name': row[1],
+                'agent_session': row[2]
+            }
+        return None
+
+    async def get_topic_by_contact(self, group_id: int, contact_id: int) -> Optional[int]:
+        """Находит topic_id по contact_id"""
+        cursor = await self._connection.execute("""
+            SELECT topic_id FROM crm_topic_contacts
+            WHERE group_id = ? AND contact_id = ?
+        """, (group_id, contact_id))
+        row = await cursor.fetchone()
+        return row[0] if row else None
+
+    async def load_all_topic_contacts(self, group_id: int) -> Dict[int, int]:
+        """Загружает все маппинги для группы (topic_id -> contact_id)"""
+        cursor = await self._connection.execute("""
+            SELECT topic_id, contact_id FROM crm_topic_contacts WHERE group_id = ?
+        """, (group_id,))
+        rows = await cursor.fetchall()
+        return {row[0]: row[1] for row in rows}
 
 
 # Глобальный экземпляр базы данных

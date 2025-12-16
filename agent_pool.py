@@ -2,11 +2,11 @@
 Agent Pool Management for handling multiple Telegram agents with load balancing
 """
 import asyncio
-import time
 import logging
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Any
 from agent_account import AgentAccount
 from config_manager import AgentConfig
+from utils.retry import calculate_backoff, format_wait_time
 
 logger = logging.getLogger(__name__)
 
@@ -88,25 +88,28 @@ class AgentPool:
     ) -> bool:
         """
         Отправка сообщения через доступного агента с автоматическим переключением
-        
+
         Args:
             user: Username (с или без @), user ID, или User объект
             text: Текст сообщения
             max_retries: Максимальное количество попыток с разными агентами
-            
+
         Returns:
             True если сообщение отправлено успешно
         """
         for attempt in range(max_retries):
             agent = self.get_available_agent()
-            
+
             if not agent:
-                logger.warning(f"Попытка {attempt + 1}/{max_retries}: нет доступных агентов")
+                delay = calculate_backoff(attempt, base=1.0, max_delay=30.0)
+                logger.warning(
+                    f"Попытка {attempt + 1}/{max_retries}: нет доступных агентов, "
+                    f"ожидание {delay:.1f}с"
+                )
                 if attempt < max_retries - 1:
-                    # Ждем немного перед следующей попыткой
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    await asyncio.sleep(delay)
                 continue
-            
+
             try:
                 success = await agent.send_message(user, text)
                 if success:
@@ -114,18 +117,40 @@ class AgentPool:
                     return True
                 else:
                     logger.warning(f"Агент {agent.session_name} не смог отправить сообщение")
-                    
+
             except Exception as e:
                 logger.error(f"Ошибка отправки через агента {agent.session_name}: {e}")
-            
-            # Если не удалось - пробуем следующего агента
+
+            # Если не удалось - пробуем следующего агента с небольшой задержкой
             if attempt < max_retries - 1:
                 await asyncio.sleep(1)
-        
+
         logger.error(f"Не удалось отправить сообщение после {max_retries} попыток")
         return False
+
+    async def periodic_health_check(self, interval: float = 300.0) -> None:
+        """
+        Фоновая задача для периодической проверки здоровья агентов
+
+        Args:
+            interval: Интервал проверки в секундах (по умолчанию 5 минут)
+        """
+        logger.info(f"Запуск периодической проверки агентов каждые {format_wait_time(int(interval))}")
+        while True:
+            await asyncio.sleep(interval)
+
+            if not self._is_initialized:
+                continue
+
+            unhealthy_count = 0
+            for agent in self.agents:
+                if not await agent.health_check():
+                    unhealthy_count += 1
+
+            if unhealthy_count > 0:
+                logger.warning(f"Health check: {unhealthy_count}/{len(self.agents)} агентов недоступны")
     
-    def get_status(self) -> Dict[str, any]:
+    def get_status(self) -> Dict[str, Any]:
         """
         Получить статус пула агентов
         

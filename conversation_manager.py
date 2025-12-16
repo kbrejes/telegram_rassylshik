@@ -4,15 +4,21 @@ Conversation Manager - управление топиками и трансляц
 """
 import asyncio
 import logging
+import random
 from typing import Optional, Dict
 from telethon import TelegramClient, events
 from telethon import errors
 
+from database import db
+
 # Forum topics support (requires Telethon 1.37+)
 try:
-    from telethon.tl.functions.channels import CreateForumTopicRequest
+    from telethon.tl.functions.messages import CreateForumTopicRequest
 except ImportError:
-    CreateForumTopicRequest = None
+    try:
+        from telethon.tl.functions.channels import CreateForumTopicRequest
+    except ImportError:
+        CreateForumTopicRequest = None
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +54,19 @@ class ConversationManager:
         
         # Кэш: message_id сообщений, отправленных агентом контакту (чтобы не зеркалировать обратно)
         self._agent_sent_messages: set = set()
-        
+
         logger.info(f"ConversationManager инициализирован для группы: {group_id}")
+
+    async def load_cache_from_db(self):
+        """Загружает кэш topic_id <-> contact_id из базы данных"""
+        try:
+            mappings = await db.load_all_topic_contacts(self.group_id)
+            for topic_id, contact_id in mappings.items():
+                self._topic_cache[contact_id] = topic_id
+                self._reverse_topic_cache[topic_id] = contact_id
+            logger.info(f"Загружено {len(mappings)} маппингов из БД для группы {self.group_id}")
+        except Exception as e:
+            logger.error(f"Ошибка загрузки кэша из БД: {e}")
     
     async def create_topic(
         self,
@@ -71,24 +88,44 @@ class ConversationManager:
             ID топика или None если не удалось создать
         """
         try:
+            if CreateForumTopicRequest is None:
+                logger.error("CreateForumTopicRequest не доступен. Обновите Telethon: pip install -U telethon")
+                return None
+
             logger.info(f"Создание топика '{title}' для контакта {contact_id}")
-            
+
+            # Сначала получаем entity группы (агент должен знать о ней)
+            try:
+                group_entity = await self.client.get_entity(self.group_id)
+            except ValueError as e:
+                logger.error(f"Агент не имеет доступа к группе {self.group_id}. Добавьте агента в CRM группу!")
+                return None
+
             # Создаем топик через Telethon API
             result = await self.client(CreateForumTopicRequest(
-                peer=self.group_id,
+                peer=group_entity,
                 title=title[:128],  # Ограничение Telegram
-                icon_color=None,
-                icon_emoji_id=None,
-                random_id=None
+                random_id=random.randint(1, 2**31)
             ))
             
             # Извлекаем topic_id из ответа
             topic_id = result.updates[0].id
-            
-            # Кэшируем
+
+            # Кэшируем в памяти
             self._topic_cache[contact_id] = topic_id
             self._reverse_topic_cache[topic_id] = contact_id
-            
+
+            # Сохраняем в БД для персистентности
+            try:
+                await db.save_topic_contact(
+                    group_id=self.group_id,
+                    topic_id=topic_id,
+                    contact_id=contact_id,
+                    contact_name=title
+                )
+            except Exception as e:
+                logger.error(f"Ошибка сохранения в БД: {e}")
+
             return topic_id
             
         except errors.FloodWaitError as e:
@@ -185,20 +222,47 @@ class ConversationManager:
         """
         Регистрация обработчиков для двусторонней трансляции сообщений
         """
-        
-        @self.group_monitor_client.on(events.NewMessage(chats=self.group_id))
+
+        # Telethon use positive channel IDs internally, extract from -100XXXXXXXXXX format
+        channel_id = self.group_id
+        if channel_id < 0:
+            # Convert from Bot API format (-100XXXXXXXXXX) to Telethon format
+            channel_id_str = str(abs(channel_id))
+            if channel_id_str.startswith('100') and len(channel_id_str) > 10:
+                channel_id = int(channel_id_str[3:])  # Strip '100' prefix
+
+        logger.info(f"  Регистрация обработчика CRM: group_id={self.group_id}, channel_id={channel_id}")
+
+        @self.group_monitor_client.on(events.NewMessage())
         async def handle_message_from_topic(event):
             """Обработка сообщения из топика → отправить контакту"""
             try:
                 message = event.message
-                
-                # Проверяем, что сообщение из нужной группы
-                if message.chat_id != self.group_id:
-                    return
-                
-                # Игнорируем собственные сообщения
-                if message.out:
-                    return
+                chat_id = message.chat_id
+
+                # Проверяем, что сообщение из нужной группы (поддерживаем оба формата ID)
+                is_our_group = (
+                    chat_id == self.group_id or  # Bot API format: -100XXXXXXXXXX
+                    chat_id == channel_id or      # Telethon format: positive
+                    chat_id == -channel_id        # Negative without 100 prefix
+                )
+
+                if not is_our_group:
+                    return  # Silent skip for other chats
+
+                logger.info(f"📩 CRM: chat_id={chat_id}, out={message.out}, from={message.sender_id}, text='{message.text[:30] if message.text else 'media'}...'")
+
+                # Игнорируем только сообщения от самого бота-монитора
+                # (агенты отправляют служебные сообщения через свои клиенты)
+                try:
+                    me = await self.group_monitor_client.get_me()
+                    logger.info(f"  Проверка: sender={message.sender_id}, bot={me.id}")
+                    if message.sender_id == me.id:
+                        logger.debug(f"  Пропуск: сообщение от бота")
+                        return
+                except Exception as e:
+                    logger.error(f"  Ошибка get_me(): {e}")
+                    # Продолжаем обработку если не можем проверить
                 
                 # Определяем topic_id
                 topic_id = None
@@ -243,31 +307,57 @@ class ConversationManager:
                         pass
                 
                 if not topic_id:
+                    logger.warning(f"  Пропуск: topic_id не определен. reply_to={message.reply_to}")
                     return
-                
-                # Находим контакт для этого топика
+
+                logger.info(f"  topic_id={topic_id}, кэш: {self._reverse_topic_cache}")
+
+                # Находим контакт для этого топика - сначала в памяти, потом в БД
                 contact_id = self.get_contact_id(topic_id)
                 if not contact_id:
+                    # Пробуем загрузить из БД
+                    try:
+                        contact_data = await db.get_contact_by_topic(self.group_id, topic_id)
+                        if contact_data:
+                            contact_id = contact_data['contact_id']
+                            # Обновляем кэш в памяти
+                            self._topic_cache[contact_id] = topic_id
+                            self._reverse_topic_cache[topic_id] = contact_id
+                            logger.info(f"  Загружен из БД: topic {topic_id} -> contact {contact_id}")
+                    except Exception as e:
+                        logger.error(f"  Ошибка загрузки из БД: {e}")
+
+                if not contact_id:
+                    logger.warning(f"  ⚠️ Контакт для топика {topic_id} не найден ни в кэше, ни в БД")
                     return
-                
+
                 # Отправляем сообщение контакту
                 try:
                     message_text = message.text or ""
-                    
+                    logger.info(f"  📤 Отправка контакту {contact_id} из топика {topic_id}: '{message_text[:50]}...'")
+
                     # Игнорируем служебные сообщения
                     if message_text.startswith("🤖 **Агент (") or message_text.startswith("📌 **Новый контакт:") or message_text.startswith("📋 **Вакансия из") or message_text.startswith("👤 **"):
+                        logger.debug(f"  Пропуск: служебное сообщение")
                         return
-                    
+
+                    if not message_text and not message.media:
+                        logger.debug(f"  Пропуск: пустое сообщение")
+                        return
+
                     # Если задан callback - используем его
                     if self.send_contact_message_cb:
+                        logger.info(f"  Используем callback для отправки")
                         await self.send_contact_message_cb(
                             contact_id=contact_id,
                             text=message_text,
                             media=message.media,
                             topic_id=topic_id
                         )
+                        logger.info(f"  ✅ Сообщение отправлено через callback")
                     else:
-                        # Fallback: отправляем через текущего клиента
+                        # Fallback: отправляем через текущего клиента (агента)
+                        logger.info(f"  Используем агента {type(self.client).__name__} для отправки")
                         if message.media:
                             await self.client.send_message(
                                 contact_id,
@@ -279,8 +369,9 @@ class ConversationManager:
                                 contact_id,
                                 message_text
                             )
+                        logger.info(f"  ✅ Сообщение отправлено через агента")
                 except Exception as e:
-                    logger.error(f"Ошибка отправки контакту {contact_id}: {e}", exc_info=True)
+                    logger.error(f"  ❌ Ошибка отправки контакту {contact_id}: {e}", exc_info=True)
             
             except Exception as e:
                 logger.error(f"Ошибка в handle_message_from_topic: {e}", exc_info=True)

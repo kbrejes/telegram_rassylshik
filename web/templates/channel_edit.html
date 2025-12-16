@@ -5,6 +5,115 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if is_new %}Создание канала{% else %}Редактирование канала{% endif %} - Job Notification Bot</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Setup guide styles */
+        .setup-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 1rem;
+        }
+        .setup-step {
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+        }
+        .step-number {
+            width: 32px;
+            height: 32px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .step-content {
+            flex: 1;
+        }
+
+        /* ID helper button */
+        .id-helper {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .id-helper .input {
+            flex: 1;
+        }
+        .btn-helper {
+            padding: 8px 12px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            transition: background 0.2s;
+        }
+        .btn-helper:hover {
+            background: #e0e0e0;
+        }
+
+        /* Section divider with title */
+        .section-divider {
+            display: flex;
+            align-items: center;
+            margin: 2rem 0;
+            gap: 15px;
+        }
+        .section-divider::before,
+        .section-divider::after {
+            content: '';
+            flex: 1;
+            height: 2px;
+            background: #e0e0e0;
+        }
+        .section-divider span {
+            color: #666;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        /* Info tooltip */
+        .info-tooltip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            font-size: 12px;
+            cursor: help;
+            margin-left: 5px;
+        }
+
+        /* Notification animations */
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -12,6 +121,61 @@
             <h1>{% if is_new %}➕ Создание канала{% else %}✏️ Редактирование канала{% endif %}</h1>
             <p>Настройте канал для уведомлений о вакансиях</p>
         </div>
+
+        <!-- Пошаговый гайд для новых пользователей -->
+        {% if is_new %}
+        <div class="card setup-guide" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin-bottom: 1.5rem;">
+            <h2 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">
+                📋 Как настроить мониторинг вакансий
+            </h2>
+            <div class="setup-steps">
+                <div class="setup-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <strong>Создайте канал для уведомлений</strong>
+                        <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 0.9rem;">
+                            Telegram → Создать канал → Приватный канал<br>
+                            Сюда будут приходить отфильтрованные вакансии
+                        </p>
+                    </div>
+                </div>
+                <div class="setup-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <strong>Получите ID канала</strong>
+                        <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 0.9rem;">
+                            Напишите что-нибудь в канал → перешлите ЭТО сообщение боту <a href="https://t.me/getmyid_bot" target="_blank" style="color: #fff; text-decoration: underline;">@getmyid_bot</a><br>
+                            Найдите строку <code style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 3px;">Forwarded from chat: -100...</code>
+                        </p>
+                    </div>
+                </div>
+                <div class="setup-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <strong>Добавьте бота в канал</strong>
+                        <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 0.9rem;">
+                            Настройки канала → Администраторы → Добавить администратора<br>
+                            Найдите бота и дайте права на публикацию
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <details style="margin-top: 1rem; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
+                <summary style="cursor: pointer; font-weight: bold;">🤖 Настройка CRM (опционально)</summary>
+                <div style="margin-top: 10px; padding-left: 10px;">
+                    <p style="margin: 0 0 10px 0; font-size: 0.9rem;">
+                        CRM позволяет автоматически откликаться на вакансии и вести переписку в удобном формате топиков.
+                    </p>
+                    <ol style="margin: 0; padding-left: 20px; font-size: 0.9rem; line-height: 1.8;">
+                        <li><strong>Создайте группу с топиками:</strong> Telegram → Создать группу → Настройки ⚙️ → Темы → Включить</li>
+                        <li><strong>Получите ID группы:</strong> Напишите что-нибудь в группу → перешлите это сообщение в @getmyid_bot → скопируйте "Forwarded from chat"</li>
+                        <li><strong>Добавьте агентов:</strong> Это ваши Telegram-аккаунты для отправки откликов</li>
+                    </ol>
+                </div>
+            </details>
+        </div>
+        {% endif %}
 
         <div class="card">
             <a href="/" class="button button-secondary button-small" style="margin-bottom: 1rem;">
@@ -34,19 +198,34 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="telegram_id">ID Telegram канала/чата *</label>
-                    <input 
-                        type="text" 
-                        id="telegram_id" 
-                        name="telegram_id" 
-                        class="input" 
-                        placeholder="Например: -1001234567890"
-                        value="{% if channel %}{{ channel.telegram_id }}{% endif %}"
-                        required
-                    >
+                    <label for="telegram_id">
+                        ID канала для уведомлений *
+                        <span class="info-tooltip" title="Куда бот будет отправлять отфильтрованные вакансии">?</span>
+                    </label>
+                    <div class="id-helper">
+                        <input
+                            type="text"
+                            id="telegram_id"
+                            name="telegram_id"
+                            class="input"
+                            placeholder="-100XXXXXXXXXX"
+                            value="{% if channel %}{{ channel.telegram_id }}{% endif %}"
+                            required
+                        >
+                        <button type="button" class="btn-helper" onclick="autoCreateChannel()" title="Автоматически создать канал">
+                            ✨ Создать канал
+                        </button>
+                        <a href="https://t.me/getmyid_bot" target="_blank" class="btn-helper" title="Открыть бота для получения ID">
+                            🔍 Узнать ID
+                        </a>
+                    </div>
                     <span class="help-text">
-                        ID канала куда будут отправляться уведомления. 
-                        Получить можно через @getmyid_bot
+                        <strong>Вариант 1:</strong> Нажмите "Создать канал" — бот автоматически создаст канал и заполнит ID<br>
+                        <strong>Вариант 2 (вручную):</strong><br>
+                        &nbsp;&nbsp;1. Создайте канал в Telegram<br>
+                        &nbsp;&nbsp;2. Напишите любое сообщение в канал<br>
+                        &nbsp;&nbsp;3. Перешлите ЭТО сообщение в <a href="https://t.me/getmyid_bot" target="_blank">@getmyid_bot</a><br>
+                        &nbsp;&nbsp;4. Скопируйте ID из строки "Forwarded from chat" (начинается с -100...)
                     </span>
                 </div>
 
@@ -107,92 +286,103 @@
                     </span>
                 </div>
 
-                <hr style="margin: 2rem 0; border: none; border-top: 2px solid #e0e0e0;">
-
-                <h3 style="margin-bottom: 1rem;">🤖 CRM Функциональность</h3>
+                <div class="section-divider">
+                    <span>🤖 CRM и автоответы (опционально)</span>
+                </div>
 
                 <div class="form-group">
                     <label>
-                        <input 
-                            type="checkbox" 
-                            id="crm_enabled" 
-                            name="crm_enabled" 
+                        <input
+                            type="checkbox"
+                            id="crm_enabled"
+                            name="crm_enabled"
                             {% if channel and channel.crm_enabled %}checked{% endif %}
                             onchange="toggleCrmFields()"
                         >
-                        Включить CRM (автоответы + трансляция в топики)
+                        Включить CRM режим
                     </label>
                     <span class="help-text">
-                        Бот будет автоматически откликаться на вакансии и создавать топики в CRM группе
+                        Автоматические отклики на вакансии + ведение переписки в формате топиков
                     </span>
                 </div>
 
                 <div id="crm-fields" style="display: none;">
+                    <div class="alert alert-info" style="margin-bottom: 1.5rem;">
+                        <strong>💡 Что такое CRM режим?</strong><br>
+                        <ul style="margin: 10px 0 0 20px; padding: 0;">
+                            <li>Агент автоматически отправляет отклик работодателю</li>
+                            <li>Для каждого контакта создаётся отдельный топик в группе</li>
+                            <li>Вся переписка транслируется в топик для удобного отслеживания</li>
+                        </ul>
+                    </div>
+
                     <div class="form-group">
-                        <label for="crm_group_id">ID CRM группы с топиками</label>
-                        <input 
-                            type="text" 
-                            id="crm_group_id" 
-                            name="crm_group_id" 
-                            class="input" 
-                            placeholder="-1001234567890"
-                            value="{% if channel %}{{ channel.crm_group_id if channel.crm_group_id else '' }}{% endif %}"
-                        >
+                        <label for="crm_group_id">
+                            ID группы для CRM (с топиками)
+                            <span class="info-tooltip" title="Группа с включенными темами, где будет создаваться топик для каждого контакта">?</span>
+                        </label>
+                        <div class="id-helper">
+                            <input
+                                type="text"
+                                id="crm_group_id"
+                                name="crm_group_id"
+                                class="input"
+                                placeholder="-100XXXXXXXXXX"
+                                value="{% if channel %}{{ channel.crm_group_id if channel.crm_group_id else '' }}{% endif %}"
+                            >
+                            <button type="button" class="btn-helper" onclick="autoCreateCrmGroup()" title="Автоматически создать группу с топиками">
+                                ✨ Создать группу
+                            </button>
+                            <a href="https://t.me/getmyid_bot" target="_blank" class="btn-helper" title="Открыть бота для получения ID">
+                                🔍 Узнать ID
+                            </a>
+                        </div>
                         <span class="help-text">
-                            ID группы где будут создаваться топики для каждого контакта.
-                            Группа должна иметь включенные темы (Topics).
+                            <strong>Вариант 1:</strong> Нажмите "Создать группу" — бот создаст группу с топиками и заполнит ID<br>
+                            <strong>Вариант 2 (вручную):</strong><br>
+                            &nbsp;&nbsp;1. Создайте группу → Настройки ⚙️ → Темы → Включить<br>
+                            &nbsp;&nbsp;2. Напишите сообщение в группу<br>
+                            &nbsp;&nbsp;3. Перешлите его в <a href="https://t.me/getmyid_bot" target="_blank">@getmyid_bot</a><br>
+                            &nbsp;&nbsp;4. ID в строке "Forwarded from chat" (начинается с -100...)
                         </span>
                     </div>
 
                     <div class="form-group">
-                        <label>Агенты для автоответов</label>
+                        <label>
+                            Агенты для автоответов
+                            <span class="info-tooltip" title="Ваши Telegram-аккаунты, от имени которых будут отправляться отклики">?</span>
+                        </label>
+                        <div class="alert" style="background: #fff3cd; border: 1px solid #ffc107; margin-bottom: 1rem;">
+                            <strong>⚠️ Что такое агент?</strong><br>
+                            Агент — это ваш личный Telegram-аккаунт, который будет отправлять отклики работодателям.
+                            Вам понадобится авторизоваться через код из SMS.
+                        </div>
                         <div id="agents-list">
                             {% if channel and channel.agents %}
                                 {% for agent in channel.agents %}
-                                <div class="agent-item" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px;">
+                                <div class="agent-item" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; background: #f9f9f9;">
                                     <div style="display: flex; gap: 15px; align-items: end;">
                                         <div style="flex: 1;">
-                                            <label>Телефон</label>
-                                            <input type="text" class="input agent-phone" placeholder="+79991234567" value="{{ agent.phone }}" required>
+                                            <label>📱 Телефон</label>
+                                            <input type="text" class="input agent-phone" placeholder="+79991234567" value="{{ agent.phone }}" readonly style="background: #eee;">
                                         </div>
                                         <div style="flex: 1;">
-                                            <label>Имя сессии</label>
-                                            <input type="text" class="input agent-session" placeholder="agent_1" value="{{ agent.session_name }}" required>
+                                            <label>📁 Сессия</label>
+                                            <input type="text" class="input agent-session" placeholder="agent_1" value="{{ agent.session_name }}" readonly style="background: #eee;">
                                         </div>
-                                        <button type="button" class="btn btn-danger" onclick="removeAgent(this)">Удалить</button>
+                                        <button type="button" class="btn btn-danger" onclick="removeAgent(this)">✕</button>
                                     </div>
                                 </div>
                                 {% endfor %}
-                            {% else %}
-                                <!-- Backward compatibility: show old format if exists -->
-                                {% if channel and channel.agent_phone %}
-                                <div class="agent-item" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px;">
-                                    <div style="display: flex; gap: 15px; align-items: end;">
-                                        <div style="flex: 1;">
-                                            <label>Телефон</label>
-                                            <input type="text" class="input agent-phone" placeholder="+79991234567" value="{{ channel.agent_phone }}" required>
-                                        </div>
-                                        <div style="flex: 1;">
-                                            <label>Имя сессии</label>
-                                            <input type="text" class="input agent-session" placeholder="agent_1" value="{{ channel.agent_session_name }}" required>
-                                        </div>
-                                        <button type="button" class="btn btn-danger" onclick="removeAgent(this)">Удалить</button>
-                                    </div>
-                                </div>
-                                {% endif %}
                             {% endif %}
                         </div>
                         <button type="button" class="btn btn-secondary" onclick="addAgent()" style="margin-top: 10px;">
-                            + Добавить агента
+                            ➕ Добавить агента
                         </button>
                         <span class="help-text">
-                            Несколько агентов позволяют избежать ограничений Telegram API. 
-                            При блокировке одного агента автоматически используется следующий.
+                            <strong>Совет:</strong> Добавьте 2-3 агента для надёжности.
+                            При FloodWait одного аккаунта автоматически используется другой.
                         </span>
-                        
-                        <!-- Hidden fields for backward compatibility -->
-                        <input type="hidden" name="agent_phone" value="{% if channel %}{{ channel.agent_phone }}{% endif %}">
-                        <input type="hidden" name="agent_session_name" value="{% if channel %}{{ channel.agent_session_name }}{% endif %}">
                     </div>
 
                     <div class="form-group">
@@ -255,19 +445,158 @@
             crmFields.style.display = crmEnabled ? 'block' : 'none';
         }
 
+        // ==================== Auto-create Functions ====================
+
+        async function autoCreateChannel() {
+            const channelName = document.getElementById('name').value.trim();
+            if (!channelName) {
+                alert('⚠️ Сначала введите название канала в поле выше');
+                document.getElementById('name').focus();
+                return;
+            }
+
+            const title = prompt(
+                '📢 Создание канала для уведомлений\n\n' +
+                'Введите название канала в Telegram:',
+                channelName + ' - Вакансии'
+            );
+            if (!title) return;
+
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '⏳ Создание...';
+
+            try {
+                const response = await fetch('/api/telegram/create-channel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title, about: 'Канал для уведомлений о вакансиях' })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('telegram_id').value = data.channel_id;
+                    showNotification('✅ ' + data.message, 'success');
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('❌ Ошибка подключения к серверу');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        async function autoCreateCrmGroup() {
+            const channelName = document.getElementById('name').value.trim();
+            if (!channelName) {
+                alert('⚠️ Сначала введите название канала в поле "Название канала"');
+                document.getElementById('name').focus();
+                return;
+            }
+
+            const title = prompt(
+                '💼 Создание CRM группы с топиками\n\n' +
+                'Введите название группы:',
+                channelName + ' - CRM'
+            );
+            if (!title) return;
+
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '⏳ Создание...';
+
+            try {
+                const response = await fetch('/api/telegram/create-crm-group', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title, about: 'CRM группа для отслеживания откликов' })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('crm_group_id').value = data.group_id;
+
+                    let message = '✅ ' + data.message;
+                    if (data.note) {
+                        message += '\n' + data.note;
+                    }
+                    showNotification(message, 'success');
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('❌ Ошибка подключения к серверу');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 20px;
+                border-radius: 8px;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                max-width: 400px;
+                animation: slideIn 0.3s ease;
+            `;
+
+            if (type === 'success') {
+                notification.style.background = '#4caf50';
+                notification.style.color = 'white';
+            } else if (type === 'error') {
+                notification.style.background = '#f44336';
+                notification.style.color = 'white';
+            } else {
+                notification.style.background = '#2196f3';
+                notification.style.color = 'white';
+            }
+
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 4000);
+        }
+
         let currentAgentAuth = null;
 
         async function addAgent() {
             const agentsList = document.getElementById('agents-list');
-            const agentCount = agentsList.children.length + 1;
-            
+
             const phone = prompt("📱 Введите номер телефона агента (с кодом страны, например +79991234567):");
             if (!phone) return;
-            
-            const sessionName = prompt("📁 Введите имя сессии для агента:", `agent_${agentCount}`);
-            if (!sessionName) return;
-            
-            currentAgentAuth = { phone, sessionName };
+
+            // Очищаем телефон от пробелов и дефисов
+            const cleanPhone = phone.replace(/[\s\-]/g, '');
+
+            // Валидация формата телефона
+            const phoneRegex = /^\+\d{10,15}$/;
+            if (!phoneRegex.test(cleanPhone)) {
+                alert('❌ Неверный формат телефона.\n\nИспользуйте международный формат: +79991234567');
+                return;
+            }
+
+            // Автоматически генерируем имя сессии из последних 4 цифр телефона
+            const lastDigits = cleanPhone.slice(-4);
+            const sessionName = `agent_${lastDigits}`;
+
+            currentAgentAuth = { phone: cleanPhone, sessionName };
             
             // Показываем модальное окно
             showAuthModal();
@@ -332,14 +661,14 @@
             agentsList.appendChild(agentItem);
         }
         
-        async function verifyAgentCode() {
+        async function verifyAgentCode(e) {
             const code = document.getElementById('authCode').value.trim();
             if (!code) {
                 alert('Введите код');
                 return;
             }
-            
-            const verifyBtn = event.target;
+
+            const verifyBtn = e ? e.target : document.getElementById('verifyCodeBtn');
             verifyBtn.disabled = true;
             verifyBtn.textContent = 'Проверка...';
             
@@ -397,8 +726,12 @@
             document.getElementById('authPhoneConfirm').textContent = currentAgentAuth.phone;
             document.getElementById('authCode').value = '';
             document.getElementById('authError').style.display = 'none';
+            // Сброс кнопки
+            const btn = document.getElementById('verifyCodeBtn');
+            btn.disabled = false;
+            btn.textContent = 'Подтвердить';
         }
-        
+
         function showAuthStep2_5() {
             document.getElementById('authStep1').style.display = 'none';
             document.getElementById('authStep2').style.display = 'none';
@@ -406,6 +739,10 @@
             document.getElementById('authStep3').style.display = 'none';
             document.getElementById('auth2FAPassword').value = '';
             document.getElementById('auth2FAError').style.display = 'none';
+            // Сброс кнопки
+            const btn = document.getElementById('verify2FABtn');
+            btn.disabled = false;
+            btn.textContent = 'Подтвердить';
         }
         
         function showAuthStep3(userInfo) {
@@ -416,14 +753,14 @@
             document.getElementById('authUserInfo').textContent = `${userInfo.name} (@${userInfo.username})`;
         }
         
-        async function verify2FAPassword() {
+        async function verify2FAPassword(e) {
             const password = document.getElementById('auth2FAPassword').value.trim();
             if (!password) {
                 alert('Введите пароль');
                 return;
             }
-            
-            const verifyBtn = event.target;
+
+            const verifyBtn = e ? e.target : document.getElementById('verify2FABtn');
             verifyBtn.disabled = true;
             verifyBtn.textContent = 'Проверка...';
             
@@ -553,12 +890,6 @@
         // Initialize CRM fields visibility on page load
         document.addEventListener('DOMContentLoaded', function() {
             toggleCrmFields();
-            
-            // Если нет агентов, добавляем один по умолчанию
-            const agentsList = document.getElementById('agents-list');
-            if (agentsList.children.length === 0) {
-                addAgent();
-            }
         });
 
         document.getElementById('channel-form').addEventListener('submit', async (e) => {
@@ -591,11 +922,7 @@
                     crm_group_id: parseInt(document.getElementById('crm_group_id').value.trim()) || 0,
                     agents: collectAgents(),
                     auto_response_enabled: document.getElementById('auto_response_enabled').checked,
-                    auto_response_template: document.getElementById('auto_response_template').value.trim(),
-                    
-                    // Backward compatibility - пустые значения, так как теперь используется agents[]
-                    agent_phone: "",
-                    agent_session_name: ""
+                    auto_response_template: document.getElementById('auto_response_template').value.trim()
                 };
 
                 // Валидация
@@ -670,7 +997,7 @@
                     <input type="text" id="authCode" class="input" placeholder="12345" maxlength="6" style="text-align: center; font-size: 1.2rem;">
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button type="button" onclick="verifyAgentCode()" class="btn btn-primary" style="flex: 1;">
+                    <button type="button" id="verifyCodeBtn" onclick="verifyAgentCode(event)" class="btn btn-primary" style="flex: 1;">
                         Подтвердить
                     </button>
                     <button type="button" onclick="closeAuthModal()" class="btn btn-secondary" style="flex: 1;">
@@ -679,7 +1006,7 @@
                 </div>
                 <div id="authError" class="auth-error" style="display: none;"></div>
             </div>
-            
+
             <div id="authStep2_5" class="auth-step" style="display: none;">
                 <p>🔐 Требуется пароль двухфакторной аутентификации</p>
                 <div class="form-group">
@@ -687,7 +1014,7 @@
                     <input type="password" id="auth2FAPassword" class="input" placeholder="Ваш пароль" style="text-align: center; font-size: 1.2rem;">
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button type="button" onclick="verify2FAPassword()" class="btn btn-primary" style="flex: 1;">
+                    <button type="button" id="verify2FABtn" onclick="verify2FAPassword(event)" class="btn btn-primary" style="flex: 1;">
                         Подтвердить
                     </button>
                     <button type="button" onclick="closeAuthModal()" class="btn btn-secondary" style="flex: 1;">

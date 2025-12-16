@@ -20,6 +20,11 @@ from conversation_manager import ConversationManager
 logger = logging.getLogger(__name__)
 
 
+class NeedsAuthenticationError(Exception):
+    """Исключение: требуется авторизация через веб-интерфейс"""
+    pass
+
+
 class ChannelNameLogFilter(logging.Filter):
     """Фильтр для замены ID каналов на их имена в логах"""
     
@@ -107,12 +112,15 @@ class MultiChannelJobMonitorBot:
             logger.debug(f"Ошибка проверки сессии: {e}")
             return False
 
-    async def start(self):
-        """Запуск бота с проверкой сессии"""
-        logger.info("Запуск Multi-Channel Telegram userbot...")
+    async def start(self, wait_for_auth: bool = True):
+        """
+        Запуск бота с проверкой сессии
 
-        # Проверяем есть ли валидная сессия
-        session_path = Path(f"{config.SESSION_NAME}.session")
+        Args:
+            wait_for_auth: Если True и нет сессии - ждать авторизации через веб.
+                          Если False - пытаться авторизоваться автоматически.
+        """
+        logger.info("Запуск Multi-Channel Telegram userbot...")
 
         if not self.client.is_connected():
             await self.client.connect()
@@ -122,10 +130,15 @@ class MultiChannelJobMonitorBot:
             logger.info("Найдена существующая сессия, используем её")
         else:
             # Сессии нет - нужна авторизация
-            logger.info("Сессия не найдена, требуется авторизация")
-            # Это вызовет FloodWaitError если слишком много попыток
-            # Ошибка будет обработана в main_multi.py
-            await self.client.start(phone=config.PHONE)
+            if wait_for_auth:
+                # НЕ пытаемся автоматически авторизоваться
+                # Ждём пока пользователь авторизуется через веб-интерфейс
+                logger.info("Сессия не найдена. Ожидание авторизации через веб-интерфейс...")
+                raise NeedsAuthenticationError("Требуется авторизация через веб-интерфейс")
+            else:
+                # Старое поведение - автоматическая авторизация (может вызвать FloodWait)
+                logger.info("Сессия не найдена, попытка авторизации...")
+                await self.client.start(phone=config.PHONE)
 
         # Проверка авторизации
         me = await self.client.get_me()
@@ -233,16 +246,8 @@ class MultiChannelJobMonitorBot:
                 
                 # Валидация конфигурации
                 if not channel.agents:
-                    # Backward compatibility: check old format
-                    if channel.agent_phone and channel.agent_session_name:
-                        from config_manager import AgentConfig
-                        channel.agents = [AgentConfig(
-                            phone=channel.agent_phone,
-                            session_name=channel.agent_session_name
-                        )]
-                    else:
-                        logger.warning(f"  ⚠️ Канал '{channel.name}': нет агентов, CRM пропущен")
-                        continue
+                    logger.warning(f"  ⚠️ Канал '{channel.name}': нет агентов, CRM пропущен")
+                    continue
                 
                 if not channel.crm_group_id:
                     logger.warning(f"  ⚠️ Канал '{channel.name}': не указан crm_group_id, CRM пропущен")
@@ -270,7 +275,10 @@ class MultiChannelJobMonitorBot:
                         )
                         logger.debug(f"  ConversationManager создан, callback: {'задан' if conv_manager.send_contact_message_cb else 'не задан'}")
                         logger.debug(f"  group_monitor_client: {type(conv_manager.group_monitor_client).__name__}, client: {type(conv_manager.client).__name__}")
-                        
+
+                        # Загружаем кэш topic->contact из БД
+                        await conv_manager.load_cache_from_db()
+
                         # Регистрируем обработчики трансляции
                         conv_manager.register_handlers()
                         
@@ -808,29 +816,6 @@ class MultiChannelJobMonitorBot:
                             info_message += f"🔗 **Ссылка:** {message_processor.get_message_link(message, chat)}"
                             
                             await conv_manager.send_to_topic(topic_id, info_message)
-                            
-                            # Опционально: пересылаем исходное объявление с вакансией в топик
-                            if channel.mirror_job_post_to_topic:
-                                # Используем send_message с подписью и reply_to для гарантированного попадания в топик
-                                # (forward_messages не поддерживает reply_to для топиков)
-                                vacancy_text = f"📋 **Вакансия из {chat_title}:**\n\n{message.text or ''}"
-                                
-                                # Проверяем тип медиа - MessageMediaWebPage нельзя использовать как file
-                                media_file = None
-                                if message.media:
-                                    from telethon.tl.types import MessageMediaWebPage
-                                    if not isinstance(message.media, MessageMediaWebPage):
-                                        media_file = message.media
-                                
-                                sent_msg = await self.client.send_message(
-                                    entity=channel.crm_group_id,
-                                    message=vacancy_text,
-                                    file=media_file,
-                                    reply_to=topic_id
-                                )
-                                # Сохраняем связь message_id -> topic_id
-                                if sent_msg and hasattr(sent_msg, 'id'):
-                                    conv_manager.save_message_to_topic(sent_msg.id, topic_id)
                     
                     except ValueError as e:
                         logger.warning(f"  ⚠️ Не удалось найти пользователя {contacts['telegram']}: {e}")

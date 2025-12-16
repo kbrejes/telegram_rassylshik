@@ -53,7 +53,7 @@ def run_web_interface():
 
 async def run_bot():
     """Запускает телеграм бота с graceful error handling"""
-    from bot_multi import bot
+    from bot_multi import bot, NeedsAuthenticationError
     from telethon import errors
     import time
 
@@ -74,6 +74,24 @@ async def run_bot():
 
             # Запускаем основной цикл
             await bot.run()
+
+        except NeedsAuthenticationError:
+            # Требуется авторизация через веб-интерфейс
+            bot_state["status"] = "waiting_auth"
+            bot_state["error"] = "Требуется авторизация. Откройте веб-интерфейс для входа."
+            logger.info("Ожидание авторизации через веб-интерфейс...")
+            logger.info("Откройте http://localhost:8080/auth для авторизации")
+
+            # Ждём пока пользователь авторизуется через веб
+            while bot_state["status"] == "waiting_auth":
+                await asyncio.sleep(5)
+                # Проверяем, может сессия уже создана
+                if await bot.check_session_valid():
+                    logger.info("Обнаружена валидная сессия, перезапуск бота...")
+                    break
+
+            # После авторизации - перезапускаем цикл
+            continue
 
         except errors.FloodWaitError as e:
             wait_until = time.time() + e.seconds
