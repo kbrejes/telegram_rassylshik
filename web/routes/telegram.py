@@ -429,15 +429,32 @@ async def create_channel_full(data: FullChannelCreateRequest):
             agents_invited = []
             agents_errors = []
 
+            logger.info(f"Добавление {len(data.agents)} агентов в CRM группу...")
+
             for agent_session in data.agents:
+                logger.info(f"  Попытка добавить агента: {agent_session}")
                 try:
-                    agent_session_path = f"sessions/{agent_session}"
-                    agent_tg_session = TimeoutSQLiteSession(agent_session_path)
-                    agent_client = TelegramClient(agent_tg_session, config.API_ID, config.API_HASH)
+                    import os
+                    import shutil
+
+                    # Копируем сессию агента чтобы избежать database lock
+                    original_agent_session = f"sessions/{agent_session}.session"
+                    temp_agent_session_path = f"sessions/{agent_session}_web_temp"
+                    temp_agent_session_file = f"{temp_agent_session_path}.session"
+
+                    if os.path.exists(original_agent_session):
+                        shutil.copy2(original_agent_session, temp_agent_session_file)
+                    else:
+                        logger.warning(f"  Сессия агента не найдена: {original_agent_session}")
+                        agents_errors.append(f"{agent_session}: сессия не найдена")
+                        continue
+
+                    agent_client = TelegramClient(temp_agent_session_path, config.API_ID, config.API_HASH)
                     await agent_client.connect()
 
                     if await agent_client.is_user_authorized():
                         agent_me = await agent_client.get_me()
+                        logger.info(f"  Агент авторизован: {agent_me.first_name}")
                         try:
                             await client(InviteToChannelRequest(
                                 channel=crm_group,
@@ -445,17 +462,27 @@ async def create_channel_full(data: FullChannelCreateRequest):
                             ))
                             agent_name = agent_me.username or agent_me.first_name
                             agents_invited.append(f"@{agent_name}")
-                            logger.info(f"Агент {agent_session} добавлен в CRM")
+                            logger.info(f"  ✅ Агент {agent_session} добавлен в CRM группу")
                         except Exception as invite_err:
                             if "USER_ALREADY_PARTICIPANT" in str(invite_err):
                                 agents_invited.append(f"@{agent_me.username or agent_me.first_name} (уже в группе)")
+                                logger.info(f"  Агент уже в группе")
                             else:
                                 agents_errors.append(f"{agent_session}: {str(invite_err)}")
+                                logger.warning(f"  ❌ Ошибка приглашения: {invite_err}")
+                    else:
+                        logger.warning(f"  Агент не авторизован")
+                        agents_errors.append(f"{agent_session}: не авторизован")
 
                     await agent_client.disconnect()
+
+                    # Удаляем временную копию
+                    if os.path.exists(temp_agent_session_file):
+                        os.remove(temp_agent_session_file)
+
                 except Exception as e:
                     agents_errors.append(f"{agent_session}: {str(e)}")
-                    logger.warning(f"Не удалось добавить агента {agent_session}: {e}")
+                    logger.error(f"  ❌ Не удалось добавить агента {agent_session}: {e}")
 
             # 4. Отправляем инвайт владельцу
             owner_invited = False
