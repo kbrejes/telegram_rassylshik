@@ -4,6 +4,7 @@ import uuid
 import logging
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -91,20 +92,20 @@ async def cleanup_pending_auth(session_name: str):
 
 # ==================== Alias endpoints for frontend compatibility ====================
 
-class AgentAuthStartRequest(AgentAuthInitRequest):
-    """Упрощённый запрос авторизации (без session_name)"""
-    session_name: str = ""
+class AgentAuthStartRequest(BaseModel):
+    """Запрос на начало авторизации агента"""
+    phone: str
 
 
 @router.post("/auth/start")
-async def agent_auth_start(phone: str):
+async def agent_auth_start(request: AgentAuthStartRequest):
     """Начать авторизацию агента (генерирует session_name автоматически)"""
     try:
-        phone_digits = re.sub(r'\D', '', phone)
+        phone_digits = re.sub(r'\D', '', request.phone)
         session_name = f"agent_{phone_digits[-4:]}"
 
-        logger.info(f"Начало авторизации агента: phone={phone}, session={session_name}")
-        result = await agent_auth_manager.init_auth(phone, session_name)
+        logger.info(f"Начало авторизации агента: phone={request.phone}, session={session_name}")
+        result = await agent_auth_manager.init_auth(request.phone, session_name)
 
         if result.get("success") or result.get("needs_code"):
             return {"success": True, "session_name": session_name, "message": "Код отправлен"}
