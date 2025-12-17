@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создание канала - Job Notification Bot</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .wizard-container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .wizard-step {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .wizard-step h3 {
+            margin: 0 0 15px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-number {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        /* Collapsible sections */
+        .collapsible-section {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .collapsible-header {
+            padding: 12px 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .collapsible-header:hover {
+            background: #f0f0f0;
+        }
+
+        .collapsible-content {
+            padding: 15px;
+            display: none;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .collapsible-section.open .collapsible-content {
+            display: block;
+        }
+
+        .collapsible-section.open .collapsible-header {
+            border-radius: 8px 8px 0 0;
+        }
+
+        .arrow {
+            transition: transform 0.2s;
+        }
+
+        .collapsible-section.open .arrow {
+            transform: rotate(180deg);
+        }
+
+        /* Saved lists */
+        .saved-list-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .saved-list-selector select {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        /* Agent cards */
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .agent-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .agent-card:hover {
+            border-color: #667eea;
+        }
+
+        .agent-card.selected {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .agent-card .agent-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .agent-card .agent-phone {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .agent-card .checkmark {
+            float: right;
+            color: #667eea;
+            display: none;
+        }
+
+        .agent-card.selected .checkmark {
+            display: inline;
+        }
+
+        /* Template selector */
+        .template-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .template-option {
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 10px 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .template-option:hover {
+            border-color: #667eea;
+        }
+
+        .template-option.selected {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .template-name {
+            font-weight: 500;
+            margin-bottom: 3px;
+        }
+
+        .template-preview {
+            font-size: 0.85rem;
+            color: #666;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Add new agent button */
+        .add-agent-card {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 12px;
+            cursor: pointer;
+            text-align: center;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .add-agent-card:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        /* Submit button */
+        .submit-section {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Status messages */
+        .status-message {
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+
+        /* Loading spinner */
+        .loading-inline {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .help-text {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .input, .textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>➕ Создание канала</h1>
+            <p>Настройте мониторинг вакансий за несколько шагов</p>
+        </div>
+
+        <div class="wizard-container">
+            <!-- Step 1: Name -->
+            <div class="wizard-step">
+                <h3><span class="step-number">1</span> Назовите канал</h3>
+                <input
+                    type="text"
+                    id="channel_name"
+                    class="input"
+                    placeholder="Например: Python вакансии"
+                    required
+                >
+                <p class="help-text">Это название для вашего удобства, его увидите только вы</p>
+            </div>
+
+            <!-- Step 2: Sources -->
+            <div class="wizard-step">
+                <h3><span class="step-number">2</span> Какие каналы отслеживаем?</h3>
+
+                <div class="saved-list-selector">
+                    <select id="source_presets" onchange="loadSourcePreset()">
+                        <option value="">— Выберите сохранённый список —</option>
+                    </select>
+                    <button type="button" class="btn-helper" onclick="saveCurrentSources()">💾 Сохранить текущий</button>
+                </div>
+
+                <textarea
+                    id="input_sources"
+                    class="textarea"
+                    placeholder="@channel1&#10;@channel2&#10;@channel3"
+                ></textarea>
+                <p class="help-text">Укажите каналы для мониторинга (по одному на строку). Используйте @username</p>
+            </div>
+
+            <!-- Step 3: Agents -->
+            <div class="wizard-step">
+                <h3><span class="step-number">3</span> Выберите агентов</h3>
+                <p class="help-text" style="margin-top: 0;">Агенты будут отправлять отклики от вашего имени</p>
+
+                <div class="agents-grid" id="agents_grid">
+                    <!-- Agents will be loaded here -->
+                    <div class="add-agent-card" onclick="showAddAgentModal()">
+                        ➕ Добавить нового агента
+                    </div>
+                </div>
+
+                <div id="no_agents_warning" class="status-message" style="display: none; background: #fff3cd; color: #856404;">
+                    ⚠️ Нет подключенных агентов. Добавьте хотя бы одного агента для работы CRM.
+                </div>
+            </div>
+
+            <!-- Step 4: Auto-response template -->
+            <div class="wizard-step">
+                <h3><span class="step-number">4</span> Шаблон автоответа</h3>
+
+                <div class="template-list" id="template_list">
+                    <!-- Templates will be loaded here -->
+                </div>
+
+                <div class="collapsible-section" id="custom_template_section">
+                    <div class="collapsible-header" onclick="toggleSection(this)">
+                        <span>✏️ Написать свой шаблон</span>
+                        <span class="arrow">▼</span>
+                    </div>
+                    <div class="collapsible-content">
+                        <textarea
+                            id="auto_response_template"
+                            class="textarea"
+                            placeholder="Здравствуйте! Меня заинтересовала ваша вакансия..."
+                        ></textarea>
+                        <div style="margin-top: 10px; display: flex; gap: 10px;">
+                            <input type="text" id="new_template_name" class="input" placeholder="Название шаблона" style="flex: 1;">
+                            <button type="button" class="btn-helper" onclick="saveTemplate()">💾 Сохранить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 5: Optional filters (collapsible) -->
+            <div class="wizard-step">
+                <h3 style="margin-bottom: 5px;">⚙️ Дополнительные настройки</h3>
+                <p class="help-text" style="margin-top: 0;">Опционально — можно пропустить</p>
+
+                <div class="collapsible-section">
+                    <div class="collapsible-header" onclick="toggleSection(this)">
+                        <span>🔍 Ключевые слова (фильтры)</span>
+                        <span class="arrow">▼</span>
+                    </div>
+                    <div class="collapsible-content">
+                        <div style="margin-bottom: 15px;">
+                            <label><strong>Включающие слова</strong></label>
+                            <textarea
+                                id="include_keywords"
+                                class="textarea"
+                                placeholder="python&#10;django&#10;senior"
+                                style="min-height: 80px;"
+                            ></textarea>
+                            <p class="help-text">Вакансия должна содержать хотя бы одно из этих слов</p>
+                        </div>
+                        <div>
+                            <label><strong>Исключающие слова</strong></label>
+                            <textarea
+                                id="exclude_keywords"
+                                class="textarea"
+                                placeholder="junior&#10;стажер&#10;intern"
+                                style="min-height: 80px;"
+                            ></textarea>
+                            <p class="help-text">Вакансии с этими словами будут пропущены</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit -->
+            <div class="submit-section">
+                <button type="button" class="btn-submit" onclick="createChannel()" id="submit_btn">
+                    🚀 Создать канал
+                </button>
+                <div id="submit_status" class="status-message"></div>
+            </div>
+
+            <div style="text-align: center; margin-top: 10px;">
+                <a href="/" style="color: #666;">← Вернуться к списку каналов</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Agent Modal -->
+    <div id="add_agent_modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 25px; border-radius: 12px; max-width: 400px; width: 90%;">
+            <h3 style="margin-top: 0;">➕ Добавить агента</h3>
+            <div style="margin-bottom: 15px;">
+                <label>📱 Номер телефона</label>
+                <input type="text" id="new_agent_phone" class="input" placeholder="+7 999 123 4567">
+            </div>
+            <div id="agent_code_section" style="display: none; margin-bottom: 15px;">
+                <label>🔑 Код из Telegram</label>
+                <input type="text" id="new_agent_code" class="input" placeholder="12345">
+            </div>
+            <div id="agent_2fa_section" style="display: none; margin-bottom: 15px;">
+                <label>🔐 Пароль 2FA</label>
+                <input type="password" id="new_agent_2fa" class="input" placeholder="Пароль">
+            </div>
+            <div id="agent_modal_status" class="status-message"></div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button type="button" class="btn-helper" style="flex: 1;" onclick="closeAgentModal()">Отмена</button>
+                <button type="button" class="btn-submit" style="flex: 1; padding: 10px;" onclick="processAgentAuth()" id="agent_auth_btn">
+                    Получить код
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let selectedAgents = [];
+        let selectedTemplateId = null;
+        let availableAgents = [];
+        let savedTemplates = [];
+        let savedSourceLists = [];
+        let agentAuthState = { step: 'phone', sessionName: null };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadAvailableAgents();
+            await loadSavedTemplates();
+            await loadSavedSourceLists();
+        });
+
+        // Toggle collapsible sections
+        function toggleSection(header) {
+            const section = header.parentElement;
+            section.classList.toggle('open');
+        }
+
+        // Load available agents from backend
+        async function loadAvailableAgents() {
+            try {
+                const response = await fetch('/api/agents');
+                const data = await response.json();
+                if (data.success) {
+                    availableAgents = data.agents || [];
+                    renderAgentsGrid();
+                }
+            } catch (e) {
+                console.error('Error loading agents:', e);
+            }
+        }
+
+        function renderAgentsGrid() {
+            const grid = document.getElementById('agents_grid');
+            const warning = document.getElementById('no_agents_warning');
+
+            let html = '';
+            availableAgents.forEach(agent => {
+                const isSelected = selectedAgents.includes(agent.session_name);
+                html += `
+                    <div class="agent-card ${isSelected ? 'selected' : ''}"
+                         onclick="toggleAgent('${agent.session_name}')">
+                        <span class="checkmark">✓</span>
+                        <div class="agent-name">${agent.name || 'Агент'}</div>
+                        <div class="agent-phone">${agent.phone}</div>
+                    </div>
+                `;
+            });
+            html += `<div class="add-agent-card" onclick="showAddAgentModal()">➕ Добавить нового агента</div>`;
+
+            grid.innerHTML = html;
+            warning.style.display = availableAgents.length === 0 ? 'block' : 'none';
+        }
+
+        function toggleAgent(sessionName) {
+            const idx = selectedAgents.indexOf(sessionName);
+            if (idx > -1) {
+                selectedAgents.splice(idx, 1);
+            } else {
+                selectedAgents.push(sessionName);
+            }
+            renderAgentsGrid();
+        }
+
+        // Load saved templates
+        async function loadSavedTemplates() {
+            try {
+                const response = await fetch('/api/templates');
+                const data = await response.json();
+                if (data.success) {
+                    savedTemplates = data.templates || [];
+                    renderTemplates();
+                }
+            } catch (e) {
+                console.error('Error loading templates:', e);
+                // Default template
+                savedTemplates = [
+                    { id: 'default', name: 'Стандартный отклик', text: 'Здравствуйте! Меня заинтересовала ваша вакансия. Буду рад обсудить детали!' }
+                ];
+                renderTemplates();
+            }
+        }
+
+        function renderTemplates() {
+            const list = document.getElementById('template_list');
+            let html = '';
+            savedTemplates.forEach(t => {
+                const isSelected = selectedTemplateId === t.id;
+                html += `
+                    <div class="template-option ${isSelected ? 'selected' : ''}" onclick="selectTemplate('${t.id}')">
+                        <div class="template-name">${isSelected ? '✓ ' : ''}${t.name}</div>
+                        <div class="template-preview">${t.text.substring(0, 60)}${t.text.length > 60 ? '...' : ''}</div>
+                    </div>
+                `;
+            });
+            list.innerHTML = html;
+
+            // Auto-select first template
+            if (savedTemplates.length > 0 && !selectedTemplateId) {
+                selectTemplate(savedTemplates[0].id);
+            }
+        }
+
+        function selectTemplate(id) {
+            selectedTemplateId = id;
+            const template = savedTemplates.find(t => t.id === id);
+            if (template) {
+                document.getElementById('auto_response_template').value = template.text;
+            }
+            renderTemplates();
+        }
+
+        async function saveTemplate() {
+            const name = document.getElementById('new_template_name').value.trim();
+            const text = document.getElementById('auto_response_template').value.trim();
+
+            if (!name || !text) {
+                alert('Введите название и текст шаблона');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, text })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    await loadSavedTemplates();
+                    document.getElementById('new_template_name').value = '';
+                    alert('✅ Шаблон сохранён!');
+                }
+            } catch (e) {
+                console.error('Error saving template:', e);
+            }
+        }
+
+        // Source lists
+        async function loadSavedSourceLists() {
+            try {
+                const response = await fetch('/api/source-lists');
+                const data = await response.json();
+                if (data.success) {
+                    savedSourceLists = data.lists || [];
+                    renderSourcePresets();
+                }
+            } catch (e) {
+                console.error('Error loading source lists:', e);
+            }
+        }
+
+        function renderSourcePresets() {
+            const select = document.getElementById('source_presets');
+            let html = '<option value="">— Выберите сохранённый список —</option>';
+            savedSourceLists.forEach(list => {
+                html += `<option value="${list.id}">${list.name} (${list.sources.length} каналов)</option>`;
+            });
+            select.innerHTML = html;
+        }
+
+        function loadSourcePreset() {
+            const select = document.getElementById('source_presets');
+            const list = savedSourceLists.find(l => l.id === select.value);
+            if (list) {
+                document.getElementById('input_sources').value = list.sources.join('\n');
+            }
+        }
+
+        async function saveCurrentSources() {
+            const sources = document.getElementById('input_sources').value.trim();
+            if (!sources) {
+                alert('Сначала введите каналы');
+                return;
+            }
+
+            const name = prompt('Название списка:', 'Мои каналы');
+            if (!name) return;
+
+            try {
+                const response = await fetch('/api/source-lists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        sources: sources.split('\n').map(s => s.trim()).filter(s => s)
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    await loadSavedSourceLists();
+                    alert('✅ Список сохранён!');
+                }
+            } catch (e) {
+                console.error('Error saving sources:', e);
+            }
+        }
+
+        // Agent modal
+        function showAddAgentModal() {
+            document.getElementById('add_agent_modal').style.display = 'flex';
+            agentAuthState = { step: 'phone', sessionName: null };
+            document.getElementById('new_agent_phone').value = '';
+            document.getElementById('new_agent_code').value = '';
+            document.getElementById('new_agent_2fa').value = '';
+            document.getElementById('agent_code_section').style.display = 'none';
+            document.getElementById('agent_2fa_section').style.display = 'none';
+            document.getElementById('agent_auth_btn').textContent = 'Получить код';
+            document.getElementById('agent_modal_status').className = 'status-message';
+        }
+
+        function closeAgentModal() {
+            document.getElementById('add_agent_modal').style.display = 'none';
+        }
+
+        async function processAgentAuth() {
+            const btn = document.getElementById('agent_auth_btn');
+            const status = document.getElementById('agent_modal_status');
+
+            btn.disabled = true;
+
+            try {
+                if (agentAuthState.step === 'phone') {
+                    const phone = document.getElementById('new_agent_phone').value.trim();
+                    if (!phone) {
+                        status.textContent = 'Введите номер телефона';
+                        status.className = 'status-message error';
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    btn.innerHTML = 'Отправка... <span class="loading-inline"></span>';
+
+                    const response = await fetch('/api/agents/auth/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone })
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        agentAuthState.step = 'code';
+                        agentAuthState.sessionName = data.session_name;
+                        document.getElementById('agent_code_section').style.display = 'block';
+                        btn.textContent = 'Подтвердить код';
+                        status.textContent = 'Код отправлен в Telegram';
+                        status.className = 'status-message success';
+                    } else {
+                        status.textContent = data.message || 'Ошибка';
+                        status.className = 'status-message error';
+                    }
+                } else if (agentAuthState.step === 'code') {
+                    const code = document.getElementById('new_agent_code').value.trim();
+                    if (!code) {
+                        status.textContent = 'Введите код';
+                        status.className = 'status-message error';
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    btn.innerHTML = 'Проверка... <span class="loading-inline"></span>';
+
+                    const response = await fetch('/api/agents/auth/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            session_name: agentAuthState.sessionName,
+                            code
+                        })
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        status.textContent = '✅ Агент подключён: ' + (data.name || 'Успешно');
+                        status.className = 'status-message success';
+                        await loadAvailableAgents();
+                        setTimeout(closeAgentModal, 1500);
+                    } else if (data.requires_2fa) {
+                        agentAuthState.step = '2fa';
+                        document.getElementById('agent_2fa_section').style.display = 'block';
+                        btn.textContent = 'Подтвердить пароль';
+                        status.textContent = 'Требуется пароль 2FA';
+                        status.className = 'status-message';
+                    } else {
+                        status.textContent = data.message || 'Неверный код';
+                        status.className = 'status-message error';
+                    }
+                } else if (agentAuthState.step === '2fa') {
+                    const password = document.getElementById('new_agent_2fa').value;
+
+                    btn.innerHTML = 'Проверка... <span class="loading-inline"></span>';
+
+                    const response = await fetch('/api/agents/auth/2fa', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            session_name: agentAuthState.sessionName,
+                            password
+                        })
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        status.textContent = '✅ Агент подключён: ' + (data.name || 'Успешно');
+                        status.className = 'status-message success';
+                        await loadAvailableAgents();
+                        setTimeout(closeAgentModal, 1500);
+                    } else {
+                        status.textContent = data.message || 'Неверный пароль';
+                        status.className = 'status-message error';
+                    }
+                }
+            } catch (e) {
+                status.textContent = 'Ошибка подключения';
+                status.className = 'status-message error';
+            }
+
+            btn.disabled = false;
+        }
+
+        // Create channel
+        async function createChannel() {
+            const btn = document.getElementById('submit_btn');
+            const status = document.getElementById('submit_status');
+
+            // Validation
+            const name = document.getElementById('channel_name').value.trim();
+            const sources = document.getElementById('input_sources').value.trim();
+            const template = document.getElementById('auto_response_template').value.trim();
+
+            if (!name) {
+                status.textContent = 'Введите название канала';
+                status.className = 'status-message error';
+                return;
+            }
+
+            if (!sources) {
+                status.textContent = 'Укажите каналы для мониторинга';
+                status.className = 'status-message error';
+                return;
+            }
+
+            if (selectedAgents.length === 0) {
+                status.textContent = 'Выберите хотя бы одного агента';
+                status.className = 'status-message error';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '🔄 Создание... <span class="loading-inline"></span>';
+            status.className = 'status-message';
+
+            try {
+                const response = await fetch('/api/channels/create-full', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        input_sources: sources.split('\n').map(s => s.trim()).filter(s => s),
+                        agents: selectedAgents,
+                        auto_response_template: template || 'Здравствуйте! Меня заинтересовала ваша вакансия.',
+                        include_keywords: document.getElementById('include_keywords').value.split('\n').map(s => s.trim()).filter(s => s),
+                        exclude_keywords: document.getElementById('exclude_keywords').value.split('\n').map(s => s.trim()).filter(s => s)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    status.innerHTML = '✅ Канал создан! Перенаправление...';
+                    status.className = 'status-message success';
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1500);
+                } else {
+                    status.textContent = '❌ ' + (data.message || 'Ошибка создания');
+                    status.className = 'status-message error';
+                    btn.disabled = false;
+                    btn.textContent = '🚀 Создать канал';
+                }
+            } catch (e) {
+                status.textContent = '❌ Ошибка подключения к серверу';
+                status.className = 'status-message error';
+                btn.disabled = false;
+                btn.textContent = '🚀 Создать канал';
+            }
+        }
+    </script>
+</body>
+</html>

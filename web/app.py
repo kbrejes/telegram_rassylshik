@@ -28,6 +28,68 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 # Initialize config manager
 config_manager = ConfigManager()
 
+# Storage for templates and source lists
+import json
+
+TEMPLATES_FILE = BASE_DIR.parent / "configs" / "templates.json"
+SOURCE_LISTS_FILE = BASE_DIR.parent / "configs" / "source_lists.json"
+
+
+def load_templates():
+    """Load saved auto-response templates"""
+    if TEMPLATES_FILE.exists():
+        try:
+            with open(TEMPLATES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            pass
+    # Default templates
+    return [
+        {"id": "default", "name": "Стандартный отклик", "text": "Здравствуйте! Меня заинтересовала ваша вакансия. Буду рад обсудить детали!"},
+        {"id": "detailed", "name": "Подробный отклик", "text": "Здравствуйте!\n\nМеня заинтересовала ваша вакансия. Имею релевантный опыт и готов обсудить условия сотрудничества.\n\nБуду рад ответить на ваши вопросы!"}
+    ]
+
+
+def save_templates(templates):
+    """Save templates to file"""
+    TEMPLATES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(TEMPLATES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(templates, f, ensure_ascii=False, indent=2)
+
+
+def load_source_lists():
+    """Load saved source channel lists"""
+    if SOURCE_LISTS_FILE.exists():
+        try:
+            with open(SOURCE_LISTS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
+
+
+def save_source_lists(lists):
+    """Save source lists to file"""
+    SOURCE_LISTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(SOURCE_LISTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(lists, f, ensure_ascii=False, indent=2)
+
+
+def get_available_agents():
+    """Get list of all authorized agent sessions"""
+    agents = []
+    sessions_dir = BASE_DIR.parent / "sessions"
+    if sessions_dir.exists():
+        for session_file in sessions_dir.glob("agent_*.session"):
+            session_name = session_file.stem
+            # Try to get agent info
+            agents.append({
+                "session_name": session_name,
+                "phone": "",  # Will be filled if we can read it
+                "name": session_name.replace("agent_", "Агент ")
+            })
+    return agents
+
 
 # Pydantic models for API
 class AgentRequest(BaseModel):
@@ -83,7 +145,16 @@ async def index(request: Request):
 
 @app.get("/channel/new")
 async def new_channel_page(request: Request):
-    """Страница создания нового канала"""
+    """Новая страница создания канала (wizard)"""
+    return templates.TemplateResponse(
+        "channel_create.html",
+        {"request": request}
+    )
+
+
+@app.get("/channel/new-legacy")
+async def new_channel_page_legacy(request: Request):
+    """Старая страница создания канала"""
     return templates.TemplateResponse(
         "channel_edit.html",
         {
@@ -1075,6 +1146,359 @@ async def add_agents_to_crm(request: AddAgentsToCrmRequest):
 
     except Exception as e:
         logger.error(f"Ошибка добавления агентов: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ==================== Wizard API Endpoints ====================
+
+@app.get("/api/agents")
+async def get_agents_list():
+    """Получить список всех доступных агентов"""
+    try:
+        agents = get_available_agents()
+        return {"success": True, "agents": agents}
+    except Exception as e:
+        logger.error(f"Ошибка получения списка агентов: {e}")
+        return {"success": False, "message": str(e), "agents": []}
+
+
+@app.get("/api/templates")
+async def get_templates():
+    """Получить список сохранённых шаблонов автоответов"""
+    try:
+        templates = load_templates()
+        return {"success": True, "templates": templates}
+    except Exception as e:
+        logger.error(f"Ошибка загрузки шаблонов: {e}")
+        return {"success": False, "message": str(e), "templates": []}
+
+
+class SaveTemplateRequest(BaseModel):
+    name: str
+    text: str
+
+
+@app.post("/api/templates")
+async def save_template_endpoint(request: SaveTemplateRequest):
+    """Сохранить новый шаблон автоответа"""
+    try:
+        templates = load_templates()
+
+        # Генерируем уникальный ID
+        import uuid
+        new_template = {
+            "id": f"template_{uuid.uuid4().hex[:8]}",
+            "name": request.name,
+            "text": request.text
+        }
+        templates.append(new_template)
+        save_templates(templates)
+
+        return {"success": True, "template": new_template}
+    except Exception as e:
+        logger.error(f"Ошибка сохранения шаблона: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@app.get("/api/source-lists")
+async def get_source_lists():
+    """Получить сохранённые списки каналов-источников"""
+    try:
+        lists = load_source_lists()
+        return {"success": True, "lists": lists}
+    except Exception as e:
+        logger.error(f"Ошибка загрузки списков источников: {e}")
+        return {"success": False, "message": str(e), "lists": []}
+
+
+class SaveSourceListRequest(BaseModel):
+    name: str
+    sources: List[str]
+
+
+@app.post("/api/source-lists")
+async def save_source_list_endpoint(request: SaveSourceListRequest):
+    """Сохранить новый список каналов-источников"""
+    try:
+        lists = load_source_lists()
+
+        import uuid
+        new_list = {
+            "id": f"list_{uuid.uuid4().hex[:8]}",
+            "name": request.name,
+            "sources": request.sources
+        }
+        lists.append(new_list)
+        save_source_lists(lists)
+
+        return {"success": True, "list": new_list}
+    except Exception as e:
+        logger.error(f"Ошибка сохранения списка источников: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# Aliases for agent auth endpoints (frontend uses different paths)
+class AgentAuthStartRequest(BaseModel):
+    phone: str
+
+
+@app.post("/api/agents/auth/start")
+async def agent_auth_start(request: AgentAuthStartRequest):
+    """Начать авторизацию агента (alias for /api/agents/init)"""
+    try:
+        # Генерируем имя сессии из номера телефона
+        import re
+        phone_digits = re.sub(r'\D', '', request.phone)
+        session_name = f"agent_{phone_digits[-4:]}"
+
+        logger.info(f"Начало авторизации агента: phone={request.phone}, session={session_name}")
+        result = await agent_auth_manager.init_auth(request.phone, session_name)
+
+        if result.get("success") or result.get("code_sent"):
+            return {"success": True, "session_name": session_name, "message": "Код отправлен"}
+        return result
+    except Exception as e:
+        logger.error(f"Ошибка инициализации авторизации агента: {e}")
+        return {"success": False, "message": str(e)}
+
+
+class AgentAuthVerifyRequest(BaseModel):
+    session_name: str
+    code: str
+
+
+@app.post("/api/agents/auth/verify")
+async def agent_auth_verify(request: AgentAuthVerifyRequest):
+    """Проверить код авторизации агента"""
+    try:
+        logger.info(f"Проверка кода для агента: session={request.session_name}")
+        result = await agent_auth_manager.verify_code(request.session_name, request.code)
+
+        if result.get("authenticated"):
+            return {"success": True, "name": result.get("name", "Агент")}
+        elif result.get("requires_2fa"):
+            return {"success": False, "requires_2fa": True, "message": "Требуется 2FA пароль"}
+        return {"success": False, "message": result.get("error", "Неверный код")}
+    except Exception as e:
+        logger.error(f"Ошибка проверки кода: {e}")
+        return {"success": False, "message": str(e)}
+
+
+class AgentAuth2FARequest(BaseModel):
+    session_name: str
+    password: str
+
+
+@app.post("/api/agents/auth/2fa")
+async def agent_auth_2fa(request: AgentAuth2FARequest):
+    """Проверить 2FA пароль агента"""
+    try:
+        logger.info(f"Проверка 2FA для агента: session={request.session_name}")
+        result = await agent_auth_manager.verify_password(request.session_name, request.password)
+
+        if result.get("authenticated"):
+            return {"success": True, "name": result.get("name", "Агент")}
+        return {"success": False, "message": result.get("error", "Неверный пароль")}
+    except Exception as e:
+        logger.error(f"Ошибка проверки 2FA: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# Full channel creation endpoint
+class FullChannelCreateRequest(BaseModel):
+    name: str
+    input_sources: List[str]
+    agents: List[str]  # List of session names
+    auto_response_template: str = ""
+    include_keywords: List[str] = []
+    exclude_keywords: List[str] = []
+
+
+@app.post("/api/channels/create-full")
+async def create_channel_full(data: FullChannelCreateRequest):
+    """
+    Создать канал с полной автоматизацией:
+    1. Создаёт Telegram канал для уведомлений
+    2. Создаёт CRM группу с топиками
+    3. Добавляет агентов в CRM
+    4. Сохраняет конфигурацию
+    """
+    logger.info(f"📋 Создание полного канала: name={data.name}")
+
+    try:
+        from telethon.tl.functions.channels import CreateChannelRequest as TgCreateChannel
+        from telethon.tl.functions.channels import ToggleForumRequest, InviteToChannelRequest
+        from telethon.tl.functions.messages import ExportChatInviteRequest
+        from auth.base import TimeoutSQLiteSession
+        from telethon import TelegramClient
+        from config import config
+
+        # Проверяем что бот авторизован
+        session_status = await bot_auth_manager.check_session_status()
+        if not session_status.get("authenticated"):
+            return {
+                "success": False,
+                "message": "Бот не авторизован. Сначала пройдите авторизацию на странице /auth"
+            }
+
+        # Создаём клиент
+        session = TimeoutSQLiteSession(config.SESSION_NAME)
+        client = TelegramClient(session, config.API_ID, config.API_HASH)
+        await client.connect()
+
+        if not await client.is_user_authorized():
+            await client.disconnect()
+            return {"success": False, "message": "Сессия бота недействительна"}
+
+        try:
+            # 1. Создаём канал для уведомлений
+            logger.info("Создание канала для уведомлений...")
+            notification_result = await client(TgCreateChannel(
+                title=f"{data.name} - Вакансии",
+                about=f"Уведомления о вакансиях: {data.name}",
+                broadcast=True,
+                megagroup=False
+            ))
+            notification_channel = notification_result.chats[0]
+            notification_channel_id = -1000000000000 - notification_channel.id
+            logger.info(f"Канал уведомлений создан: {notification_channel_id}")
+
+            # 2. Создаём CRM группу с топиками
+            logger.info("Создание CRM группы...")
+            crm_result = await client(TgCreateChannel(
+                title=f"{data.name} - CRM",
+                about=f"CRM для управления откликами: {data.name}",
+                broadcast=False,
+                megagroup=True
+            ))
+            crm_group = crm_result.chats[0]
+            crm_group_id = -1000000000000 - crm_group.id
+
+            # Включаем топики
+            topics_enabled = False
+            try:
+                await client(ToggleForumRequest(
+                    channel=crm_group,
+                    enabled=True,
+                    tabs=[]
+                ))
+                topics_enabled = True
+                logger.info("Топики включены")
+            except Exception as e:
+                logger.warning(f"Не удалось включить топики: {e}")
+
+            logger.info(f"CRM группа создана: {crm_group_id}")
+
+            # 3. Добавляем агентов в CRM
+            agents_invited = []
+            agents_errors = []
+
+            for agent_session in data.agents:
+                try:
+                    agent_session_path = f"sessions/{agent_session}"
+                    agent_tg_session = TimeoutSQLiteSession(agent_session_path)
+                    agent_client = TelegramClient(agent_tg_session, config.API_ID, config.API_HASH)
+                    await agent_client.connect()
+
+                    if await agent_client.is_user_authorized():
+                        agent_me = await agent_client.get_me()
+                        try:
+                            await client(InviteToChannelRequest(
+                                channel=crm_group,
+                                users=[agent_me.id]
+                            ))
+                            agent_name = agent_me.username or agent_me.first_name
+                            agents_invited.append(f"@{agent_name}")
+                            logger.info(f"Агент {agent_session} добавлен в CRM")
+                        except Exception as invite_err:
+                            if "USER_ALREADY_PARTICIPANT" in str(invite_err):
+                                agents_invited.append(f"@{agent_me.username or agent_me.first_name} (уже в группе)")
+                            else:
+                                agents_errors.append(f"{agent_session}: {str(invite_err)}")
+
+                    await agent_client.disconnect()
+                except Exception as e:
+                    agents_errors.append(f"{agent_session}: {str(e)}")
+                    logger.warning(f"Не удалось добавить агента {agent_session}: {e}")
+
+            # 4. Отправляем инвайт владельцу (kbrejes)
+            owner_invited = False
+            try:
+                owner_entity = await client.get_entity("kbrejes")
+                invite = await client(ExportChatInviteRequest(
+                    peer=crm_group,
+                    expire_date=None,
+                    usage_limit=1,
+                    title="CRM доступ"
+                ))
+                await client.send_message(
+                    owner_entity,
+                    f"🔗 **Приглашение в CRM группу**\n\n"
+                    f"Канал: **{data.name}**\n"
+                    f"Группа CRM: **{data.name} - CRM**\n"
+                    f"Ссылка: {invite.link}\n\n"
+                    f"_Ссылка одноразовая_"
+                )
+                owner_invited = True
+                logger.info("Инвайт отправлен владельцу")
+            except Exception as e:
+                logger.warning(f"Не удалось отправить инвайт владельцу: {e}")
+
+            # 5. Сохраняем конфигурацию канала
+            import uuid
+            from config_manager import AgentConfig
+
+            channel_id = f"channel_{uuid.uuid4().hex[:8]}"
+
+            filters = FilterConfig(
+                include_keywords=data.include_keywords,
+                exclude_keywords=data.exclude_keywords,
+                require_all_includes=False
+            )
+
+            agents_config = []
+            for agent_session in data.agents:
+                agents_config.append(AgentConfig(
+                    phone="",
+                    session_name=agent_session
+                ))
+
+            channel = ChannelConfig(
+                id=channel_id,
+                name=data.name,
+                telegram_id=notification_channel_id,
+                enabled=True,
+                input_sources=data.input_sources,
+                filters=filters,
+                crm_enabled=True,
+                crm_group_id=crm_group_id,
+                agents=agents_config,
+                auto_response_enabled=True,
+                auto_response_template=data.auto_response_template or "Здравствуйте! Меня заинтересовала ваша вакансия. Буду рад обсудить детали!"
+            )
+
+            if config_manager.add_channel(channel):
+                logger.info(f"Канал {channel_id} сохранён в конфигурации")
+
+            return {
+                "success": True,
+                "message": f"Канал '{data.name}' создан успешно!",
+                "channel_id": channel_id,
+                "notification_channel_id": notification_channel_id,
+                "crm_group_id": crm_group_id,
+                "topics_enabled": topics_enabled,
+                "agents_invited": agents_invited,
+                "agents_errors": agents_errors,
+                "owner_invited": owner_invited
+            }
+
+        finally:
+            await client.disconnect()
+
+    except Exception as e:
+        logger.error(f"Ошибка создания полного канала: {e}")
+        import traceback
+        traceback.print_exc()
         return {"success": False, "message": str(e)}
 
 
