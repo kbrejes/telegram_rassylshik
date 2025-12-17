@@ -790,12 +790,16 @@ async def execute_telegram_deletion(entity_id: int, entity_type: str) -> bool:
 
         # Используем копию сессии чтобы не блокировать основного бота
         web_session_path = f"sessions/{config.SESSION_NAME}_web"
-        original_session_path = f"sessions/{config.SESSION_NAME}.session"
+        original_session_path = f"{config.SESSION_NAME}.session"  # Сессия в корне проекта
 
         # Копируем сессию если её нет или она устарела
-        if not os.path.exists(f"{web_session_path}.session") or \
-           os.path.getmtime(original_session_path) > os.path.getmtime(f"{web_session_path}.session"):
-            shutil.copy2(original_session_path, f"{web_session_path}.session")
+        if os.path.exists(original_session_path):
+            if not os.path.exists(f"{web_session_path}.session") or \
+               os.path.getmtime(original_session_path) > os.path.getmtime(f"{web_session_path}.session"):
+                shutil.copy2(original_session_path, f"{web_session_path}.session")
+        else:
+            logger.error(f"Сессия бота не найдена: {original_session_path}")
+            return False
 
         client = TelegramClient(web_session_path, config.API_ID, config.API_HASH)
 
