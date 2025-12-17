@@ -20,17 +20,29 @@ config_manager = ConfigManager()
 async def create_new_bot_client():
     """
     Создаёт НОВЫЙ клиент бота для веб-запросов.
-    Не пытается переиспользовать клиент бота чтобы избежать проблем с event loop.
+    Использует КОПИЮ сессии чтобы избежать database is locked.
 
     Returns:
         TelegramClient: новый подключенный клиент
     """
-    from auth.base import TimeoutSQLiteSession
+    import os
+    import shutil
     from telethon import TelegramClient
     from config import config
 
-    session = TimeoutSQLiteSession(config.SESSION_NAME)
-    client = TelegramClient(session, config.API_ID, config.API_HASH)
+    # Используем копию сессии чтобы не блокировать основного бота
+    original_session = f"{config.SESSION_NAME}.session"
+    web_session_path = f"sessions/web_bot_session"
+    web_session_file = f"{web_session_path}.session"
+
+    # Копируем сессию если оригинал существует и новее копии
+    if os.path.exists(original_session):
+        if not os.path.exists(web_session_file) or \
+           os.path.getmtime(original_session) > os.path.getmtime(web_session_file):
+            os.makedirs("sessions", exist_ok=True)
+            shutil.copy2(original_session, web_session_file)
+
+    client = TelegramClient(web_session_path, config.API_ID, config.API_HASH)
     await client.connect()
     return client
 

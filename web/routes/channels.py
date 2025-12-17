@@ -22,13 +22,23 @@ pending_telegram_deletions: List = []
 
 
 async def create_new_bot_client():
-    """Создаёт новый клиент бота для веб-запросов"""
-    from auth.base import TimeoutSQLiteSession
+    """Создаёт новый клиент используя КОПИЮ сессии"""
+    import os
+    import shutil
     from telethon import TelegramClient
     from config import config
 
-    session = TimeoutSQLiteSession(config.SESSION_NAME)
-    client = TelegramClient(session, config.API_ID, config.API_HASH)
+    original_session = f"{config.SESSION_NAME}.session"
+    web_session_path = f"sessions/web_bot_session"
+    web_session_file = f"{web_session_path}.session"
+
+    if os.path.exists(original_session):
+        if not os.path.exists(web_session_file) or \
+           os.path.getmtime(original_session) > os.path.getmtime(web_session_file):
+            os.makedirs("sessions", exist_ok=True)
+            shutil.copy2(original_session, web_session_file)
+
+    client = TelegramClient(web_session_path, config.API_ID, config.API_HASH)
     await client.connect()
     return client
 
