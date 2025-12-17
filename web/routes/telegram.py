@@ -11,11 +11,28 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from auth import bot_auth_manager
 from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig
-from web.utils import get_or_create_bot_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/telegram", tags=["telegram"])
 config_manager = ConfigManager()
+
+
+async def create_new_bot_client():
+    """
+    Создаёт НОВЫЙ клиент бота для веб-запросов.
+    Не пытается переиспользовать клиент бота чтобы избежать проблем с event loop.
+
+    Returns:
+        TelegramClient: новый подключенный клиент
+    """
+    from auth.base import TimeoutSQLiteSession
+    from telethon import TelegramClient
+    from config import config
+
+    session = TimeoutSQLiteSession(config.SESSION_NAME)
+    client = TelegramClient(session, config.API_ID, config.API_HASH)
+    await client.connect()
+    return client
 
 
 class CreateChannelRequest(BaseModel):
@@ -65,11 +82,10 @@ async def create_telegram_channel(request: CreateChannelRequest):
                 "message": "Бот не авторизован. Сначала пройдите авторизацию на странице /auth"
             }
 
-        client, should_disconnect = await get_or_create_bot_client()
+        client = await create_new_bot_client()
 
         if not await client.is_user_authorized():
-            if should_disconnect:
-                await client.disconnect()
+            await client.disconnect()
             return {
                 "success": False,
                 "message": "Сессия бота недействительна. Пройдите авторизацию заново."
@@ -96,8 +112,7 @@ async def create_telegram_channel(request: CreateChannelRequest):
             }
 
         finally:
-            if should_disconnect:
-                await client.disconnect()
+            await client.disconnect()
 
     except Exception as e:
         logger.error(f"Ошибка создания канала: {e}")
@@ -129,11 +144,10 @@ async def create_telegram_crm_group(request: CreateCrmGroupRequest):
                 "message": "Бот не авторизован. Сначала пройдите авторизацию на странице /auth"
             }
 
-        client, should_disconnect = await get_or_create_bot_client()
+        client = await create_new_bot_client()
 
         if not await client.is_user_authorized():
-            if should_disconnect:
-                await client.disconnect()
+            await client.disconnect()
             return {
                 "success": False,
                 "message": "Сессия бота недействительна. Пройдите авторизацию заново."
@@ -241,8 +255,7 @@ async def create_telegram_crm_group(request: CreateCrmGroupRequest):
             }
 
         finally:
-            if should_disconnect:
-                await client.disconnect()
+            await client.disconnect()
 
     except Exception as e:
         logger.error(f"Ошибка создания CRM группы: {e}")
@@ -270,11 +283,10 @@ async def add_agents_to_crm(request: AddAgentsToCrmRequest):
         if not channel or not channel.agents:
             return {"success": False, "message": "Канал не найден или нет агентов"}
 
-        client, should_disconnect = await get_or_create_bot_client()
+        client = await create_new_bot_client()
 
         if not await client.is_user_authorized():
-            if should_disconnect:
-                await client.disconnect()
+            await client.disconnect()
             return {"success": False, "message": "Сессия бота недействительна"}
 
         try:
@@ -318,8 +330,7 @@ async def add_agents_to_crm(request: AddAgentsToCrmRequest):
             }
 
         finally:
-            if should_disconnect:
-                await client.disconnect()
+            await client.disconnect()
 
     except Exception as e:
         logger.error(f"Ошибка добавления агентов: {e}")
@@ -357,11 +368,10 @@ async def create_channel_full(data: FullChannelCreateRequest):
                 "message": "Бот не авторизован. Сначала пройдите авторизацию на странице /auth"
             }
 
-        client, should_disconnect = await get_or_create_bot_client()
+        client = await create_new_bot_client()
 
         if not await client.is_user_authorized():
-            if should_disconnect:
-                await client.disconnect()
+            await client.disconnect()
             return {"success": False, "message": "Сессия бота недействительна"}
 
         try:
@@ -504,8 +514,7 @@ async def create_channel_full(data: FullChannelCreateRequest):
             }
 
         finally:
-            if should_disconnect:
-                await client.disconnect()
+            await client.disconnect()
 
     except Exception as e:
         logger.error(f"Ошибка создания полного канала: {e}")

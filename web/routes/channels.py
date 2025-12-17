@@ -9,10 +9,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig
-from web.utils import (
-    ChannelCreateRequest, ChannelUpdateRequest,
-    get_or_create_bot_client, get_agent_client
-)
+from web.utils import ChannelCreateRequest, ChannelUpdateRequest, get_agent_client
 from auth import bot_auth_manager
 
 logger = logging.getLogger(__name__)
@@ -22,6 +19,18 @@ config_manager = ConfigManager()
 
 # Очередь отложенных удалений (импортируется из app.py)
 pending_telegram_deletions: List = []
+
+
+async def create_new_bot_client():
+    """Создаёт новый клиент бота для веб-запросов"""
+    from auth.base import TimeoutSQLiteSession
+    from telethon import TelegramClient
+    from config import config
+
+    session = TimeoutSQLiteSession(config.SESSION_NAME)
+    client = TelegramClient(session, config.API_ID, config.API_HASH)
+    await client.connect()
+    return client
 
 
 async def _add_agents_to_crm_group(crm_group_id: int, agents: list) -> dict:
@@ -35,11 +44,10 @@ async def _add_agents_to_crm_group(crm_group_id: int, agents: list) -> dict:
     if not session_status.get("authenticated"):
         return {"invited": [], "errors": ["Бот не авторизован"]}
 
-    client, should_disconnect = await get_or_create_bot_client()
+    client = await create_new_bot_client()
 
     if not await client.is_user_authorized():
-        if should_disconnect:
-            await client.disconnect()
+        await client.disconnect()
         return {"invited": [], "errors": ["Сессия бота недействительна"]}
 
     try:
@@ -82,8 +90,7 @@ async def _add_agents_to_crm_group(crm_group_id: int, agents: list) -> dict:
                 logger.warning(f"Не удалось добавить агента {agent_session}: {e}")
 
     finally:
-        if should_disconnect:
-            await client.disconnect()
+        await client.disconnect()
 
     return {"invited": invited, "errors": errors}
 
