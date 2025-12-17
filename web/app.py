@@ -225,8 +225,8 @@ async def _add_agents_to_crm_group(crm_group_id: int, agents: list) -> dict:
     invited = []
     errors = []
 
-    # Проверяем сессию бота
-    session_status = await bot_auth_manager.check_session_status()
+    # Проверяем сессию бота (quick_check чтобы не блокировать сессию)
+    session_status = await bot_auth_manager.check_session_status(quick_check=True)
     if not session_status.get("authenticated"):
         return {"invited": [], "errors": ["Бот не авторизован"]}
 
@@ -1027,8 +1027,8 @@ async def create_telegram_channel(request: CreateChannelRequest):
         from telethon import TelegramClient
         from config import config
 
-        # Проверяем что бот авторизован
-        session_status = await bot_auth_manager.check_session_status()
+        # Проверяем что бот авторизован (quick_check чтобы не блокировать сессию)
+        session_status = await bot_auth_manager.check_session_status(quick_check=True)
         if not session_status.get("authenticated"):
             return {
                 "success": False,
@@ -1094,8 +1094,8 @@ async def create_telegram_crm_group(request: CreateCrmGroupRequest):
         from telethon import TelegramClient
         from config import config
 
-        # Проверяем что бот авторизован
-        session_status = await bot_auth_manager.check_session_status()
+        # Проверяем что бот авторизован (quick_check чтобы не блокировать сессию)
+        session_status = await bot_auth_manager.check_session_status(quick_check=True)
         if not session_status.get("authenticated"):
             return {
                 "success": False,
@@ -1253,8 +1253,8 @@ async def add_agents_to_crm(request: AddAgentsToCrmRequest):
         from telethon import TelegramClient
         from config import config
 
-        # Проверяем что бот авторизован
-        session_status = await bot_auth_manager.check_session_status()
+        # Проверяем что бот авторизован (quick_check чтобы не блокировать сессию)
+        session_status = await bot_auth_manager.check_session_status(quick_check=True)
         if not session_status.get("authenticated"):
             return {"success": False, "message": "Бот не авторизован"}
 
@@ -1500,8 +1500,8 @@ async def create_channel_full(data: FullChannelCreateRequest):
         from telethon import TelegramClient
         from config import config
 
-        # Проверяем что бот авторизован
-        session_status = await bot_auth_manager.check_session_status()
+        # Проверяем что бот авторизован (quick_check чтобы не блокировать сессию)
+        session_status = await bot_auth_manager.check_session_status(quick_check=True)
         if not session_status.get("authenticated"):
             return {
                 "success": False,

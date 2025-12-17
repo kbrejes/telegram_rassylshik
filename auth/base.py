@@ -290,15 +290,32 @@ class TelegramAuthManager(ABC):
                 "message": f"Ошибка: {str(e)}"
             }
 
-    async def check_session_status(self, identifier: Optional[str] = None) -> dict:
-        """Проверяет статус существующей сессии"""
+    async def check_session_status(self, identifier: Optional[str] = None, quick_check: bool = False) -> dict:
+        """
+        Проверяет статус существующей сессии
+
+        Args:
+            identifier: Идентификатор сессии
+            quick_check: Если True, только проверяет существование файла без открытия соединения
+                        (используется когда бот уже работает, чтобы избежать database is locked)
+        """
         try:
             session_path = self.get_session_path(identifier)
+            session_file = Path(f"{session_path}.session")
 
-            if not Path(f"{session_path}.session").exists():
+            if not session_file.exists():
                 return {
                     "exists": False,
                     "authenticated": False
+                }
+
+            # Быстрая проверка - только существование файла
+            # Используется когда бот уже работает и держит сессию открытой
+            if quick_check:
+                return {
+                    "exists": True,
+                    "authenticated": True,  # Предполагаем что если файл есть, бот авторизован
+                    "quick_check": True
                 }
 
             client = self._create_client(session_path)
@@ -321,6 +338,14 @@ class TelegramAuthManager(ABC):
             }
 
         except Exception as e:
+            # Если database is locked, значит бот уже работает с этой сессией
+            if "database is locked" in str(e):
+                logger.info(f"Сессия заблокирована (бот работает): {session_path}")
+                return {
+                    "exists": True,
+                    "authenticated": True,
+                    "locked_by_bot": True
+                }
             logger.error(f"Ошибка проверки сессии: {e}")
             return {
                 "exists": False,

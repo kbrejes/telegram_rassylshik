@@ -59,9 +59,9 @@ class BotAuthManager(TelegramAuthManager):
         """Проверяет 2FA пароль"""
         return await super().verify_password(password, identifier=None)
 
-    async def check_session_status(self) -> dict:
+    async def check_session_status(self, quick_check: bool = False) -> dict:
         """Проверяет статус сессии"""
-        return await super().check_session_status(identifier=None)
+        return await super().check_session_status(identifier=None, quick_check=quick_check)
 
     async def cleanup(self) -> None:
         """Очищает незавершенную аутентификацию"""
