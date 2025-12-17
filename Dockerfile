@@ -21,6 +21,10 @@ COPY channels.txt ./
 # Копируем веб-интерфейс
 COPY web/ ./web/
 
+# Копируем модули auth и utils
+COPY auth/ ./auth/
+COPY utils/ ./utils/
+
 # Копируем default configs
 COPY configs/ ./configs_default/
 
