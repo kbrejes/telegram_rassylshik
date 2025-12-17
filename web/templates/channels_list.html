@@ -149,19 +149,47 @@
 
         // Удаление канала
         async function deleteChannel(channelId) {
-            if (!confirm('Вы уверены, что хотите удалить этот канал?')) {
-                return;
+            const deleteTelegram = confirm(
+                '⚠️ Удалить канал?\n\n' +
+                'Нажмите OK чтобы удалить канал ВМЕСТЕ с Telegram каналом и CRM группой.\n\n' +
+                'Нажмите Отмена чтобы отменить удаление.'
+            );
+
+            if (!deleteTelegram) {
+                // Спросим, может хочет удалить только из конфига
+                const deleteConfigOnly = confirm(
+                    'Удалить только из конфигурации?\n\n' +
+                    'Telegram канал и CRM группа останутся в Telegram.\n\n' +
+                    'OK - удалить только конфиг\n' +
+                    'Отмена - не удалять ничего'
+                );
+                if (!deleteConfigOnly) {
+                    return;
+                }
             }
 
             try {
-                const response = await fetch(`/api/channels/${channelId}`, {
+                const url = `/api/channels/${channelId}?delete_telegram=${deleteTelegram}`;
+                const response = await fetch(url, {
                     method: 'DELETE'
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    alert('Канал успешно удален');
+                    let message = '✅ Канал успешно удален!\n\nУдалено:\n';
+                    if (data.deleted) {
+                        message += data.deleted.map(item => `• ${item}`).join('\n');
+                    }
+                    if (data.pending && data.pending.length > 0) {
+                        message += '\n\n⏳ Будет удалено позже (rate limit):\n';
+                        message += data.pending.map(item => `• ${item}`).join('\n');
+                    }
+                    if (data.errors && data.errors.length > 0) {
+                        message += '\n\n⚠️ Ошибки:\n';
+                        message += data.errors.map(err => `• ${err}`).join('\n');
+                    }
+                    alert(message);
                     window.location.reload();
                 } else {
                     alert('Ошибка удаления канала');

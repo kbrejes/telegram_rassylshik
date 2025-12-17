@@ -589,9 +589,12 @@ class MultiChannelJobMonitorBot:
                 if source_id in self.channel_names:
                     del self.channel_names[source_id]
                 logger.info(f"  ➖ Удален источник: {channel_name}")
-            
+
             logger.info(f"Мониторится: {len(self.monitored_sources)} источников, {len(self.output_channels)} output каналов")
-        
+
+            # Переинициализируем CRM агентов для новых каналов
+            await self.setup_crm_agents()
+
         except Exception as e:
             logger.error(f"Ошибка перезагрузки конфигурации: {e}", exc_info=True)
     
@@ -1028,4 +1031,26 @@ class MultiChannelJobMonitorBot:
 
 # Глобальный экземпляр бота
 bot = MultiChannelJobMonitorBot()
+
+
+if __name__ == "__main__":
+    # Настройка логирования
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    async def main():
+        try:
+            await bot.start()
+            await bot.run()
+        except NeedsAuthenticationError as e:
+            logger.error(f"❌ {e}")
+            logger.info("Запустите веб-интерфейс: python3 -m uvicorn web.app:app --port 8080")
+        except KeyboardInterrupt:
+            logger.info("Остановка по Ctrl+C")
+        finally:
+            await bot.stop()
+
+    asyncio.run(main())
 

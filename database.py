@@ -223,6 +223,20 @@ class Database:
         rows = await cursor.fetchall()
         return {row[0]: row[1] for row in rows}
 
+    async def delete_topic_contacts_by_group(self, group_id: int) -> int:
+        """Удаляет все записи crm_topic_contacts для указанной группы
+
+        Returns:
+            Количество удалённых записей
+        """
+        cursor = await self._connection.execute("""
+            DELETE FROM crm_topic_contacts WHERE group_id = ?
+        """, (group_id,))
+        await self._connection.commit()
+        deleted_count = cursor.rowcount
+        logger.info(f"Удалено {deleted_count} записей crm_topic_contacts для группы {group_id}")
+        return deleted_count
+
 
 # Глобальный экземпляр базы данных
 db = Database()

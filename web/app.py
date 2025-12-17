@@ -1,7 +1,9 @@
 """FastAPI веб-интерфейс для управления Job Notification Bot"""
 import os
+import asyncio
+import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -19,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(title="Job Notification Bot - Management Interface")
+
+# Очередь отложенных удалений Telegram сущностей
+pending_telegram_deletions: List[Dict[str, Any]] = []
+deletion_worker_started = False
 
 # Setup templates and static files
 BASE_DIR = Path(__file__).parent
@@ -433,17 +439,84 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
 
 
 @app.delete("/api/channels/{channel_id}")
-async def delete_channel(channel_id: str):
-    """Удалить канал"""
+async def delete_channel(channel_id: str, delete_telegram: bool = True):
+    """
+    Удалить канал с опциональной очисткой Telegram сущностей.
+
+    Args:
+        channel_id: ID канала в конфиге
+        delete_telegram: Если True, удаляет также Telegram канал и CRM группу
+    """
     try:
+        # Получаем данные канала ДО удаления
+        channel = config_manager.get_channel(channel_id)
+        if not channel:
+            raise HTTPException(404, "Канал не найден")
+
+        deleted_entities = []
+        pending_entities = []
+        errors = []
+
+        if delete_telegram:
+            # Удаляем Telegram канал (для уведомлений)
+            if channel.telegram_id:
+                result = await execute_telegram_deletion(channel.telegram_id, "Telegram канал")
+                if result:
+                    deleted_entities.append(f"Telegram канал {channel.telegram_id}")
+                elif any(t['entity_id'] == channel.telegram_id for t in pending_telegram_deletions):
+                    pending_entities.append(f"Telegram канал {channel.telegram_id}")
+                else:
+                    errors.append(f"Не удалось удалить Telegram канал {channel.telegram_id}")
+
+            # Удаляем CRM группу
+            if channel.crm_enabled and channel.crm_group_id:
+                result = await execute_telegram_deletion(channel.crm_group_id, "CRM группа")
+                if result:
+                    deleted_entities.append(f"CRM группа {channel.crm_group_id}")
+                elif any(t['entity_id'] == channel.crm_group_id for t in pending_telegram_deletions):
+                    pending_entities.append(f"CRM группа {channel.crm_group_id}")
+                else:
+                    errors.append(f"Не удалось удалить CRM группу {channel.crm_group_id}")
+
+        # Удаляем записи из базы данных
+        if channel.crm_enabled and channel.crm_group_id:
+            try:
+                import aiosqlite
+                from config import config
+                # Используем отдельное соединение с timeout чтобы избежать lock
+                async with aiosqlite.connect(config.DATABASE_PATH, timeout=10) as conn:
+                    cursor = await conn.execute(
+                        "DELETE FROM crm_topic_contacts WHERE group_id = ?",
+                        (channel.crm_group_id,)
+                    )
+                    await conn.commit()
+                    deleted_count = cursor.rowcount
+                    if deleted_count > 0:
+                        deleted_entities.append(f"{deleted_count} записей из БД")
+                        logger.info(f"Удалено {deleted_count} записей crm_topic_contacts")
+            except Exception as e:
+                error_msg = f"Ошибка очистки БД: {e}"
+                logger.warning(error_msg)
+                errors.append(error_msg)
+
+        # Удаляем из конфига
         if config_manager.delete_channel(channel_id):
+            deleted_entities.append("конфигурация канала")
+
+            message = "Канал удален успешно"
+            if pending_entities:
+                message += " (некоторые Telegram сущности будут удалены позже из-за rate limit)"
+
             return {
                 "success": True,
-                "message": "Канал удален успешно"
+                "message": message,
+                "deleted": deleted_entities,
+                "pending": pending_entities if pending_entities else None,
+                "errors": errors if errors else None
             }
         else:
-            raise HTTPException(404, "Канал не найден")
-    
+            raise HTTPException(500, "Не удалось удалить канал из конфигурации")
+
     except HTTPException:
         raise
     except Exception as e:
@@ -669,6 +742,96 @@ async def startup_event():
     config_manager.load()
 
     logger.info(f"Loaded {len(config_manager.channels)} channels")
+
+    # Запускаем worker для отложенных удалений
+    global deletion_worker_started
+    if not deletion_worker_started:
+        deletion_worker_started = True
+        asyncio.create_task(deletion_worker())
+
+
+async def deletion_worker():
+    """Фоновый worker для отложенных удалений Telegram сущностей"""
+    logger.info("🗑️ Deletion worker started")
+
+    while True:
+        try:
+            await asyncio.sleep(10)  # Проверяем каждые 10 секунд
+
+            if not pending_telegram_deletions:
+                continue
+
+            now = time.time()
+            tasks_to_process = []
+
+            # Находим задачи, которые пора выполнить
+            for task in pending_telegram_deletions[:]:
+                if task['retry_after'] <= now:
+                    tasks_to_process.append(task)
+                    pending_telegram_deletions.remove(task)
+
+            for task in tasks_to_process:
+                logger.info(f"🔄 Повторная попытка удаления: {task['type']} {task['entity_id']}")
+                await execute_telegram_deletion(task['entity_id'], task['type'])
+
+        except Exception as e:
+            logger.error(f"Ошибка в deletion worker: {e}")
+
+
+async def execute_telegram_deletion(entity_id: int, entity_type: str) -> bool:
+    """Выполняет удаление Telegram сущности с обработкой rate limit"""
+    try:
+        from telethon.tl.functions.channels import DeleteChannelRequest
+        from telethon.errors import FloodWaitError
+        from telethon import TelegramClient
+        from telethon.sessions import SQLiteSession
+        from config import config
+        import shutil
+
+        # Используем копию сессии чтобы не блокировать основного бота
+        web_session_path = f"sessions/{config.SESSION_NAME}_web"
+        original_session_path = f"sessions/{config.SESSION_NAME}.session"
+
+        # Копируем сессию если её нет или она устарела
+        if not os.path.exists(f"{web_session_path}.session") or \
+           os.path.getmtime(original_session_path) > os.path.getmtime(f"{web_session_path}.session"):
+            shutil.copy2(original_session_path, f"{web_session_path}.session")
+
+        client = TelegramClient(web_session_path, config.API_ID, config.API_HASH)
+
+        await client.connect()
+
+        if not await client.is_user_authorized():
+            logger.warning("Бот не авторизован для удаления")
+            await client.disconnect()
+            return False
+
+        try:
+            await client(DeleteChannelRequest(entity_id))
+            logger.info(f"✅ Удалён {entity_type}: {entity_id}")
+            await client.disconnect()
+            return True
+
+        except FloodWaitError as e:
+            # Rate limit - добавляем в очередь на повторную попытку
+            retry_after = time.time() + e.seconds + 5  # +5 секунд запаса
+            pending_telegram_deletions.append({
+                'entity_id': entity_id,
+                'type': entity_type,
+                'retry_after': retry_after
+            })
+            logger.warning(f"⏳ Rate limit для {entity_type} {entity_id}, повтор через {e.seconds} сек")
+            await client.disconnect()
+            return False
+
+        except Exception as e:
+            logger.error(f"Ошибка удаления {entity_type} {entity_id}: {e}")
+            await client.disconnect()
+            return False
+
+    except Exception as e:
+        logger.error(f"Ошибка подключения для удаления: {e}")
+        return False
 
 
 @app.get("/api/channels/{channel_id}/agents")
