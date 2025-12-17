@@ -1033,6 +1033,13 @@ class MultiChannelJobMonitorBot:
 bot = MultiChannelJobMonitorBot()
 
 
+def get_bot_client():
+    """Возвращает клиент бота если он подключён, иначе None"""
+    if bot and bot.client and bot.client.is_connected():
+        return bot.client
+    return None
+
+
 if __name__ == "__main__":
     # Настройка логирования
     logging.basicConfig(
