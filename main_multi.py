@@ -37,7 +37,9 @@ bot_state = {
 
 def run_web_interface():
     """Запускает веб-интерфейс в отдельном потоке"""
-    logger.info("Запуск веб-интерфейса на http://0.0.0.0:8080")
+    # Читаем порт из переменной окружения (Railway использует PORT)
+    port = int(os.environ.get("WEB_PORT", os.environ.get("PORT", 8080)))
+    logger.info(f"Запуск веб-интерфейса на http://0.0.0.0:{port}")
 
     # Передаём bot_state в веб-приложение
     import web.app as web_app
@@ -46,7 +48,7 @@ def run_web_interface():
     uvicorn.run(
         "web.app:app",
         host="0.0.0.0",
-        port=8080,
+        port=port,
         log_level="warning"  # Уменьшаем спам от uvicorn
     )
 
@@ -80,7 +82,8 @@ async def run_bot():
             bot_state["status"] = "waiting_auth"
             bot_state["error"] = "Требуется авторизация. Откройте веб-интерфейс для входа."
             logger.info("Ожидание авторизации через веб-интерфейс...")
-            logger.info("Откройте http://localhost:8080/auth для авторизации")
+            port = os.environ.get("WEB_PORT", os.environ.get("PORT", 8080))
+            logger.info(f"Откройте http://localhost:{port}/auth для авторизации")
 
             # Ждём пока пользователь авторизуется через веб
             while bot_state["status"] == "waiting_auth":
@@ -137,7 +140,8 @@ def main():
     web_thread = Thread(target=run_web_interface, daemon=True)
     web_thread.start()
 
-    logger.info("Веб-интерфейс запущен: http://localhost:8080")
+    port = os.environ.get("WEB_PORT", os.environ.get("PORT", 8080))
+    logger.info(f"Веб-интерфейс запущен: http://localhost:{port}")
     logger.info("Запуск Telegram бота...")
 
     # Запускаем бота в основном потоке

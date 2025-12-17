@@ -24,9 +24,10 @@ COPY web/ ./web/
 # Копируем default configs
 COPY configs/ ./configs_default/
 
-# Копируем startup скрипт
+# Копируем startup скрипты
 COPY start_flyio.sh ./
-RUN chmod +x start_flyio.sh
+COPY start_railway.sh ./
+RUN chmod +x start_flyio.sh start_railway.sh
 
 # Создаем директории для данных (будут заменены симлинками при запуске)
 RUN mkdir -p /app/data /app/logs /app/configs /app/sessions
