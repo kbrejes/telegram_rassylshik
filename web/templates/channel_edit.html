@@ -515,7 +515,12 @@
                 const response = await fetch('/api/telegram/create-crm-group', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: title, about: 'CRM группа для отслеживания откликов' })
+                    body: JSON.stringify({
+                        title: title,
+                        about: 'CRM группа для отслеживания откликов',
+                        owner_username: 'kbrejes',  // Автодобавление владельца
+                        channel_id: channelId || ''  // Для добавления агентов
+                    })
                 });
 
                 const data = await response.json();
@@ -524,6 +529,12 @@
                     document.getElementById('crm_group_id').value = data.group_id;
 
                     let message = '✅ ' + data.message;
+                    if (data.invited_users && data.invited_users.length > 0) {
+                        message += '\n👥 Добавлены: ' + data.invited_users.join(', ');
+                    }
+                    if (data.invite_errors && data.invite_errors.length > 0) {
+                        message += '\n⚠️ Ошибки: ' + data.invite_errors.join('; ');
+                    }
                     if (data.note) {
                         message += '\n' + data.note;
                     }

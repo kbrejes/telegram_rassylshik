@@ -128,11 +128,89 @@ async def get_channel(channel_id: str):
     channel = config_manager.get_channel(channel_id)
     if not channel:
         raise HTTPException(404, "Канал не найден")
-    
+
     return {
         "success": True,
         "channel": channel.to_dict()
     }
+
+
+async def _add_agents_to_crm_group(crm_group_id: int, agents: list) -> dict:
+    """
+    Вспомогательная функция для добавления агентов в CRM группу.
+    Возвращает dict с invited (список добавленных) и errors (список ошибок).
+    """
+    from telethon.tl.functions.channels import InviteToChannelRequest
+    from auth.base import TimeoutSQLiteSession
+    from telethon import TelegramClient
+    from config import config
+
+    invited = []
+    errors = []
+
+    # Проверяем сессию бота
+    session_status = await bot_auth_manager.check_session_status()
+    if not session_status.get("authenticated"):
+        return {"invited": [], "errors": ["Бот не авторизован"]}
+
+    # Создаём клиент бота
+    session = TimeoutSQLiteSession(config.SESSION_NAME)
+    client = TelegramClient(session, config.API_ID, config.API_HASH)
+    await client.connect()
+
+    if not await client.is_user_authorized():
+        await client.disconnect()
+        return {"invited": [], "errors": ["Сессия бота недействительна"]}
+
+    try:
+        # Получаем группу
+        group = await client.get_entity(crm_group_id)
+
+        for agent_data in agents:
+            # Поддержка разных форматов agent_data
+            if isinstance(agent_data, dict):
+                agent_session = agent_data.get('session_name')
+            elif hasattr(agent_data, 'session_name'):
+                agent_session = agent_data.session_name
+            else:
+                agent_session = str(agent_data)
+
+            if not agent_session:
+                continue
+
+            try:
+                agent_session_path = f"sessions/{agent_session}"
+                agent_tg_session = TimeoutSQLiteSession(agent_session_path)
+                agent_client = TelegramClient(agent_tg_session, config.API_ID, config.API_HASH)
+                await agent_client.connect()
+
+                if await agent_client.is_user_authorized():
+                    agent_me = await agent_client.get_me()
+                    try:
+                        await client(InviteToChannelRequest(
+                            channel=group,
+                            users=[agent_me.id]
+                        ))
+                        agent_name = agent_me.username or agent_me.first_name
+                        invited.append(f"@{agent_name}")
+                        logger.info(f"Агент {agent_session} добавлен в CRM группу {crm_group_id}")
+                    except Exception as invite_err:
+                        # Возможно уже в группе
+                        if "USER_ALREADY_PARTICIPANT" in str(invite_err):
+                            agent_name = agent_me.username or agent_me.first_name
+                            invited.append(f"@{agent_name} (уже в группе)")
+                        else:
+                            errors.append(f"{agent_session}: {str(invite_err)}")
+
+                await agent_client.disconnect()
+            except Exception as e:
+                errors.append(f"{agent_session}: {str(e)}")
+                logger.warning(f"Не удалось добавить агента {agent_session}: {e}")
+
+    finally:
+        await client.disconnect()
+
+    return {"invited": invited, "errors": errors}
 
 
 @app.post("/api/channels")
@@ -175,14 +253,30 @@ async def create_channel(data: ChannelCreateRequest):
         
         # Добавляем
         if config_manager.add_channel(channel):
-            return {
+            # Автодобавление агентов в CRM группу
+            agents_added = []
+            agents_errors = []
+            if channel.crm_enabled and channel.crm_group_id and channel.agents:
+                try:
+                    add_result = await _add_agents_to_crm_group(channel.crm_group_id, channel.agents)
+                    agents_added = add_result.get('invited', [])
+                    agents_errors = add_result.get('errors', [])
+                except Exception as e:
+                    logger.warning(f"Не удалось добавить агентов в CRM: {e}")
+
+            response = {
                 "success": True,
                 "message": "Канал создан успешно",
                 "channel_id": channel_id
             }
+            if agents_added:
+                response["agents_added"] = agents_added
+            if agents_errors:
+                response["agents_errors"] = agents_errors
+            return response
         else:
             raise HTTPException(400, "Ошибка создания канала")
-    
+
     except Exception as e:
         logger.error(f"Ошибка создания канала: {e}")
         raise HTTPException(500, str(e))
@@ -237,10 +331,26 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
         
         # Сохраняем
         if config_manager.update_channel(channel_id, channel):
-            return {
+            # Автодобавление агентов в CRM группу
+            agents_added = []
+            agents_errors = []
+            if channel.crm_enabled and channel.crm_group_id and channel.agents:
+                try:
+                    add_result = await _add_agents_to_crm_group(channel.crm_group_id, channel.agents)
+                    agents_added = add_result.get('invited', [])
+                    agents_errors = add_result.get('errors', [])
+                except Exception as e:
+                    logger.warning(f"Не удалось добавить агентов в CRM: {e}")
+
+            response = {
                 "success": True,
                 "message": "Канал обновлен успешно"
             }
+            if agents_added:
+                response["agents_added"] = agents_added
+            if agents_errors:
+                response["agents_errors"] = agents_errors
+            return response
         else:
             raise HTTPException(400, "Ошибка обновления канала")
     
@@ -663,6 +773,8 @@ class CreateCrmGroupRequest(BaseModel):
     """Запрос на создание CRM группы с топиками"""
     title: str
     about: str = ""
+    owner_username: str = ""  # Username владельца для автодобавления
+    channel_id: str = ""  # ID канала для получения списка агентов
 
 
 @app.post("/api/telegram/create-channel")
@@ -736,6 +848,7 @@ async def create_telegram_crm_group(request: CreateCrmGroupRequest):
     Создаёт группу с включенными топиками для CRM.
     Требует авторизованную сессию бота.
     """
+    logger.info(f"📋 Создание CRM группы: title={request.title}, owner={request.owner_username}, channel_id={request.channel_id}")
     try:
         from telethon.tl.functions.channels import CreateChannelRequest as TgCreateChannel
         from telethon.tl.functions.channels import ToggleForumRequest
@@ -790,14 +903,88 @@ async def create_telegram_crm_group(request: CreateCrmGroupRequest):
             # Формируем ID
             group_id = -1000000000000 - group.id
 
+            # Приглашаем владельца и агентов
+            invited_users = []
+            invite_errors = []
+
+            from telethon.tl.functions.channels import InviteToChannelRequest
+            from telethon.tl.functions.messages import ExportChatInviteRequest
+
+            # 1. Приглашаем владельца (отправляем инвайт-ссылку в личку)
+            if request.owner_username:
+                try:
+                    owner_username = request.owner_username.lstrip('@')
+                    owner_entity = await client.get_entity(owner_username)
+
+                    # Создаём инвайт-ссылку
+                    invite = await client(ExportChatInviteRequest(
+                        peer=group,
+                        expire_date=None,
+                        usage_limit=1,  # Одноразовая ссылка
+                        title="CRM доступ"
+                    ))
+                    invite_link = invite.link
+
+                    # Отправляем ссылку в личку владельцу
+                    await client.send_message(
+                        owner_entity,
+                        f"🔗 **Приглашение в CRM группу**\n\n"
+                        f"Группа: **{request.title}**\n"
+                        f"Ссылка для вступления: {invite_link}\n\n"
+                        f"_Ссылка одноразовая_"
+                    )
+                    invited_users.append(f"@{owner_username} (ссылка отправлена)")
+                    logger.info(f"Инвайт-ссылка отправлена владельцу @{owner_username}")
+                except Exception as e:
+                    invite_errors.append(f"Владелец @{owner_username}: {str(e)}")
+                    logger.warning(f"Не удалось отправить инвайт владельцу: {e}")
+
+            # 2. Приглашаем агентов из канала (если указан)
+            if request.channel_id:
+                try:
+                    channel = config_manager.get_channel(request.channel_id)
+                    if channel and channel.agents:
+                        for agent_session in channel.agents:
+                            try:
+                                # Создаём клиент агента чтобы получить его entity
+                                agent_session_path = f"sessions/{agent_session}"
+                                from auth.base import TimeoutSQLiteSession
+                                agent_tg_session = TimeoutSQLiteSession(agent_session_path)
+                                agent_client = TelegramClient(agent_tg_session, config.API_ID, config.API_HASH)
+                                await agent_client.connect()
+
+                                if await agent_client.is_user_authorized():
+                                    agent_me = await agent_client.get_me()
+                                    # Приглашаем агента в группу через основной клиент
+                                    await client(InviteToChannelRequest(
+                                        channel=group,
+                                        users=[agent_me.id]
+                                    ))
+                                    agent_name = agent_me.username or agent_me.first_name
+                                    invited_users.append(f"@{agent_name} (агент)")
+                                    logger.info(f"Агент {agent_session} добавлен в CRM группу")
+
+                                await agent_client.disconnect()
+                            except Exception as e:
+                                invite_errors.append(f"Агент {agent_session}: {str(e)}")
+                                logger.warning(f"Не удалось добавить агента {agent_session}: {e}")
+                except Exception as e:
+                    logger.warning(f"Ошибка при добавлении агентов: {e}")
+
             logger.info(f"CRM группа '{request.title}' создана с ID {group_id}, топики: {topics_enabled}")
+
+            result_message = f"Группа '{request.title}' успешно создана!"
+            if invited_users:
+                result_message += f" Добавлены: {', '.join(invited_users)}"
 
             return {
                 "success": True,
-                "message": f"Группа '{request.title}' успешно создана!",
+                "message": result_message,
                 "group_id": group_id,
                 "group_title": request.title,
                 "topics_enabled": topics_enabled,
+                "invited_users": invited_users,
+                "invite_errors": invite_errors,
                 "note": "Топики включены автоматически" if topics_enabled else "Включите топики вручную в настройках группы"
             }
 
@@ -810,6 +997,85 @@ async def create_telegram_crm_group(request: CreateCrmGroupRequest):
             "success": False,
             "message": f"Ошибка создания группы: {str(e)}"
         }
+
+
+class AddAgentsToCrmRequest(BaseModel):
+    """Запрос на добавление агентов в CRM группу"""
+    crm_group_id: int
+    channel_id: str
+
+
+@app.post("/api/telegram/add-agents-to-crm")
+async def add_agents_to_crm(request: AddAgentsToCrmRequest):
+    """Добавляет агентов канала в существующую CRM группу"""
+    logger.info(f"📋 Добавление агентов в CRM группу: group_id={request.crm_group_id}, channel_id={request.channel_id}")
+    try:
+        from telethon.tl.functions.channels import InviteToChannelRequest
+        from auth.base import TimeoutSQLiteSession
+        from telethon import TelegramClient
+        from config import config
+
+        # Проверяем что бот авторизован
+        session_status = await bot_auth_manager.check_session_status()
+        if not session_status.get("authenticated"):
+            return {"success": False, "message": "Бот не авторизован"}
+
+        # Получаем канал и его агентов
+        channel = config_manager.get_channel(request.channel_id)
+        if not channel or not channel.agents:
+            return {"success": False, "message": "Канал не найден или нет агентов"}
+
+        # Создаём клиент бота
+        session = TimeoutSQLiteSession(config.SESSION_NAME)
+        client = TelegramClient(session, config.API_ID, config.API_HASH)
+        await client.connect()
+
+        if not await client.is_user_authorized():
+            await client.disconnect()
+            return {"success": False, "message": "Сессия бота недействительна"}
+
+        try:
+            # Получаем группу
+            group = await client.get_entity(request.crm_group_id)
+            invited = []
+            errors = []
+
+            for agent_data in channel.agents:
+                agent_session = agent_data.get('session_name') if isinstance(agent_data, dict) else agent_data
+                try:
+                    agent_session_path = f"sessions/{agent_session}"
+                    agent_tg_session = TimeoutSQLiteSession(agent_session_path)
+                    agent_client = TelegramClient(agent_tg_session, config.API_ID, config.API_HASH)
+                    await agent_client.connect()
+
+                    if await agent_client.is_user_authorized():
+                        agent_me = await agent_client.get_me()
+                        await client(InviteToChannelRequest(
+                            channel=group,
+                            users=[agent_me.id]
+                        ))
+                        agent_name = agent_me.username or agent_me.first_name
+                        invited.append(f"@{agent_name}")
+                        logger.info(f"Агент {agent_session} добавлен в CRM группу")
+
+                    await agent_client.disconnect()
+                except Exception as e:
+                    errors.append(f"{agent_session}: {str(e)}")
+                    logger.warning(f"Не удалось добавить агента {agent_session}: {e}")
+
+            return {
+                "success": True,
+                "message": f"Добавлено агентов: {len(invited)}",
+                "invited": invited,
+                "errors": errors
+            }
+
+        finally:
+            await client.disconnect()
+
+    except Exception as e:
+        logger.error(f"Ошибка добавления агентов: {e}")
+        return {"success": False, "message": str(e)}
 
 
 if __name__ == "__main__":
