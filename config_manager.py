@@ -192,6 +192,11 @@ class ConfigManager:
             "base_url": "https://api.openai.com/v1",
             "api_key": "${OPENAI_API_KEY}",
             "default_model": "gpt-4o-mini"
+        },
+        "groq": {
+            "base_url": "https://api.groq.com/openai/v1",
+            "api_key": "${GROQ_API_KEY}",
+            "default_model": "llama-3.3-70b-versatile"
         }
     }
 
