@@ -287,6 +287,11 @@ class MultiChannelJobMonitorBot:
                         # Загружаем кэш topic->contact из БД
                         await conv_manager.load_cache_from_db()
 
+                        # Восстанавливаем contact_to_channel маппинг из загруженного кэша
+                        for contact_id in conv_manager._topic_cache.keys():
+                            self.contact_to_channel[contact_id] = channel.id
+                        logger.info(f"  Восстановлено {len(conv_manager._topic_cache)} контактов в contact_to_channel")
+
                         # Регистрируем обработчики трансляции
                         conv_manager.register_handlers()
                         
@@ -466,7 +471,17 @@ class MultiChannelJobMonitorBot:
             # Пытаемся найти канал, к которому привязан контакт
             channel_id = self.contact_to_channel.get(contact_id)
             if not channel_id:
-                return
+                # Попробуем найти канал по topic_id в conversation_managers
+                for ch_id, conv_manager in self.conversation_managers.items():
+                    if conv_manager.get_contact_id(topic_id) == contact_id:
+                        channel_id = ch_id
+                        self.contact_to_channel[contact_id] = channel_id
+                        logger.info(f"Восстановлен contact_to_channel: {contact_id} -> {channel_id}")
+                        break
+
+                if not channel_id:
+                    logger.warning(f"Канал для контакта {contact_id} не найден в contact_to_channel")
+                    return
 
             # Ищем агента, закрепленного за этой темой
             agent = self.topic_to_agent.get(topic_id)
