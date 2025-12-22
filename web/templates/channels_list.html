@@ -176,6 +176,12 @@
 
                 const data = await response.json();
 
+                if (!response.ok) {
+                    const errorMsg = data.detail || data.message || 'Неизвестная ошибка';
+                    alert(`❌ Ошибка удаления канала:\n\n${errorMsg}`);
+                    return;
+                }
+
                 if (data.success) {
                     let message = '✅ Канал успешно удален!\n\nУдалено:\n';
                     if (data.deleted) {
@@ -192,11 +198,12 @@
                     alert(message);
                     window.location.reload();
                 } else {
-                    alert('Ошибка удаления канала');
+                    const errorMsg = data.message || data.detail || 'Неизвестная ошибка';
+                    alert(`❌ Ошибка удаления канала:\n\n${errorMsg}`);
                 }
             } catch (error) {
                 console.error('Ошибка удаления канала:', error);
-                alert('Ошибка удаления канала');
+                alert(`❌ Ошибка удаления канала:\n\n${error.message}`);
             }
         }
 
