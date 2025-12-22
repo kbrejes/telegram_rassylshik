@@ -12,10 +12,11 @@ from typing import List, Set, Dict, Optional
 from config import config
 from database import db
 from message_processor import message_processor
-from config_manager import ConfigManager, ChannelConfig
+from config_manager import ConfigManager, ChannelConfig, AIConfig
 from agent_account import AgentAccount
 from agent_pool import AgentPool
 from conversation_manager import ConversationManager
+from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig as AIHandlerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class ChannelNameLogFilter(logging.Filter):
             if record.args:
                 try:
                     formatted_message = record.msg % record.args
-                except:
+                except Exception:
                     return True
             else:
                 formatted_message = str(record.msg)
@@ -91,6 +92,10 @@ class MultiChannelJobMonitorBot:
         self.contact_to_channel: Dict[int, str] = {}  # contact_id -> channel_id (для маршрутизации)
         # Привязка topic_id -> агент, через которого ведется переписка
         self.topic_to_agent: Dict[int, AgentAccount] = {}
+
+        # AI Conversation
+        self.ai_handler_pool: Optional[AIHandlerPool] = None
+        self.ai_handlers: Dict[str, AIConversationHandler] = {}  # channel_id -> AIConversationHandler
         
         # Для отслеживания изменений конфигурации
         self.config_file_path = Path("configs/channels_config.json")
@@ -233,9 +238,12 @@ class MultiChannelJobMonitorBot:
     async def setup_crm_agents(self):
         """Инициализация CRM агентов и conversation managers для каналов"""
         logger.info("🤖 Инициализация CRM агентов...")
-        
+
+        # Инициализация AI handler pool
+        self.ai_handler_pool = AIHandlerPool(self.config_manager.llm_providers)
+
         crm_enabled_channels = [ch for ch in self.output_channels if ch.crm_enabled]
-        
+
         if not crm_enabled_channels:
             logger.info("Нет каналов с включенным CRM")
             return
@@ -287,6 +295,19 @@ class MultiChannelJobMonitorBot:
                             self._register_contact_message_handler(agent.client, conv_manager, channel.id)
                         
                         self.conversation_managers[channel.id] = conv_manager
+
+                        # Инициализация AI handler если включено
+                        if channel.ai_conversation_enabled:
+                            try:
+                                ai_config = AIHandlerConfig.from_dict(channel.ai_config.to_dict())
+                                ai_handler = await self.ai_handler_pool.get_or_create(
+                                    channel_id=channel.id,
+                                    ai_config=ai_config,
+                                )
+                                self.ai_handlers[channel.id] = ai_handler
+                                logger.info(f"  🧠 AI handler инициализирован (mode: {ai_config.mode})")
+                            except Exception as ai_error:
+                                logger.warning(f"  ⚠️ Не удалось инициализировать AI: {ai_error}")
                     else:
                         logger.error(f"  ❌ Нет доступных агентов для conversation manager '{channel.name}'")
                 else:
@@ -358,25 +379,67 @@ class MultiChannelJobMonitorBot:
                 
                 if topic_id:
                     # Отправляем сообщение от контакта в топик с подписью автора
-                    # (forward_messages не поддерживает reply_to для топиков)
                     sender_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
                     if not sender_name and sender.username:
                         sender_name = f"@{sender.username}"
                     if not sender_name:
                         sender_name = f"User {sender.id}"
-                    
+
                     # Формируем текст с подписью автора
-                    message_text = f"👤 **{sender_name}:**\n\n{message.text or ''}"
-                    
+                    relay_text = f"👤 **{sender_name}:**\n\n{message.text or ''}"
+
                     sent_msg = await agent_client.send_message(
                         entity=conv_manager.group_id,
-                        message=message_text,
+                        message=relay_text,
                         file=message.media if message.media else None,
                         reply_to=topic_id
                     )
                     # Сохраняем связь message_id -> topic_id
                     if sent_msg and hasattr(sent_msg, 'id'):
                         conv_manager.save_message_to_topic(sent_msg.id, topic_id)
+
+                    # AI: генерируем ответ если включено
+                    ai_handler = self.ai_handlers.get(channel_id)
+                    if ai_handler and message.text:
+                        async def send_to_contact(contact_id: int, text: str) -> bool:
+                            """Callback для отправки AI ответа контакту"""
+                            try:
+                                sent = await agent_client.send_message(contact_id, text)
+                                if sent:
+                                    conv_manager.mark_agent_sent_message(sent.id)
+                                    # Зеркалируем AI ответ в топик
+                                    ai_msg = f"🤖 **AI:**\n\n{text}"
+                                    topic_sent = await agent_client.send_message(
+                                        entity=conv_manager.group_id,
+                                        message=ai_msg,
+                                        reply_to=topic_id
+                                    )
+                                    if topic_sent:
+                                        conv_manager.save_message_to_topic(topic_sent.id, topic_id)
+                                return True
+                            except Exception as e:
+                                logger.error(f"Ошибка отправки AI ответа: {e}")
+                                return False
+
+                        async def suggest_in_topic(contact_id: int, text: str, name: str):
+                            """Callback для предложения ответа в топике"""
+                            suggest_msg = f"💡 **AI предлагает ответ:**\n\n{text}\n\n_Отправьте этот текст или напишите свой ответ_"
+                            await agent_client.send_message(
+                                entity=conv_manager.group_id,
+                                message=suggest_msg,
+                                reply_to=topic_id
+                            )
+
+                        # Вызываем AI handler
+                        asyncio.create_task(
+                            ai_handler.handle_message(
+                                contact_id=sender.id,
+                                message=message.text,
+                                contact_name=sender_name,
+                                send_callback=send_to_contact,
+                                suggest_callback=suggest_in_topic,
+                            )
+                        )
             
             except Exception as e:
                 logger.error(f"Ошибка в handle_contact_message: {e}", exc_info=True)
@@ -422,6 +485,11 @@ class MultiChannelJobMonitorBot:
             if not agent.client:
                 logger.error(f"У агента {agent.session_name} нет активного клиента")
                 return
+
+            # Записываем сообщение оператора в AI контекст
+            ai_handler = self.ai_handlers.get(channel_id)
+            if ai_handler and text:
+                ai_handler.add_operator_message(contact_id, text)
 
             # Отправляем сообщение контакту от имени выбранного агента
             try:
@@ -577,7 +645,7 @@ class MultiChannelJobMonitorBot:
                                 if entity.id == monitored_id:
                                     found = True
                                     break
-                            except:
+                            except Exception:
                                 pass
                 
                 if not found:
@@ -790,7 +858,21 @@ class MultiChannelJobMonitorBot:
                         if topic_id:
                             self.topic_to_agent[topic_id] = available_agent
                         
-                        # 3. Зеркалируем автоответ агента в тему (если был отправлен)
+                        # 3. Инициализируем AI контекст (если включено)
+                        ai_handler = self.ai_handlers.get(channel.id)
+                        if ai_handler and auto_response_sent and topic_id:
+                            try:
+                                job_info = f"Вакансия из канала: {chat_title}\n\n{message.text[:500]}..."
+                                await ai_handler.initialize_context(
+                                    contact_id=contact_user.id,
+                                    initial_message=channel.auto_response_template,
+                                    job_info=job_info,
+                                )
+                                logger.debug(f"  🧠 AI контекст инициализирован для {contact_user.id}")
+                            except Exception as ai_err:
+                                logger.warning(f"  ⚠️ Ошибка инициализации AI контекста: {ai_err}")
+
+                        # 4. Зеркалируем автоответ агента в тему (если был отправлен)
                         if auto_response_sent and topic_id:
                             try:
                                 agent_name = available_agent.session_name
@@ -1010,14 +1092,19 @@ class MultiChannelJobMonitorBot:
         """Остановка бота"""
         logger.info("Остановка бота...")
         self.is_running = False
-        
+
+        # Закрываем AI handlers
+        if self.ai_handler_pool:
+            self.ai_handler_pool.close_all()
+        self.ai_handlers.clear()
+
         # Отключаем CRM пулы агентов
         for channel_id, agent_pool in self.agent_pools.items():
             try:
                 await agent_pool.disconnect_all()
             except Exception as e:
                 logger.error(f"Ошибка отключения пула агентов для канала {channel_id}: {e}")
-        
+
         self.agent_pools.clear()
         
         # Закрываем соединение с БД
