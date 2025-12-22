@@ -33,10 +33,9 @@ COPY prompts/ ./prompts/
 # Копируем default configs
 COPY configs/ ./configs_default/
 
-# Копируем startup скрипты
-COPY scripts/start_flyio.sh ./
+# Копируем startup скрипт
 COPY scripts/start_railway.sh ./
-RUN chmod +x start_flyio.sh start_railway.sh
+RUN chmod +x start_railway.sh
 
 # Создаем директории для данных (будут заменены симлинками при запуске)
 RUN mkdir -p /app/data /app/logs /app/configs /app/sessions
@@ -48,6 +47,6 @@ ENV DATABASE_PATH=/app/data/jobs.db
 # Порт для веб-интерфейса
 EXPOSE 8080
 
-# Запуск через startup скрипт (для fly.io с persistent volume)
+# Запуск через startup скрипт
 # Для локального Docker можно переопределить: docker run ... python main_multi.py
-CMD ["./start_flyio.sh"]
+CMD ["./start_railway.sh"]
