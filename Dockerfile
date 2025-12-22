@@ -21,9 +21,14 @@ COPY channels.txt ./
 # Копируем веб-интерфейс
 COPY web/ ./web/
 
-# Копируем модули auth и utils
+# Копируем модули auth, utils и ai_conversation
 COPY auth/ ./auth/
 COPY utils/ ./utils/
+COPY ai_conversation/ ./ai_conversation/
+
+# Копируем personas и prompts
+COPY personas/ ./personas/
+COPY prompts/ ./prompts/
 
 # Копируем default configs
 COPY configs/ ./configs_default/
