@@ -58,6 +58,46 @@ class LLMProviderConfig:
         )
 
     @classmethod
+    def groq(cls, model: str = "llama-3.3-70b-versatile", api_key: Optional[str] = None) -> "LLMProviderConfig":
+        """Create Groq provider config."""
+        return cls(
+            name="groq",
+            base_url="https://api.groq.com/openai/v1",
+            api_key=api_key or os.getenv("GROQ_API_KEY", ""),
+            default_model=model,
+        )
+
+    @classmethod
+    def together(cls, model: str = "meta-llama/Llama-3.2-3B-Instruct-Turbo", api_key: Optional[str] = None) -> "LLMProviderConfig":
+        """Create Together AI provider config (has free tier)."""
+        return cls(
+            name="together",
+            base_url="https://api.together.xyz/v1",
+            api_key=api_key or os.getenv("TOGETHER_API_KEY", ""),
+            default_model=model,
+        )
+
+    @classmethod
+    def openrouter(cls, model: str = "meta-llama/llama-3.2-3b-instruct:free", api_key: Optional[str] = None) -> "LLMProviderConfig":
+        """Create OpenRouter provider config (has free models with :free suffix)."""
+        return cls(
+            name="openrouter",
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key or os.getenv("OPENROUTER_API_KEY", ""),
+            default_model=model,
+        )
+
+    @classmethod
+    def gemini(cls, model: str = "gemini-2.0-flash", api_key: Optional[str] = None) -> "LLMProviderConfig":
+        """Create Google Gemini provider config (15 RPM, 1M tokens/month free)."""
+        return cls(
+            name="gemini",
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key=api_key or os.getenv("GEMINI_API_KEY", ""),
+            default_model=model,
+        )
+
+    @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LLMProviderConfig":
         """Create from dictionary (for config file parsing)."""
         api_key = data.get("api_key", "")
@@ -101,7 +141,34 @@ class UnifiedLLMClient:
         "ollama": LLMProviderConfig.ollama,
         "lm_studio": LLMProviderConfig.lm_studio,
         "openai": LLMProviderConfig.openai,
+        "groq": LLMProviderConfig.groq,
+        "together": LLMProviderConfig.together,
+        "openrouter": LLMProviderConfig.openrouter,
+        "gemini": LLMProviderConfig.gemini,
     }
+
+    # Fallback providers config: (provider_factory, models_to_try)
+    # Priority: big/quality models first, small models as last resort
+    FALLBACK_CHAIN = [
+        # Groq big models
+        ("groq", [
+            "llama-3.3-70b-versatile",
+            "openai/gpt-oss-120b",      # 120B open-source GPT
+            "qwen/qwen3-32b",           # 32B Qwen
+        ]),
+        # Google Gemini (15 RPM, 1M tok/month free)
+        ("gemini", ["gemini-2.0-flash", "gemini-1.5-flash"]),
+        # OpenRouter free models
+        ("openrouter", [
+            "google/gemini-2.0-flash-exp:free",
+            "qwen/qwen3-coder:free",
+        ]),
+        # Groq smaller models as last resort
+        ("groq", [
+            "meta-llama/llama-4-scout-17b-16e-instruct",  # Llama 4 17B
+            "llama-3.1-8b-instant",
+        ]),
+    ]
 
     def __init__(
         self,
@@ -228,7 +295,13 @@ class UnifiedLLMClient:
         max_tokens: Optional[int] = None,
     ) -> str:
         """
-        Asynchronous chat completion.
+        Asynchronous chat completion with multi-provider fallback.
+
+        Fallback order (big models first):
+        1. Groq llama-3.3-70b, llama-3.1-70b
+        2. Together AI llama-3.1-70b
+        3. OpenRouter llama-3.1-70b:free, qwen-2.5-72b:free
+        4. Groq llama-3.1-8b (last resort)
 
         Args:
             messages: List of messages [{"role": "...", "content": "..."}]
@@ -238,21 +311,62 @@ class UnifiedLLMClient:
         Returns:
             Response text
         """
-        try:
-            response = await self._aclient.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature or self.temperature,
-                max_tokens=max_tokens or self.max_tokens,
-            )
+        # Build list of (client, model, provider_name) to try
+        attempts = []
+        tried_providers = set()
 
-            content = response.choices[0].message.content
-            logger.debug(f"[LLM] Async response: {content[:100]}...")
-            return content
+        for provider_name, models in self.FALLBACK_CHAIN:
+            provider_factory = self.PROVIDERS.get(provider_name)
+            if not provider_factory:
+                continue
 
-        except Exception as e:
-            logger.error(f"[LLM] Async chat error: {e}")
-            raise
+            config = provider_factory()
+            if not config.api_key:
+                continue  # Skip if no API key
+
+            # Create client for this provider
+            if provider_name == self.config.name:
+                client = self._aclient
+            else:
+                client = AsyncOpenAI(
+                    base_url=config.base_url,
+                    api_key=config.api_key,
+                )
+
+            for model in models:
+                attempts.append((client, model, provider_name))
+
+        last_error = None
+        for client, model, provider in attempts:
+            try:
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature or self.temperature,
+                    max_tokens=max_tokens or self.max_tokens,
+                )
+
+                content = response.choices[0].message.content
+                if model != self.model or provider != self.config.name:
+                    logger.info(f"[LLM] Used fallback: {provider}/{model}")
+                logger.debug(f"[LLM] Response: {content[:100]}...")
+                return content
+
+            except Exception as e:
+                error_str = str(e).lower()
+                # Rate limit, quota, auth errors, or model issues - try next
+                if any(x in str(e) for x in ["429", "401", "403", "400"]) or \
+                   any(x in error_str for x in ["rate_limit", "quota", "unauthorized", "invalid_api_key",
+                                                  "decommissioned", "not_found", "does not exist"]):
+                    logger.warning(f"[LLM] {provider}/{model} failed: {str(e)[:80]}, trying next...")
+                    last_error = e
+                    continue
+                else:
+                    logger.error(f"[LLM] Error on {provider}/{model}: {e}")
+                    raise
+
+        logger.error(f"[LLM] All providers exhausted")
+        raise last_error or Exception("No LLM providers available")
 
     def embed(self, text: str) -> List[float]:
         """
