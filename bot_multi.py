@@ -393,15 +393,19 @@ class MultiChannelJobMonitorBot:
                     # Формируем текст с подписью автора
                     relay_text = f"👤 **{sender_name}:**\n\n{message.text or ''}"
 
-                    sent_msg = await agent_client.send_message(
-                        entity=conv_manager.group_id,
-                        message=relay_text,
-                        file=message.media if message.media else None,
-                        reply_to=topic_id
-                    )
-                    # Сохраняем связь message_id -> topic_id
-                    if sent_msg and hasattr(sent_msg, 'id'):
-                        conv_manager.save_message_to_topic(sent_msg.id, topic_id)
+                    # Пытаемся отправить в CRM (не критично если не получится)
+                    try:
+                        sent_msg = await agent_client.send_message(
+                            entity=conv_manager.group_id,
+                            message=relay_text,
+                            file=message.media if message.media else None,
+                            reply_to=topic_id
+                        )
+                        # Сохраняем связь message_id -> topic_id
+                        if sent_msg and hasattr(sent_msg, 'id'):
+                            conv_manager.save_message_to_topic(sent_msg.id, topic_id)
+                    except Exception as e:
+                        logger.warning(f"Не удалось отправить в CRM топик: {e}")
 
                     # AI: генерируем ответ если включено
                     ai_handler = self.ai_handlers.get(channel_id)
