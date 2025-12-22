@@ -61,6 +61,12 @@ if [ -n "$BOT_SESSION_BASE64" ] && [ ! -f "/app/bot_session.session" ]; then
     echo "Bot session restored"
 fi
 
+# Create symlink for main bot session (bot looks for bot_session.session in /app/)
+if [ -f "$DATA_DIR/sessions/bot_session.session" ] && [ ! -f "/app/bot_session.session" ]; then
+    ln -sf "$DATA_DIR/sessions/bot_session.session" /app/bot_session.session
+    echo "Linked bot_session.session -> $DATA_DIR/sessions/bot_session.session"
+fi
+
 echo "Storage configured"
 echo "Starting bot on port ${PORT:-8080}..."
 
