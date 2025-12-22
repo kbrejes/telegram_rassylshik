@@ -11,6 +11,57 @@ from utils.retry import calculate_backoff, format_wait_time
 logger = logging.getLogger(__name__)
 
 
+# Глобальный реестр подключенных агентов (session_name -> AgentAccount)
+# Это предотвращает "database is locked" когда один агент используется несколькими каналами
+_global_agents: Dict[str, AgentAccount] = {}
+_global_agents_lock = asyncio.Lock()
+
+
+async def get_or_create_agent(session_name: str, phone: str) -> Optional[AgentAccount]:
+    """
+    Получить агента из глобального реестра или создать нового.
+    Это гарантирует что один session файл открывается только одним клиентом.
+    """
+    async with _global_agents_lock:
+        # Если агент уже подключен - возвращаем его
+        if session_name in _global_agents:
+            agent = _global_agents[session_name]
+            if agent._is_connected:
+                logger.debug(f"Агент {session_name} уже подключен, переиспользуем")
+                return agent
+            else:
+                # Агент был отключен - удаляем из реестра
+                del _global_agents[session_name]
+
+        # Создаём нового агента
+        agent = AgentAccount(session_name=session_name, phone=phone)
+        try:
+            if await agent.connect():
+                _global_agents[session_name] = agent
+                return agent
+            else:
+                return None
+        except Exception as e:
+            # Если ошибка "database is locked" - возможно другой процесс уже подключил
+            if "database is locked" in str(e):
+                logger.warning(f"Агент {session_name}: database is locked - уже используется")
+            else:
+                logger.error(f"Агент {session_name}: ошибка подключения: {e}")
+            return None
+
+
+async def disconnect_all_global_agents():
+    """Отключить всех агентов в глобальном реестре"""
+    async with _global_agents_lock:
+        for session_name, agent in list(_global_agents.items()):
+            try:
+                await agent.disconnect()
+            except Exception as e:
+                logger.error(f"Ошибка отключения агента {session_name}: {e}")
+        _global_agents.clear()
+        logger.info("Все глобальные агенты отключены")
+
+
 class AgentPool:
     """Пул агентов с балансировкой нагрузки по принципу least-busy"""
     
@@ -27,34 +78,34 @@ class AgentPool:
         
     async def initialize(self) -> bool:
         """
-        Инициализация и подключение всех агентов
-        
+        Инициализация и подключение всех агентов.
+        Использует глобальный реестр для предотвращения "database is locked".
+
         Returns:
             True если хотя бы один агент подключился успешно
         """
         logger.info(f"Инициализация пула из {len(self.agent_configs)} агентов...")
-        
+
         connected_count = 0
         for i, config in enumerate(self.agent_configs):
             try:
-                agent = AgentAccount(
-                    session_name=config.session_name,
-                    phone=config.phone
-                )
-                
-                if await agent.connect():
-                    self.agents.append(agent)
+                # Используем глобальный реестр вместо создания нового агента
+                agent = await get_or_create_agent(config.session_name, config.phone)
+
+                if agent:
+                    if agent not in self.agents:
+                        self.agents.append(agent)
                     connected_count += 1
                     logger.info(f"  ✅ Агент {i+1}/{len(self.agent_configs)} подключен: {config.session_name}")
                 else:
                     logger.error(f"  ❌ Агент {i+1}/{len(self.agent_configs)} не подключился: {config.session_name}")
-                    
+
             except Exception as e:
                 logger.error(f"  ❌ Ошибка подключения агента {config.session_name}: {e}")
-        
+
         self._is_initialized = True
         logger.info(f"📊 Пул инициализирован: {connected_count}/{len(self.agent_configs)} агентов активны")
-        
+
         return connected_count > 0
     
     def get_available_agent(self) -> Optional[AgentAccount]:
@@ -186,18 +237,15 @@ class AgentPool:
         }
     
     async def disconnect_all(self):
-        """Отключить всех агентов"""
-        logger.info("Отключение всех агентов в пуле...")
-        
-        for agent in self.agents:
-            try:
-                await agent.disconnect()
-            except Exception as e:
-                logger.error(f"Ошибка отключения агента {agent.session_name}: {e}")
-        
+        """
+        Очистить локальный пул агентов.
+        НЕ отключает агентов т.к. они могут использоваться другими каналами.
+        Для полного отключения используйте disconnect_all_global_agents().
+        """
+        logger.info(f"Очистка пула агентов ({len(self.agents)} агентов)")
+        # Не отключаем агентов - они в глобальном реестре и могут использоваться другими каналами
         self.agents.clear()
         self._is_initialized = False
-        logger.info("Все агенты отключены")
     
     def __len__(self) -> int:
         """Количество подключенных агентов"""

@@ -14,7 +14,7 @@ from database import db
 from message_processor import message_processor
 from config_manager import ConfigManager, ChannelConfig, AIConfig
 from agent_account import AgentAccount
-from agent_pool import AgentPool
+from agent_pool import AgentPool, disconnect_all_global_agents
 from conversation_manager import ConversationManager
 from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig as AIHandlerConfig
 
@@ -1098,21 +1098,24 @@ class MultiChannelJobMonitorBot:
             self.ai_handler_pool.close_all()
         self.ai_handlers.clear()
 
-        # Отключаем CRM пулы агентов
+        # Очищаем локальные пулы агентов
         for channel_id, agent_pool in self.agent_pools.items():
             try:
                 await agent_pool.disconnect_all()
             except Exception as e:
-                logger.error(f"Ошибка отключения пула агентов для канала {channel_id}: {e}")
+                logger.error(f"Ошибка очистки пула агентов для канала {channel_id}: {e}")
 
         self.agent_pools.clear()
-        
+
+        # Отключаем всех глобальных агентов
+        await disconnect_all_global_agents()
+
         # Закрываем соединение с БД
         await db.close()
-        
+
         if self.client.is_connected():
             await self.client.disconnect()
-        
+
         logger.info("Бот остановлен")
 
 
