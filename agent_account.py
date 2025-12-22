@@ -73,6 +73,14 @@ class AgentAccount:
             me = await self.client.get_me()
             username = f"@{me.username}" if me.username else "без username"
             logger.info(f"Агент {self.session_name} подключен: {me.first_name} ({username})")
+
+            # Важно: запросить updates чтобы получать сообщения
+            try:
+                await self.client.catch_up()
+                logger.debug(f"Агент {self.session_name}: catch_up выполнен")
+            except Exception as e:
+                logger.warning(f"Агент {self.session_name}: catch_up ошибка: {e}")
+
             return True
             
         except Exception as e:
