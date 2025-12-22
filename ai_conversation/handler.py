@@ -3,16 +3,22 @@ AI Conversation Handler
 
 Handles AI-powered conversations with contacts.
 Integrates with bot_multi.py for seamless lead engagement.
+
+Two-level system:
+1. StateAnalyzer - determines conversation phase
+2. PhasePromptBuilder - builds dynamic system prompts
 """
 
 import asyncio
 import random
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, Callable, Awaitable
+from typing import Optional, Dict, Any, Callable, Awaitable, List
 
 from .llm_client import UnifiedLLMClient
 from .memory import ConversationMemory
+from .state_analyzer import StateAnalyzer, StateStorage, ConversationState, AnalysisResult
+from .phase_prompts import PhasePromptBuilder, ensure_prompts_directory
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +36,11 @@ class AIConfig:
     weaviate_port: int = 8080
     use_weaviate: bool = True
     knowledge_files: list = field(default_factory=list)
+
+    # State analyzer settings
+    use_state_analyzer: bool = True  # Enable two-level phase system
+    prompts_dir: str = "prompts"
+    states_dir: str = "data/conversation_states"
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AIConfig":
@@ -49,12 +60,20 @@ class AIConfig:
             weaviate_port=data.get("weaviate_port", 8080),
             use_weaviate=data.get("use_weaviate", True),
             knowledge_files=data.get("knowledge_files", []),
+            use_state_analyzer=data.get("use_state_analyzer", True),
+            prompts_dir=data.get("prompts_dir", "prompts"),
+            states_dir=data.get("states_dir", "data/conversation_states"),
         )
 
 
 class AIConversationHandler:
     """
     Handles AI-powered conversations with contacts.
+
+    Two-level system:
+    1. StateAnalyzer analyzes conversation and determines phase
+    2. PhasePromptBuilder builds dynamic system prompt based on phase
+    3. LLM generates response with phase-appropriate instructions
 
     Modes:
     - "auto": AI automatically responds to contact
@@ -95,11 +114,16 @@ class AIConversationHandler:
         self.llm: Optional[UnifiedLLMClient] = None
         self.memory: Optional[ConversationMemory] = None
 
+        # State analyzer components
+        self.state_analyzer: Optional[StateAnalyzer] = None
+        self.prompt_builder: Optional[PhasePromptBuilder] = None
+        self.state_storage: Optional[StateStorage] = None
+
         self._initialized = False
         self._message_counts: Dict[int, int] = {}  # contact_id -> message count
 
     async def initialize(self):
-        """Initialize LLM client and memory system."""
+        """Initialize LLM client, memory system, and state analyzer."""
         if self._initialized:
             return
 
@@ -124,6 +148,21 @@ class AIConversationHandler:
             # Load knowledge files
             for file_path in self.config.knowledge_files:
                 self.memory.load_knowledge_file(file_path)
+
+            # Initialize state analyzer if enabled
+            if self.config.use_state_analyzer:
+                # Ensure prompts directory exists
+                ensure_prompts_directory(self.config.prompts_dir)
+
+                # Create components
+                self.state_storage = StateStorage(self.config.states_dir)
+                self.state_analyzer = StateAnalyzer(
+                    llm_client=self.llm,
+                    storage=self.state_storage,
+                )
+                self.prompt_builder = PhasePromptBuilder(self.config.prompts_dir)
+
+                logger.info(f"[AI] State analyzer enabled for channel {self.channel_id}")
 
             self._initialized = True
             logger.info(f"[AI] Handler initialized for channel {self.channel_id}")
@@ -165,12 +204,20 @@ class AIConversationHandler:
         self._message_counts[contact_id] = self._message_counts.get(contact_id, 0) + 1
 
         try:
-            # Generate AI response
-            response = await self.memory.generate_response(
-                contact_id=contact_id,
-                user_message=message,
-                include_knowledge=True,
-            )
+            # Generate response using appropriate method
+            if self.config.use_state_analyzer and self.state_analyzer:
+                response = await self._generate_with_state_analyzer(contact_id, message)
+            else:
+                # Fallback to old method
+                response = await self.memory.generate_response(
+                    contact_id=contact_id,
+                    user_message=message,
+                    include_knowledge=True,
+                )
+
+            if not response:
+                logger.warning(f"[AI] Empty response for {contact_id}")
+                return None
 
             logger.info(f"[AI] Generated response for {contact_id}: {response[:100]}...")
 
@@ -205,6 +252,71 @@ class AIConversationHandler:
         except Exception as e:
             logger.error(f"[AI] Error handling message: {e}")
             return None
+
+    async def _generate_with_state_analyzer(
+        self,
+        contact_id: int,
+        message: str,
+    ) -> Optional[str]:
+        """
+        Generate response using two-level state analyzer system.
+
+        1. Analyze conversation to determine phase
+        2. Build phase-specific system prompt
+        3. Generate response
+        4. Update state after response
+        """
+        # Get working memory
+        working_memory = self.memory.get_working_memory(contact_id)
+
+        # 1. Analyze conversation state
+        analysis = await self.state_analyzer.analyze(
+            contact_id=contact_id,
+            messages=working_memory,
+            last_message=message,
+        )
+
+        logger.info(f"[AI] Phase for {contact_id}: {analysis.phase} (conf={analysis.confidence:.2f})")
+
+        # 2. Get current state
+        state = self.state_analyzer.get_state(contact_id)
+
+        # 3. Build phase-specific system prompt
+        system_prompt = self.prompt_builder.build_system_prompt(
+            phase=analysis.phase,
+            analysis=analysis,
+            state=state,
+            include_founders=analysis.mention_founders,
+        )
+
+        # 4. Build messages for LLM
+        messages = [{"role": "system", "content": system_prompt}]
+
+        # Add working memory (last N messages)
+        messages.extend(working_memory[-6:])
+
+        # Add knowledge context if available
+        knowledge = self.memory.semantic_recall(message)
+        if knowledge:
+            messages.append({
+                "role": "user",
+                "content": f"Релевантная информация:\n\n{knowledge}\n\nИспользуй если поможет ответить."
+            })
+
+        # Add current message
+        messages.append({"role": "user", "content": message})
+
+        # 5. Generate response
+        response = await self.llm.achat(messages)
+
+        # 6. Update memory
+        self.memory.add_message(contact_id, "user", message)
+        self.memory.add_message(contact_id, "assistant", response)
+
+        # 7. Update state after response (detect if call was offered)
+        self.state_analyzer.update_state_after_response(contact_id, response)
+
+        return response
 
     def add_operator_message(self, contact_id: int, message: str):
         """
@@ -245,6 +357,12 @@ class AIConversationHandler:
         # Add the initial auto-response
         self.memory.add_message(contact_id, "assistant", initial_message)
 
+        # Initialize state if using state analyzer
+        if self.state_analyzer:
+            state = self.state_analyzer.get_state(contact_id)
+            state.update_interaction()
+            self.state_storage.save(state)
+
         logger.info(f"[AI] Initialized context for contact {contact_id}")
 
     async def finalize_conversation(self, contact_id: int):
@@ -261,9 +379,23 @@ class AIConversationHandler:
         else:
             logger.warning(f"[AI] Invalid mode: {mode}")
 
+    def get_state(self, contact_id: int) -> Optional[ConversationState]:
+        """Get conversation state for contact."""
+        if self.state_analyzer:
+            return self.state_analyzer.get_state(contact_id)
+        return None
+
+    def reset_state(self, contact_id: int):
+        """Reset conversation state for contact."""
+        if self.state_analyzer:
+            self.state_analyzer.reset_state(contact_id)
+        if self.memory:
+            self.memory.clear_working_memory(contact_id)
+        logger.info(f"[AI] Reset state for contact {contact_id}")
+
     def get_stats(self) -> Dict[str, Any]:
         """Get handler statistics."""
-        return {
+        stats = {
             "channel_id": self.channel_id,
             "mode": self.config.mode,
             "provider": self.config.llm_provider,
@@ -271,7 +403,14 @@ class AIConversationHandler:
             "initialized": self._initialized,
             "active_conversations": len(self._message_counts),
             "total_messages": sum(self._message_counts.values()),
+            "state_analyzer_enabled": self.config.use_state_analyzer,
         }
+
+        # Add state analyzer stats if enabled
+        if self.state_analyzer and self.state_storage:
+            stats["states_cached"] = len(self.state_storage._cache)
+
+        return stats
 
     def close(self):
         """Cleanup resources."""
