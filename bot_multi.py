@@ -343,10 +343,13 @@ class MultiChannelJobMonitorBot:
             """Трансляция сообщения от контакта в топик"""
             try:
                 message = event.message
-                
+                logger.info(f"[AGENT] Получено сообщение: {message.text[:50] if message.text else 'no text'}...")
+
                 # Игнорируем сообщения из групп (только личные диалоги)
                 chat = await event.get_chat()
+                logger.debug(f"[AGENT] Chat type: {type(chat).__name__}, id: {getattr(chat, 'id', 'unknown')}")
                 if isinstance(chat, (Chat, Channel)):
+                    logger.debug(f"[AGENT] Игнорируем сообщение из группы/канала")
                     return
                 
                 # Игнорируем собственные сообщения
