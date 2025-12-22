@@ -34,8 +34,8 @@ COPY prompts/ ./prompts/
 COPY configs/ ./configs_default/
 
 # Копируем startup скрипты
-COPY start_flyio.sh ./
-COPY start_railway.sh ./
+COPY scripts/start_flyio.sh ./
+COPY scripts/start_railway.sh ./
 RUN chmod +x start_flyio.sh start_railway.sh
 
 # Создаем директории для данных (будут заменены симлинками при запуске)
