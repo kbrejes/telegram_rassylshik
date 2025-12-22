@@ -16,31 +16,26 @@ mkdir -p "$DATA_DIR/sessions"
 mkdir -p "$DATA_DIR/configs"
 mkdir -p "$DATA_DIR/logs"
 
-# If DATA_DIR is not /app/data, create symlinks
-if [ "$DATA_DIR" != "/app/data" ]; then
-    # Sessions
-    if [ ! -L "/app/sessions" ]; then
-        rm -rf /app/sessions 2>/dev/null || true
-        ln -sf "$DATA_DIR/sessions" /app/sessions
-        echo "Linked sessions -> $DATA_DIR/sessions"
-    fi
+# Always create symlinks for configs, sessions, logs to DATA_DIR
+# Sessions
+if [ ! -L "/app/sessions" ]; then
+    rm -rf /app/sessions 2>/dev/null || true
+    ln -sf "$DATA_DIR/sessions" /app/sessions
+    echo "Linked sessions -> $DATA_DIR/sessions"
+fi
 
-    # Configs
-    if [ ! -L "/app/configs" ]; then
-        rm -rf /app/configs 2>/dev/null || true
-        ln -sf "$DATA_DIR/configs" /app/configs
-        echo "Linked configs -> $DATA_DIR/configs"
-    fi
+# Configs
+if [ ! -L "/app/configs" ]; then
+    rm -rf /app/configs 2>/dev/null || true
+    ln -sf "$DATA_DIR/configs" /app/configs
+    echo "Linked configs -> $DATA_DIR/configs"
+fi
 
-    # Logs
-    if [ ! -L "/app/logs" ]; then
-        rm -rf /app/logs 2>/dev/null || true
-        ln -sf "$DATA_DIR/logs" /app/logs
-        echo "Linked logs -> $DATA_DIR/logs"
-    fi
-else
-    # Data dir is default, just ensure directories exist
-    mkdir -p /app/sessions /app/configs /app/logs
+# Logs
+if [ ! -L "/app/logs" ]; then
+    rm -rf /app/logs 2>/dev/null || true
+    ln -sf "$DATA_DIR/logs" /app/logs
+    echo "Linked logs -> $DATA_DIR/logs"
 fi
 
 # Copy default config if not exists
