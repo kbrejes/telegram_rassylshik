@@ -648,7 +648,7 @@
             }
         }
         
-        function addAgentToList(phone, sessionName) {
+        function addAgentToList(phone, sessionName, userName) {
             const agentsList = document.getElementById('agents-list');
             
             const agentItem = document.createElement('div');
@@ -657,6 +657,10 @@
             
             agentItem.innerHTML = `
                 <div style="display: flex; gap: 15px; align-items: end;">
+                    <div style="flex: 1;">
+                        <label>Telegram аккаунт</label>
+                        <input type="text" class="input agent-username" value="${userName || '—'}" readonly>
+                    </div>
                     <div style="flex: 1;">
                         <label>Телефон</label>
                         <input type="text" class="input agent-phone" placeholder="+79991234567" value="${phone}" readonly>

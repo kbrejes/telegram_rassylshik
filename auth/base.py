@@ -9,8 +9,24 @@ from telethon.sessions import SQLiteSession
 from config import config
 import logging
 import sqlite3
+import os
 
 logger = logging.getLogger(__name__)
+
+
+def delete_session_file(session_path: str) -> bool:
+    """Safely delete session file(s)"""
+    deleted = False
+    for ext in ['.session', '.session-journal']:
+        file_path = f"{session_path}{ext}"
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                logger.info(f"Удален файл сессии: {file_path}")
+                deleted = True
+            except Exception as e:
+                logger.error(f"Не удалось удалить {file_path}: {e}")
+    return deleted
 
 
 class TimeoutSQLiteSession(SQLiteSession):
@@ -81,26 +97,95 @@ class TelegramAuthManager(ABC):
         return TelegramClient(session, self.api_id, self.api_hash)
 
     async def _check_existing_session(self, session_path: str, include_phone: bool = False) -> Optional[dict]:
-        """Проверяет существующую сессию и возвращает user_info если авторизована"""
-        if not Path(f"{session_path}.session").exists():
+        """
+        Проверяет существующую сессию и возвращает user_info если авторизована.
+        Если сессия невалидна - удаляет её и возвращает None для создания новой.
+        """
+        session_file = Path(f"{session_path}.session")
+        if not session_file.exists():
             return None
 
-        client = self._create_client(session_path)
-        await client.connect()
+        client = None
+        try:
+            client = self._create_client(session_path)
+            await client.connect()
 
-        if await client.is_user_authorized():
-            me = await client.get_me()
+            if await client.is_user_authorized():
+                me = await client.get_me()
+                await client.disconnect()
+                return {
+                    "success": True,
+                    "needs_code": False,
+                    "already_authenticated": True,
+                    "user_info": self._format_user_info(me, include_phone),
+                    "message": "Уже авторизован"
+                }
+
+            # Сессия существует но не авторизована - удаляем
             await client.disconnect()
+            logger.warning(f"Сессия {session_path} существует но не авторизована, удаляем")
+            delete_session_file(session_path)
+            return None
+
+        except errors.AuthKeyDuplicatedError:
+            logger.error(f"AuthKeyDuplicatedError для {session_path} - сессия используется с другого IP")
+            if client:
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+            delete_session_file(session_path)
             return {
-                "success": True,
-                "needs_code": False,
-                "already_authenticated": True,
-                "user_info": self._format_user_info(me, include_phone),
-                "message": "Уже авторизован"
+                "success": False,
+                "session_conflict": True,
+                "message": "Сессия использовалась с другого устройства. Файл сессии удалён. Попробуйте авторизоваться заново."
             }
 
-        await client.disconnect()
-        return None
+        except (errors.AuthKeyUnregisteredError, errors.UserDeactivatedError, errors.UserDeactivatedBanError):
+            logger.error(f"Сессия {session_path} недействительна (аккаунт деактивирован или ключ отозван)")
+            if client:
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+            delete_session_file(session_path)
+            return {
+                "success": False,
+                "session_invalid": True,
+                "message": "Сессия недействительна (аккаунт деактивирован или сессия отозвана). Авторизуйтесь заново."
+            }
+
+        except Exception as e:
+            error_str = str(e).lower()
+            if client:
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+
+            # Если база данных повреждена или сессия невалидна - удаляем
+            if any(x in error_str for x in ['database', 'corrupt', 'malformed', 'invalid', 'auth']):
+                logger.error(f"Сессия {session_path} повреждена: {e}")
+                delete_session_file(session_path)
+                return {
+                    "success": False,
+                    "session_corrupted": True,
+                    "message": f"Файл сессии повреждён и был удалён. Авторизуйтесь заново."
+                }
+
+            # Если database is locked - сессия используется ботом
+            if "database is locked" in error_str:
+                logger.info(f"Сессия {session_path} заблокирована (используется ботом)")
+                return {
+                    "success": True,
+                    "needs_code": False,
+                    "already_authenticated": True,
+                    "locked_by_bot": True,
+                    "message": "Сессия уже используется ботом"
+                }
+
+            logger.error(f"Ошибка проверки сессии {session_path}: {e}")
+            return None
 
     async def init_auth(self, phone: str, identifier: Optional[str] = None) -> dict:
         """
@@ -119,7 +204,15 @@ class TelegramAuthManager(ABC):
             # Проверяем существующую сессию
             existing = await self._check_existing_session(session_path, include_phone=identifier is None)
             if existing:
-                return existing
+                # Если это ошибка сессии - возвращаем её, пользователь должен попробовать снова
+                if existing.get("session_conflict") or existing.get("session_invalid") or existing.get("session_corrupted"):
+                    return existing
+                # Если уже авторизован - возвращаем успех
+                if existing.get("already_authenticated"):
+                    return existing
+
+            # Очищаем pending данные перед новой попыткой
+            self.clear_pending_data(identifier)
 
             # Создаем нового клиента для аутентификации
             client = self._create_client(session_path)
@@ -149,11 +242,45 @@ class TelegramAuthManager(ABC):
                 "flood_wait": e.seconds,
                 "message": f"Слишком много запросов. Подождите {e.seconds} секунд (~{e.seconds // 3600}ч {(e.seconds % 3600) // 60}м)."
             }
-        except Exception as e:
-            logger.error(f"Ошибка инициализации аутентификации: {e}")
+
+        except errors.AuthKeyDuplicatedError:
+            session_path = self.get_session_path(identifier)
+            logger.error(f"AuthKeyDuplicatedError при инициализации {session_path}")
+            delete_session_file(session_path)
             return {
                 "success": False,
-                "message": f"Ошибка: {str(e)}"
+                "session_conflict": True,
+                "message": "Сессия использовалась с другого устройства. Попробуйте ещё раз."
+            }
+
+        except errors.PhoneNumberInvalidError:
+            return {
+                "success": False,
+                "message": "Неверный формат номера телефона. Используйте международный формат: +1234567890"
+            }
+
+        except errors.PhoneNumberBannedError:
+            return {
+                "success": False,
+                "message": "Этот номер телефона заблокирован в Telegram."
+            }
+
+        except Exception as e:
+            error_str = str(e)
+            logger.error(f"Ошибка инициализации аутентификации: {e}")
+
+            # Если ошибка связана с сессией - удаляем файл
+            if any(x in error_str.lower() for x in ['auth', 'session', 'key']):
+                session_path = self.get_session_path(identifier)
+                delete_session_file(session_path)
+                return {
+                    "success": False,
+                    "message": f"Ошибка сессии: {error_str}. Файл сессии удалён, попробуйте ещё раз."
+                }
+
+            return {
+                "success": False,
+                "message": f"Ошибка: {error_str}"
             }
 
     async def verify_code(self, code: str, identifier: Optional[str] = None) -> dict:
@@ -359,6 +486,37 @@ class TelegramAuthManager(ABC):
         if client:
             try:
                 await client.disconnect()
-            except:
+            except Exception:
                 pass
         self.clear_pending_data(identifier)
+
+    async def force_reset_session(self, identifier: Optional[str] = None) -> dict:
+        """
+        Принудительно сбрасывает сессию - удаляет файл и очищает все данные.
+        Используйте когда авторизация застряла или сессия невалидна.
+        """
+        try:
+            # Очищаем pending данные
+            await self.cleanup(identifier)
+
+            # Удаляем файл сессии
+            session_path = self.get_session_path(identifier)
+            deleted = delete_session_file(session_path)
+
+            if deleted:
+                return {
+                    "success": True,
+                    "message": "Сессия сброшена. Теперь можете авторизоваться заново."
+                }
+            else:
+                return {
+                    "success": True,
+                    "message": "Файл сессии не найден (уже удалён). Можете авторизоваться."
+                }
+
+        except Exception as e:
+            logger.error(f"Ошибка сброса сессии: {e}")
+            return {
+                "success": False,
+                "message": f"Ошибка сброса: {str(e)}"
+            }

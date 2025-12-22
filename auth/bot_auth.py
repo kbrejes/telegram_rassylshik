@@ -67,6 +67,10 @@ class BotAuthManager(TelegramAuthManager):
         """Очищает незавершенную аутентификацию"""
         await super().cleanup(identifier=None)
 
+    async def force_reset_session(self) -> dict:
+        """Принудительно сбрасывает сессию бота"""
+        return await super().force_reset_session(identifier=None)
+
 
 # Глобальный экземпляр
 bot_auth_manager = BotAuthManager()

@@ -11,40 +11,11 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from auth import bot_auth_manager
 from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig
+from web.utils import create_new_bot_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/telegram", tags=["telegram"])
 config_manager = ConfigManager()
-
-
-async def create_new_bot_client():
-    """
-    Создаёт НОВЫЙ клиент бота для веб-запросов.
-    Использует КОПИЮ сессии чтобы избежать database is locked.
-
-    Returns:
-        TelegramClient: новый подключенный клиент
-    """
-    import os
-    import shutil
-    from telethon import TelegramClient
-    from config import config
-
-    # Используем копию сессии чтобы не блокировать основного бота
-    original_session = f"{config.SESSION_NAME}.session"
-    web_session_path = f"sessions/web_bot_session"
-    web_session_file = f"{web_session_path}.session"
-
-    # Копируем сессию если оригинал существует и новее копии
-    if os.path.exists(original_session):
-        if not os.path.exists(web_session_file) or \
-           os.path.getmtime(original_session) > os.path.getmtime(web_session_file):
-            os.makedirs("sessions", exist_ok=True)
-            shutil.copy2(original_session, web_session_file)
-
-    client = TelegramClient(web_session_path, config.API_ID, config.API_HASH)
-    await client.connect()
-    return client
 
 
 class CreateChannelRequest(BaseModel):
@@ -425,11 +396,49 @@ async def create_channel_full(data: FullChannelCreateRequest):
 
             logger.info(f"CRM группа создана: {crm_group_id}")
 
-            # 3. Добавляем агентов в CRM
+            # 3. Добавляем агентов в CRM (ОБЯЗАТЕЛЬНО - иначе откат)
+            logger.info(f"Добавление {len(data.agents)} агентов в CRM группу...")
+
+            if not data.agents:
+                # Нет агентов - удаляем созданное и возвращаем ошибку
+                logger.error("Не указаны агенты для CRM")
+                from telethon.tl.functions.channels import DeleteChannelRequest
+                try:
+                    await client(DeleteChannelRequest(crm_group))
+                    await client(DeleteChannelRequest(notification_channel))
+                except Exception:
+                    pass
+                return {
+                    "success": False,
+                    "message": "Необходимо выбрать хотя бы одного агента для CRM"
+                }
+
+            # Создаём invite link для агентов
+            from telethon.tl.functions.messages import ExportChatInviteRequest as ExportInvite
+            try:
+                agent_invite = await client(ExportInvite(
+                    peer=crm_group,
+                    expire_date=None,
+                    usage_limit=len(data.agents) + 5,
+                    title="Agent invite"
+                ))
+                agent_invite_link = agent_invite.link
+                logger.info(f"  Создана invite ссылка для агентов")
+            except Exception as e:
+                logger.error(f"  Не удалось создать invite link: {e}")
+                from telethon.tl.functions.channels import DeleteChannelRequest
+                try:
+                    await client(DeleteChannelRequest(crm_group))
+                    await client(DeleteChannelRequest(notification_channel))
+                except Exception:
+                    pass
+                return {
+                    "success": False,
+                    "message": f"Не удалось создать приглашение в CRM группу: {e}"
+                }
+
             agents_invited = []
             agents_errors = []
-
-            logger.info(f"Добавление {len(data.agents)} агентов в CRM группу...")
 
             for agent_session in data.agents:
                 logger.info(f"  Попытка добавить агента: {agent_session}")
@@ -455,21 +464,26 @@ async def create_channel_full(data: FullChannelCreateRequest):
                     if await agent_client.is_user_authorized():
                         agent_me = await agent_client.get_me()
                         logger.info(f"  Агент авторизован: {agent_me.first_name}")
+
+                        # Агент сам вступает в группу через invite link
                         try:
-                            await client(InviteToChannelRequest(
-                                channel=crm_group,
-                                users=[agent_me.id]
-                            ))
+                            from telethon.tl.functions.messages import ImportChatInviteRequest
+                            invite_hash = agent_invite_link.split("/")[-1]
+                            if invite_hash.startswith("+"):
+                                invite_hash = invite_hash[1:]
+
+                            await agent_client(ImportChatInviteRequest(invite_hash))
                             agent_name = agent_me.username or agent_me.first_name
                             agents_invited.append(f"@{agent_name}")
-                            logger.info(f"  ✅ Агент {agent_session} добавлен в CRM группу")
-                        except Exception as invite_err:
-                            if "USER_ALREADY_PARTICIPANT" in str(invite_err):
+                            logger.info(f"  ✅ Агент {agent_session} вступил в CRM группу")
+                        except Exception as join_err:
+                            err_str = str(join_err)
+                            if "USER_ALREADY_PARTICIPANT" in err_str or "already" in err_str.lower():
                                 agents_invited.append(f"@{agent_me.username or agent_me.first_name} (уже в группе)")
                                 logger.info(f"  Агент уже в группе")
                             else:
-                                agents_errors.append(f"{agent_session}: {str(invite_err)}")
-                                logger.warning(f"  ❌ Ошибка приглашения: {invite_err}")
+                                agents_errors.append(f"{agent_session}: {err_str}")
+                                logger.warning(f"  ❌ Ошибка вступления: {join_err}")
                     else:
                         logger.warning(f"  Агент не авторизован")
                         agents_errors.append(f"{agent_session}: не авторизован")
@@ -483,6 +497,23 @@ async def create_channel_full(data: FullChannelCreateRequest):
                 except Exception as e:
                     agents_errors.append(f"{agent_session}: {str(e)}")
                     logger.error(f"  ❌ Не удалось добавить агента {agent_session}: {e}")
+
+            # Проверяем что хотя бы один агент добавлен
+            if not agents_invited:
+                logger.error("Ни один агент не был добавлен в CRM группу - откат")
+                from telethon.tl.functions.channels import DeleteChannelRequest
+                try:
+                    await client(DeleteChannelRequest(crm_group))
+                    await client(DeleteChannelRequest(notification_channel))
+                    logger.info("Созданные каналы удалены")
+                except Exception as del_err:
+                    logger.warning(f"Ошибка удаления каналов: {del_err}")
+
+                error_details = "; ".join(agents_errors) if agents_errors else "Неизвестная ошибка"
+                return {
+                    "success": False,
+                    "message": f"Не удалось добавить агентов в CRM группу. Выберите другого агента. Ошибки: {error_details}"
+                }
 
             # 4. Отправляем инвайт владельцу
             owner_invited = False

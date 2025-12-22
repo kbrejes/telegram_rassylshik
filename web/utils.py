@@ -1,8 +1,10 @@
 """Утилиты и общие функции для веб-интерфейса"""
+import os
+import shutil
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -14,7 +16,34 @@ SOURCE_LISTS_FILE = BASE_DIR.parent / "configs" / "source_lists.json"
 
 # ============== Telegram Client ==============
 
-async def get_or_create_bot_client():
+async def create_new_bot_client() -> "TelegramClient":
+    """
+    Создаёт НОВЫЙ клиент бота для веб-запросов.
+    Использует КОПИЮ сессии чтобы избежать database is locked.
+
+    Returns:
+        TelegramClient: новый подключенный клиент
+    """
+    from telethon import TelegramClient
+    from config import config
+
+    original_session = f"{config.SESSION_NAME}.session"
+    web_session_path = "sessions/web_bot_session"
+    web_session_file = f"{web_session_path}.session"
+
+    # Копируем сессию если оригинал существует и новее копии
+    if os.path.exists(original_session):
+        if not os.path.exists(web_session_file) or \
+           os.path.getmtime(original_session) > os.path.getmtime(web_session_file):
+            os.makedirs("sessions", exist_ok=True)
+            shutil.copy2(original_session, web_session_file)
+
+    client = TelegramClient(web_session_path, config.API_ID, config.API_HASH)
+    await client.connect()
+    return client
+
+
+async def get_or_create_bot_client() -> Tuple["TelegramClient", bool]:
     """
     Возвращает клиент бота. Пытается использовать существующий клиент из работающего бота,
     чтобы избежать database is locked. Если бот не запущен, создаёт новый клиент.
@@ -33,21 +62,17 @@ async def get_or_create_bot_client():
     except Exception as e:
         logger.debug(f"Не удалось получить клиент бота: {e}")
 
-    # Создаём новый клиент
-    from auth.base import TimeoutSQLiteSession
-    from telethon import TelegramClient
-    from config import config
-
-    logger.debug("Создаём новый клиент")
-    session = TimeoutSQLiteSession(config.SESSION_NAME)
-    client = TelegramClient(session, config.API_ID, config.API_HASH)
-    await client.connect()
+    # Создаём новый клиент через копию сессии
+    client = await create_new_bot_client()
     return client, True
 
 
-async def get_agent_client(session_name: str):
+async def get_agent_client(session_name: str) -> Tuple["TelegramClient", bool]:
     """
     Создаёт клиент для агента.
+
+    Args:
+        session_name: Имя сессии агента (без расширения .session)
 
     Returns:
         tuple: (client, should_disconnect)
@@ -65,13 +90,13 @@ async def get_agent_client(session_name: str):
 
 # ============== Templates & Source Lists ==============
 
-def load_templates():
+def load_templates() -> List[Dict[str, str]]:
     """Load saved auto-response templates"""
     if TEMPLATES_FILE.exists():
         try:
             with open(TEMPLATES_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
     return [
         {"id": "default", "name": "Стандартный отклик", "text": "Здравствуйте! Меня заинтересовала ваша вакансия. Буду рад обсудить детали!"},
@@ -79,32 +104,32 @@ def load_templates():
     ]
 
 
-def save_templates(templates):
+def save_templates(templates: List[Dict[str, str]]) -> None:
     """Save templates to file"""
     TEMPLATES_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(TEMPLATES_FILE, 'w', encoding='utf-8') as f:
         json.dump(templates, f, ensure_ascii=False, indent=2)
 
 
-def load_source_lists():
+def load_source_lists() -> List[Dict[str, Any]]:
     """Load saved source channel lists"""
     if SOURCE_LISTS_FILE.exists():
         try:
             with open(SOURCE_LISTS_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
     return []
 
 
-def save_source_lists(lists):
+def save_source_lists(lists: List[Dict[str, Any]]) -> None:
     """Save source lists to file"""
     SOURCE_LISTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(SOURCE_LISTS_FILE, 'w', encoding='utf-8') as f:
         json.dump(lists, f, ensure_ascii=False, indent=2)
 
 
-def get_available_agents():
+def get_available_agents() -> List[Dict[str, str]]:
     """Get list of all authorized agent sessions"""
     agents = []
     sessions_dir = BASE_DIR.parent / "sessions"
@@ -179,20 +204,6 @@ class AgentAuthVerifyRequest(BaseModel):
 class AgentAuthPasswordRequest(BaseModel):
     password: str
     session_name: str
-
-
-class CreateChannelRequest(BaseModel):
-    name: str
-    about: str = ""
-
-
-class CreateCrmGroupRequest(BaseModel):
-    name: str
-    about: str = ""
-
-
-class AddAgentsToCrmRequest(BaseModel):
-    channel_id: str
 
 
 class SaveTemplateRequest(BaseModel):

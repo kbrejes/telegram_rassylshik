@@ -90,6 +90,21 @@ async def cleanup_pending_auth(session_name: str):
         raise HTTPException(500, str(e))
 
 
+@router.post("/{session_name}/reset")
+async def reset_agent_session(session_name: str):
+    """
+    Принудительно сбрасывает сессию агента.
+    Используйте когда авторизация застряла или сессия недействительна.
+    """
+    try:
+        logger.info(f"Принудительный сброс сессии агента: {session_name}")
+        result = await agent_auth_manager.force_reset_session(session_name)
+        return result
+    except Exception as e:
+        logger.error(f"Ошибка сброса сессии агента {session_name}: {e}")
+        raise HTTPException(500, str(e))
+
+
 # ==================== Alias endpoints for frontend compatibility ====================
 
 class AgentAuthStartRequest(BaseModel):

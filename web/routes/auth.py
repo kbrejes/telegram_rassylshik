@@ -153,3 +153,25 @@ async def cleanup_bot_pending_auth():
     except Exception as e:
         logger.error(f"Ошибка очистки: {e}")
         raise HTTPException(500, str(e))
+
+
+@router.post("/auth/reset")
+async def reset_bot_session():
+    """
+    Принудительно сбрасывает сессию бота.
+    Используйте когда авторизация застряла или сессия недействительна.
+    """
+    try:
+        logger.info("Принудительный сброс сессии бота")
+        result = await bot_auth_manager.force_reset_session()
+
+        # Сбрасываем состояние бота
+        if result.get("success"):
+            bot_state["status"] = "needs_auth"
+            bot_state["error"] = None
+            bot_state["user_info"] = None
+
+        return result
+    except Exception as e:
+        logger.error(f"Ошибка сброса сессии бота: {e}")
+        raise HTTPException(500, str(e))

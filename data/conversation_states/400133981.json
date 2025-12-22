@@ -1,0 +1,11 @@
+{
+  "contact_id": 400133981,
+  "current_phase": "call_pending",
+  "messages_in_phase": 1,
+  "total_messages": 12,
+  "call_offered": true,
+  "call_declined": false,
+  "call_scheduled": false,
+  "last_interaction": "2025-12-22T15:50:10.887591",
+  "created_at": "2025-12-22T14:46:10.515331"
+}

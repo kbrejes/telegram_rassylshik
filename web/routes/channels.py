@@ -9,7 +9,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig
-from web.utils import ChannelCreateRequest, ChannelUpdateRequest, get_agent_client
+from web.utils import ChannelCreateRequest, ChannelUpdateRequest, get_agent_client, create_new_bot_client
 from auth import bot_auth_manager
 
 logger = logging.getLogger(__name__)
@@ -19,28 +19,6 @@ config_manager = ConfigManager()
 
 # Очередь отложенных удалений (импортируется из app.py)
 pending_telegram_deletions: List = []
-
-
-async def create_new_bot_client():
-    """Создаёт новый клиент используя КОПИЮ сессии"""
-    import os
-    import shutil
-    from telethon import TelegramClient
-    from config import config
-
-    original_session = f"{config.SESSION_NAME}.session"
-    web_session_path = f"sessions/web_bot_session"
-    web_session_file = f"{web_session_path}.session"
-
-    if os.path.exists(original_session):
-        if not os.path.exists(web_session_file) or \
-           os.path.getmtime(original_session) > os.path.getmtime(web_session_file):
-            os.makedirs("sessions", exist_ok=True)
-            shutil.copy2(original_session, web_session_file)
-
-    client = TelegramClient(web_session_path, config.API_ID, config.API_HASH)
-    await client.connect()
-    return client
 
 
 async def _add_agents_to_crm_group(crm_group_id: int, agents: list) -> dict:
@@ -250,6 +228,8 @@ async def delete_channel(channel_id: str, delete_telegram: bool = True):
     from web.app import execute_telegram_deletion, pending_telegram_deletions
 
     try:
+        # Перезагружаем конфигурацию чтобы получить актуальные данные
+        config_manager.load()
         channel = config_manager.get_channel(channel_id)
         if not channel:
             raise HTTPException(404, "Канал не найден")

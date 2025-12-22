@@ -79,6 +79,10 @@ class AgentAuthManager(TelegramAuthManager):
         """Очищает незавершенную аутентификацию агента"""
         await super().cleanup(identifier=session_name)
 
+    async def force_reset_session(self, session_name: str) -> dict:
+        """Принудительно сбрасывает сессию агента"""
+        return await super().force_reset_session(identifier=session_name)
+
 
 # Глобальный экземпляр
 agent_auth_manager = AgentAuthManager()
