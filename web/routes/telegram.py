@@ -10,7 +10,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from auth import bot_auth_manager
-from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig
+from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
 from web.utils import create_new_bot_client
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,16 @@ class AddAgentsToCrmRequest(BaseModel):
     channel_id: str
 
 
+class PromptsRequest(BaseModel):
+    """Промпты для AI"""
+    base_context: str = ""
+    discovery: str = ""
+    engagement: str = ""
+    call_ready: str = ""
+    call_pending: str = ""
+    call_declined: str = ""
+
+
 class FullChannelCreateRequest(BaseModel):
     """Полное создание канала с автоматизацией"""
     name: str
@@ -46,6 +56,7 @@ class FullChannelCreateRequest(BaseModel):
     auto_response_template: str = ""
     include_keywords: List[str] = []
     exclude_keywords: List[str] = []
+    prompts: PromptsRequest = None
 
 
 @router.post("/create-channel")
@@ -75,6 +86,7 @@ async def create_telegram_channel(request: CreateChannelRequest):
             }
 
         try:
+            
             result = await client(TgCreateChannel(
                 title=request.title,
                 about=request.about,
@@ -554,6 +566,19 @@ async def create_channel_full(data: FullChannelCreateRequest):
                     session_name=agent_session
                 ))
 
+            # Промпты: если переданы - используем их, иначе дефолтные
+            if data.prompts:
+                prompts = PromptsConfig(
+                    base_context=data.prompts.base_context,
+                    discovery=data.prompts.discovery,
+                    engagement=data.prompts.engagement,
+                    call_ready=data.prompts.call_ready,
+                    call_pending=data.prompts.call_pending,
+                    call_declined=data.prompts.call_declined,
+                )
+            else:
+                prompts = PromptsConfig.load_defaults()
+
             channel = ChannelConfig(
                 id=channel_id,
                 name=data.name,
@@ -565,7 +590,8 @@ async def create_channel_full(data: FullChannelCreateRequest):
                 crm_group_id=crm_group_id,
                 agents=agents_config,
                 auto_response_enabled=True,
-                auto_response_template=data.auto_response_template or "Здравствуйте! Меня заинтересовала ваша вакансия. Буду рад обсудить детали!"
+                auto_response_template=data.auto_response_template or "Здравствуйте! Меня заинтересовала ваша вакансия. Буду рад обсудить детали!",
+                prompts=prompts
             )
 
             if config_manager.add_channel(channel):

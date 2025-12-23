@@ -414,6 +414,59 @@
                     </div>
                 </div>
 
+                <div class="section-divider">
+                    <span>🤖 AI промпты</span>
+                </div>
+
+                <div class="form-group">
+                    <p class="help-text" style="margin-bottom: 15px;">
+                        Настройте поведение AI при общении с контактами. Если оставить пустым - используются стандартные промпты.
+                        <button type="button" class="btn-helper" onclick="loadDefaultPrompts()" style="margin-left: 10px;">🔄 Загрузить дефолтные</button>
+                    </p>
+
+                    <details style="margin-bottom: 15px;">
+                        <summary style="cursor: pointer; font-weight: bold;">📝 Базовый контекст</summary>
+                        <div style="margin-top: 10px;">
+                            <textarea id="prompt_base_context" class="input textarea" style="min-height: 150px;" placeholder="Общий контекст и стиль общения AI">{% if channel and channel.prompts %}{{ channel.prompts.base_context }}{% endif %}</textarea>
+                        </div>
+                    </details>
+
+                    <details style="margin-bottom: 15px;">
+                        <summary style="cursor: pointer; font-weight: bold;">🔍 Discovery (знакомство)</summary>
+                        <div style="margin-top: 10px;">
+                            <textarea id="prompt_discovery" class="input textarea" style="min-height: 100px;" placeholder="Промпт для этапа знакомства">{% if channel and channel.prompts %}{{ channel.prompts.discovery }}{% endif %}</textarea>
+                        </div>
+                    </details>
+
+                    <details style="margin-bottom: 15px;">
+                        <summary style="cursor: pointer; font-weight: bold;">💬 Engagement (вовлечение)</summary>
+                        <div style="margin-top: 10px;">
+                            <textarea id="prompt_engagement" class="input textarea" style="min-height: 100px;" placeholder="Промпт для этапа вовлечения">{% if channel and channel.prompts %}{{ channel.prompts.engagement }}{% endif %}</textarea>
+                        </div>
+                    </details>
+
+                    <details style="margin-bottom: 15px;">
+                        <summary style="cursor: pointer; font-weight: bold;">📞 Call Ready (готов к звонку)</summary>
+                        <div style="margin-top: 10px;">
+                            <textarea id="prompt_call_ready" class="input textarea" style="min-height: 100px;" placeholder="Промпт когда готов к звонку">{% if channel and channel.prompts %}{{ channel.prompts.call_ready }}{% endif %}</textarea>
+                        </div>
+                    </details>
+
+                    <details style="margin-bottom: 15px;">
+                        <summary style="cursor: pointer; font-weight: bold;">⏳ Call Pending (звонок запланирован)</summary>
+                        <div style="margin-top: 10px;">
+                            <textarea id="prompt_call_pending" class="input textarea" style="min-height: 100px;" placeholder="Промпт когда звонок запланирован">{% if channel and channel.prompts %}{{ channel.prompts.call_pending }}{% endif %}</textarea>
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold;">❌ Call Declined (звонок отклонен)</summary>
+                        <div style="margin-top: 10px;">
+                            <textarea id="prompt_call_declined" class="input textarea" style="min-height: 100px;" placeholder="Промпт когда звонок отклонен">{% if channel and channel.prompts %}{{ channel.prompts.call_declined }}{% endif %}</textarea>
+                        </div>
+                    </details>
+                </div>
+
                 <div class="alert alert-info">
                     <strong>💡 Совет:</strong> Начните с небольшого количества источников и фильтров,
                     затем постепенно расширяйте список на основе полученных результатов.
@@ -443,6 +496,38 @@
             const crmEnabled = document.getElementById('crm_enabled').checked;
             const crmFields = document.getElementById('crm-fields');
             crmFields.style.display = crmEnabled ? 'block' : 'none';
+        }
+
+        // Load default prompts from server
+        async function loadDefaultPrompts() {
+            try {
+                const response = await fetch('/api/channels/prompts/defaults');
+                const data = await response.json();
+                if (data.success && data.prompts) {
+                    document.getElementById('prompt_base_context').value = data.prompts.base_context || '';
+                    document.getElementById('prompt_discovery').value = data.prompts.discovery || '';
+                    document.getElementById('prompt_engagement').value = data.prompts.engagement || '';
+                    document.getElementById('prompt_call_ready').value = data.prompts.call_ready || '';
+                    document.getElementById('prompt_call_pending').value = data.prompts.call_pending || '';
+                    document.getElementById('prompt_call_declined').value = data.prompts.call_declined || '';
+                    showNotification('Дефолтные промпты загружены', 'success');
+                }
+            } catch (e) {
+                console.error('Error loading prompts:', e);
+                showNotification('Ошибка загрузки промптов', 'error');
+            }
+        }
+
+        // Collect prompts from form
+        function collectPrompts() {
+            return {
+                base_context: document.getElementById('prompt_base_context').value,
+                discovery: document.getElementById('prompt_discovery').value,
+                engagement: document.getElementById('prompt_engagement').value,
+                call_ready: document.getElementById('prompt_call_ready').value,
+                call_pending: document.getElementById('prompt_call_pending').value,
+                call_declined: document.getElementById('prompt_call_declined').value
+            };
         }
 
         // ==================== Auto-create Functions ====================
@@ -937,7 +1022,10 @@
                     crm_group_id: parseInt(document.getElementById('crm_group_id').value.trim()) || 0,
                     agents: collectAgents(),
                     auto_response_enabled: document.getElementById('auto_response_enabled').checked,
-                    auto_response_template: document.getElementById('auto_response_template').value.trim()
+                    auto_response_template: document.getElementById('auto_response_template').value.trim(),
+
+                    // Промпты
+                    prompts: collectPrompts()
                 };
 
                 // Валидация

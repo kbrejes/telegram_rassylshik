@@ -36,8 +36,8 @@ class AgentConfig:
 @dataclass
 class AIConfig:
     """Конфигурация AI для разговоров"""
-    llm_provider: str = "ollama"  # "ollama" | "lm_studio" | "openai"
-    llm_model: str = "qwen2.5:3b"
+    llm_provider: str = "groq"  # "groq" | "ollama" | "openai"
+    llm_model: str = "llama-3.3-70b-versatile"
     persona_file: str = "personas/default.txt"
     mode: str = "auto"  # "auto" | "suggest" | "manual"
     reply_delay_seconds: List[int] = field(default_factory=lambda: [3, 8])
@@ -64,8 +64,8 @@ class AIConfig:
     @classmethod
     def from_dict(cls, data: dict) -> 'AIConfig':
         return cls(
-            llm_provider=data.get('llm_provider', 'ollama'),
-            llm_model=data.get('llm_model', 'qwen2.5:3b'),
+            llm_provider=data.get('llm_provider', 'groq'),
+            llm_model=data.get('llm_model', 'llama-3.3-70b-versatile'),
             persona_file=data.get('persona_file', 'personas/default.txt'),
             mode=data.get('mode', 'auto'),
             reply_delay_seconds=data.get('reply_delay_seconds', [3, 8]),
@@ -74,6 +74,60 @@ class AIConfig:
             weaviate_port=data.get('weaviate_port', 8080),
             use_weaviate=data.get('use_weaviate', True),
             knowledge_files=data.get('knowledge_files', []),
+        )
+
+
+@dataclass
+class PromptsConfig:
+    """Конфигурация промптов для AI"""
+    base_context: str = ""
+    discovery: str = ""
+    engagement: str = ""
+    call_ready: str = ""
+    call_pending: str = ""
+    call_declined: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            'base_context': self.base_context,
+            'discovery': self.discovery,
+            'engagement': self.engagement,
+            'call_ready': self.call_ready,
+            'call_pending': self.call_pending,
+            'call_declined': self.call_declined,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'PromptsConfig':
+        return cls(
+            base_context=data.get('base_context', ''),
+            discovery=data.get('discovery', ''),
+            engagement=data.get('engagement', ''),
+            call_ready=data.get('call_ready', ''),
+            call_pending=data.get('call_pending', ''),
+            call_declined=data.get('call_declined', ''),
+        )
+
+    @classmethod
+    def load_defaults(cls) -> 'PromptsConfig':
+        """Загрузить дефолтные промпты из файлов"""
+        import os
+        prompts_dir = "prompts"
+
+        def read_file(path: str) -> str:
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except:
+                return ""
+
+        return cls(
+            base_context=read_file(os.path.join(prompts_dir, "base_context.txt")),
+            discovery=read_file(os.path.join(prompts_dir, "phases", "discovery.txt")),
+            engagement=read_file(os.path.join(prompts_dir, "phases", "engagement.txt")),
+            call_ready=read_file(os.path.join(prompts_dir, "phases", "call_ready.txt")),
+            call_pending=read_file(os.path.join(prompts_dir, "phases", "call_pending.txt")),
+            call_declined=read_file(os.path.join(prompts_dir, "phases", "call_declined.txt")),
         )
 
 
@@ -119,9 +173,12 @@ class ChannelConfig:
     auto_response_enabled: bool = False
     auto_response_template: str = "Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?"
 
-    # AI Conversation
-    ai_conversation_enabled: bool = False
+    # AI Conversation (включено по умолчанию)
+    ai_conversation_enabled: bool = True
     ai_config: AIConfig = field(default_factory=AIConfig)
+
+    # Промпты для AI (если пустые - используются дефолтные из файлов)
+    prompts: PromptsConfig = field(default_factory=PromptsConfig)
 
     def to_dict(self) -> dict:
         """Конвертация в словарь"""
@@ -139,6 +196,7 @@ class ChannelConfig:
             'auto_response_template': self.auto_response_template,
             'ai_conversation_enabled': self.ai_conversation_enabled,
             'ai_config': self.ai_config.to_dict(),
+            'prompts': self.prompts.to_dict(),
         }
     
     @classmethod
@@ -156,6 +214,10 @@ class ChannelConfig:
         ai_config_data = data.get('ai_config', {})
         ai_config = AIConfig.from_dict(ai_config_data) if ai_config_data else AIConfig()
 
+        # Parse prompts config
+        prompts_data = data.get('prompts', {})
+        prompts = PromptsConfig.from_dict(prompts_data) if prompts_data else PromptsConfig()
+
         return cls(
             id=data['id'],
             name=data['name'],
@@ -168,8 +230,9 @@ class ChannelConfig:
             agents=agents,
             auto_response_enabled=data.get('auto_response_enabled', False),
             auto_response_template=data.get('auto_response_template', 'Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?'),
-            ai_conversation_enabled=data.get('ai_conversation_enabled', False),
+            ai_conversation_enabled=data.get('ai_conversation_enabled', True),
             ai_config=ai_config,
+            prompts=prompts,
         )
 
 

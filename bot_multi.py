@@ -96,7 +96,10 @@ class MultiChannelJobMonitorBot:
         # AI Conversation
         self.ai_handler_pool: Optional[AIHandlerPool] = None
         self.ai_handlers: Dict[str, AIConversationHandler] = {}  # channel_id -> AIConversationHandler
-        
+
+        # Трекинг зарегистрированных обработчиков (чтобы не дублировать)
+        self._registered_agent_handlers: Set[int] = set()  # id(agent.client)
+
         # Для отслеживания изменений конфигурации
         self.config_file_path = Path("configs/channels_config.json")
         self.last_config_mtime = None
@@ -239,6 +242,13 @@ class MultiChannelJobMonitorBot:
         """Инициализация CRM агентов и conversation managers для каналов"""
         logger.info("🤖 Инициализация CRM агентов...")
 
+        # ВАЖНО: Очищаем старые данные при перезагрузке
+        # НО НЕ очищаем _registered_agent_handlers — иначе задублируются обработчики на Telethon клиентах
+        self.agent_pools.clear()
+        self.conversation_managers.clear()
+        self.contact_to_channel.clear()
+        self.ai_handlers.clear()
+
         # Инициализация AI handler pool
         self.ai_handler_pool = AIHandlerPool(self.config_manager.llm_providers)
 
@@ -296,8 +306,13 @@ class MultiChannelJobMonitorBot:
                         conv_manager.register_handlers()
                         
                         # Регистрируем обработчик входящих сообщений от контактов для всех агентов
+                        # (только если еще не зарегистрирован для этого агента)
                         for agent in agent_pool.agents:
-                            self._register_contact_message_handler(agent.client, conv_manager, channel.id)
+                            agent_id = id(agent.client)
+                            if agent_id not in self._registered_agent_handlers:
+                                self._register_contact_message_handler(agent.client)
+                                self._registered_agent_handlers.add(agent_id)
+                                logger.debug(f"Зарегистрирован обработчик для агента {agent.session_name}")
                         
                         self.conversation_managers[channel.id] = conv_manager
 
@@ -323,21 +338,12 @@ class MultiChannelJobMonitorBot:
         
         logger.info(f"CRM инициализирован для {len(self.agent_pools)} каналов")
     
-    def _register_contact_message_handler(
-        self,
-        agent_client: TelegramClient,
-        conv_manager: ConversationManager,
-        channel_id: str
-    ):
+    def _register_contact_message_handler(self, agent_client: TelegramClient):
         """
-        Регистрация обработчика входящих сообщений от контактов к агенту
-        
-        Args:
-            agent_client: Telegram client агента
-            conv_manager: ConversationManager для этого канала
-            channel_id: ID output канала
+        Регистрация обработчика входящих сообщений от контактов к агенту.
+        Один обработчик на агента — канал определяется по contact_to_channel.
         """
-        
+
         @agent_client.on(events.NewMessage(incoming=True))
         async def handle_contact_message(event):
             """Трансляция сообщения от контакта в топик"""
@@ -347,24 +353,18 @@ class MultiChannelJobMonitorBot:
 
                 # Игнорируем сообщения из групп (только личные диалоги)
                 chat = await event.get_chat()
-                logger.debug(f"[AGENT] Chat type: {type(chat).__name__}, id: {getattr(chat, 'id', 'unknown')}")
                 if isinstance(chat, (Chat, Channel)):
-                    logger.debug(f"[AGENT] Игнорируем сообщение из группы/канала")
                     return
-                
+
                 # Игнорируем собственные сообщения
                 if message.out:
                     return
-                
-                # Проверяем, не было ли это сообщение отправлено агентом контакту
-                if conv_manager.is_agent_sent_message(message.id):
-                    return
-                
+
                 # Получаем ID отправителя
                 sender = await message.get_sender()
                 if not sender:
                     return
-                
+
                 # Проверяем, что сообщение не от самого агента
                 try:
                     me = await agent_client.get_me()
@@ -372,19 +372,42 @@ class MultiChannelJobMonitorBot:
                         return
                 except Exception:
                     pass
-                
+
                 # Игнорируем служебные сообщения
                 message_text = message.text or ""
                 if message_text.startswith("🤖 **Агент (") or message_text.startswith("📌 **Новый контакт:") or message_text.startswith("📋 **Вакансия из"):
                     return
-                
+
                 # Игнорируем сообщения с подписью "👤 **"
                 if message_text.startswith("👤 **") and "\n\n" in message_text:
                     return
-                
+
+                # Ищем канал и conv_manager для этого контакта
+                channel_id = None
+                conv_manager = None
+
+                # Сначала ищем во всех conv_managers по topic
+                for ch_id, cm in self.conversation_managers.items():
+                    if cm.get_topic_id(sender.id):
+                        channel_id = ch_id
+                        conv_manager = cm
+                        # Обновляем маппинг
+                        self.contact_to_channel[sender.id] = ch_id
+                        break
+
+                if not channel_id or not conv_manager:
+                    logger.debug(f"[AGENT] Контакт {sender.id} не найден ни в одном conv_manager")
+                    return
+
+                # Проверяем, не было ли это сообщение отправлено агентом контакту
+                if conv_manager.is_agent_sent_message(message.id):
+                    return
+
                 # Проверяем есть ли топик для этого контакта
                 topic_id = conv_manager.get_topic_id(sender.id)
-                
+                ai_handler = self.ai_handlers.get(channel_id)
+                logger.info(f"[AGENT] sender={sender.id}, topic_id={topic_id}, ai_handler={ai_handler is not None}, channel_id={channel_id}")
+
                 if topic_id:
                     # Отправляем сообщение от контакта в топик с подписью автора
                     sender_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
@@ -411,26 +434,30 @@ class MultiChannelJobMonitorBot:
                         logger.warning(f"Не удалось отправить в CRM топик: {e}")
 
                     # AI: генерируем ответ если включено
-                    ai_handler = self.ai_handlers.get(channel_id)
                     if ai_handler and message.text:
+                        logger.info(f"[AI] Вызываем AI handler для {sender.id}")
+
                         async def send_to_contact(contact_id: int, text: str) -> bool:
                             """Callback для отправки AI ответа контакту"""
                             try:
                                 sent = await agent_client.send_message(contact_id, text)
                                 if sent:
                                     conv_manager.mark_agent_sent_message(sent.id)
-                                    # Зеркалируем AI ответ в топик
-                                    ai_msg = f"🤖 **AI:**\n\n{text}"
-                                    topic_sent = await agent_client.send_message(
-                                        entity=conv_manager.group_id,
-                                        message=ai_msg,
-                                        reply_to=topic_id
-                                    )
-                                    if topic_sent:
-                                        conv_manager.save_message_to_topic(topic_sent.id, topic_id)
+                                    # Зеркалируем AI ответ в топик (не критично если не получится)
+                                    try:
+                                        ai_msg = f"🤖 **AI:**\n\n{text}"
+                                        topic_sent = await agent_client.send_message(
+                                            entity=conv_manager.group_id,
+                                            message=ai_msg,
+                                            reply_to=topic_id
+                                        )
+                                        if topic_sent:
+                                            conv_manager.save_message_to_topic(topic_sent.id, topic_id)
+                                    except Exception as mirror_err:
+                                        logger.warning(f"Не удалось зеркалировать AI в CRM: {mirror_err}")
                                 return True
                             except Exception as e:
-                                logger.error(f"Ошибка отправки AI ответа: {e}")
+                                logger.error(f"Ошибка отправки AI ответа контакту: {e}")
                                 return False
 
                         async def suggest_in_topic(contact_id: int, text: str, name: str):
@@ -452,11 +479,9 @@ class MultiChannelJobMonitorBot:
                                 suggest_callback=suggest_in_topic,
                             )
                         )
-            
+
             except Exception as e:
                 logger.error(f"Ошибка в handle_contact_message: {e}", exc_info=True)
-        
-        logger.debug(f"Обработчик входящих сообщений зарегистрирован для канала {channel_id}")
     
     async def _send_message_from_topic_to_contact(
         self,
@@ -787,6 +812,9 @@ class MultiChannelJobMonitorBot:
             contacts: Словарь с извлеченными контактами (telegram, email, phone)
         """
         try:
+            # Трекинг контактов, которым уже отправили в этом workflow
+            contacted_users: Set[str] = set()
+
             # Проходим по всем matching каналам с включенным CRM
             for channel in matching_outputs:
                 if not channel.crm_enabled:
@@ -814,17 +842,23 @@ class MultiChannelJobMonitorBot:
                 if channel.auto_response_enabled and channel.auto_response_template:
                     try:
                         # Проверяем есть ли telegram контакт в объявлении
-                        if contacts.get('telegram'):
-                            # Отправляем автоответ конкретным агентом
-                            success = await available_agent.send_message(
-                                contacts['telegram'],  # Передаем @username, не ID
-                                channel.auto_response_template
-                            )
-                            
-                            if success:
-                                auto_response_sent = True
+                        telegram_contact = contacts.get('telegram')
+                        if telegram_contact:
+                            # Пропускаем если уже отправили этому контакту
+                            if telegram_contact.lower() in contacted_users:
+                                logger.debug(f"  ⏭️ Пропуск автоответа для {telegram_contact} (уже отправлено)")
                             else:
-                                logger.warning(f"  ⚠️ Не удалось отправить автоответ через агента {available_agent.session_name}: {contacts['telegram']}")
+                                # Отправляем автоответ конкретным агентом
+                                success = await available_agent.send_message(
+                                    telegram_contact,  # Передаем @username, не ID
+                                    channel.auto_response_template
+                                )
+
+                                if success:
+                                    auto_response_sent = True
+                                    contacted_users.add(telegram_contact.lower())
+                                else:
+                                    logger.warning(f"  ⚠️ Не удалось отправить автоответ через агента {available_agent.session_name}: {telegram_contact}")
                     
                     except Exception as e:
                         logger.error(f"  ❌ Ошибка отправки автоответа: {e}")

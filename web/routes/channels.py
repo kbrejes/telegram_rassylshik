@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig
-from web.utils import ChannelCreateRequest, ChannelUpdateRequest, get_agent_client, create_new_bot_client
+from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
+from web.utils import ChannelCreateRequest, ChannelUpdateRequest, get_agent_client, create_new_bot_client, PromptsRequest
 from auth import bot_auth_manager
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,16 @@ async def _add_agents_to_crm_group(crm_group_id: int, agents: list) -> dict:
     return {"invited": invited, "errors": errors}
 
 
+@router.get("/prompts/defaults")
+async def get_default_prompts():
+    """Получить дефолтные промпты из файлов"""
+    defaults = PromptsConfig.load_defaults()
+    return {
+        "success": True,
+        "prompts": defaults.to_dict()
+    }
+
+
 @router.get("")
 async def get_channels():
     """Получить список всех каналов"""
@@ -119,6 +129,19 @@ async def create_channel(data: ChannelCreateRequest):
             for a in data.agents
         ]
 
+        # Промпты: если переданы - используем их, иначе дефолтные
+        if data.prompts:
+            prompts = PromptsConfig(
+                base_context=data.prompts.base_context,
+                discovery=data.prompts.discovery,
+                engagement=data.prompts.engagement,
+                call_ready=data.prompts.call_ready,
+                call_pending=data.prompts.call_pending,
+                call_declined=data.prompts.call_declined,
+            )
+        else:
+            prompts = PromptsConfig.load_defaults()
+
         channel = ChannelConfig(
             id=channel_id,
             name=data.name,
@@ -130,7 +153,8 @@ async def create_channel(data: ChannelCreateRequest):
             crm_group_id=data.crm_group_id,
             agents=agents,
             auto_response_enabled=data.auto_response_enabled,
-            auto_response_template=data.auto_response_template
+            auto_response_template=data.auto_response_template,
+            prompts=prompts
         )
 
         if config_manager.add_channel(channel):
@@ -194,6 +218,17 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
             channel.auto_response_enabled = data.auto_response_enabled
         if data.auto_response_template is not None:
             channel.auto_response_template = data.auto_response_template
+
+        # Обновляем промпты если переданы
+        if data.prompts is not None:
+            channel.prompts = PromptsConfig(
+                base_context=data.prompts.base_context,
+                discovery=data.prompts.discovery,
+                engagement=data.prompts.engagement,
+                call_ready=data.prompts.call_ready,
+                call_pending=data.prompts.call_pending,
+                call_declined=data.prompts.call_declined,
+            )
 
         if config_manager.update_channel(channel_id, channel):
             agents_added = []

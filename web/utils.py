@@ -151,6 +151,15 @@ class AgentRequest(BaseModel):
     session_name: str
 
 
+class PromptsRequest(BaseModel):
+    base_context: str = ""
+    discovery: str = ""
+    engagement: str = ""
+    call_ready: str = ""
+    call_pending: str = ""
+    call_declined: str = ""
+
+
 class ChannelCreateRequest(BaseModel):
     name: str
     telegram_id: int
@@ -163,6 +172,7 @@ class ChannelCreateRequest(BaseModel):
     agents: List[AgentRequest] = []
     auto_response_enabled: bool = False
     auto_response_template: str = ""
+    prompts: Optional[PromptsRequest] = None
 
 
 class ChannelUpdateRequest(BaseModel):
@@ -177,6 +187,7 @@ class ChannelUpdateRequest(BaseModel):
     agents: Optional[List[AgentRequest]] = None
     auto_response_enabled: Optional[bool] = None
     auto_response_template: Optional[str] = None
+    prompts: Optional[PromptsRequest] = None
 
 
 class BotAuthInitRequest(BaseModel):

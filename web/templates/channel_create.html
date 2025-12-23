@@ -397,6 +397,47 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="collapsible-section">
+                    <div class="collapsible-header" onclick="toggleSection(this)">
+                        <span>🤖 AI промпты</span>
+                        <span class="arrow">▼</span>
+                    </div>
+                    <div class="collapsible-content">
+                        <p class="help-text" style="margin-bottom: 15px;">Настройте поведение AI при общении с контактами. По умолчанию используются стандартные промпты.</p>
+
+                        <div style="margin-bottom: 15px;">
+                            <label><strong>Базовый контекст</strong></label>
+                            <textarea id="prompt_base_context" class="textarea" style="min-height: 150px;" placeholder="Загрузка..."></textarea>
+                            <p class="help-text">Общий контекст и стиль общения AI</p>
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label><strong>Discovery (знакомство)</strong></label>
+                            <textarea id="prompt_discovery" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label><strong>Engagement (вовлечение)</strong></label>
+                            <textarea id="prompt_engagement" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label><strong>Call Ready (готов к звонку)</strong></label>
+                            <textarea id="prompt_call_ready" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label><strong>Call Pending (звонок запланирован)</strong></label>
+                            <textarea id="prompt_call_pending" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                        </div>
+
+                        <div>
+                            <label><strong>Call Declined (звонок отклонен)</strong></label>
+                            <textarea id="prompt_call_declined" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Submit -->
@@ -447,13 +488,46 @@
         let savedTemplates = [];
         let savedSourceLists = [];
         let agentAuthState = { step: 'phone', sessionName: null };
+        let defaultPrompts = {};
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
             await loadAvailableAgents();
             await loadSavedTemplates();
             await loadSavedSourceLists();
+            await loadDefaultPrompts();
         });
+
+        // Load default prompts from server
+        async function loadDefaultPrompts() {
+            try {
+                const response = await fetch('/api/channels/prompts/defaults');
+                const data = await response.json();
+                if (data.success && data.prompts) {
+                    defaultPrompts = data.prompts;
+                    document.getElementById('prompt_base_context').value = data.prompts.base_context || '';
+                    document.getElementById('prompt_discovery').value = data.prompts.discovery || '';
+                    document.getElementById('prompt_engagement').value = data.prompts.engagement || '';
+                    document.getElementById('prompt_call_ready').value = data.prompts.call_ready || '';
+                    document.getElementById('prompt_call_pending').value = data.prompts.call_pending || '';
+                    document.getElementById('prompt_call_declined').value = data.prompts.call_declined || '';
+                }
+            } catch (e) {
+                console.error('Error loading prompts:', e);
+            }
+        }
+
+        // Collect prompts from form
+        function collectPrompts() {
+            return {
+                base_context: document.getElementById('prompt_base_context').value,
+                discovery: document.getElementById('prompt_discovery').value,
+                engagement: document.getElementById('prompt_engagement').value,
+                call_ready: document.getElementById('prompt_call_ready').value,
+                call_pending: document.getElementById('prompt_call_pending').value,
+                call_declined: document.getElementById('prompt_call_declined').value
+            };
+        }
 
         // Toggle collapsible sections
         function toggleSection(header) {
@@ -805,7 +879,8 @@
                         agents: selectedAgents,
                         auto_response_template: template || 'Здравствуйте! Меня заинтересовала ваша вакансия.',
                         include_keywords: document.getElementById('include_keywords').value.split('\n').map(s => s.trim()).filter(s => s),
-                        exclude_keywords: document.getElementById('exclude_keywords').value.split('\n').map(s => s.trim()).filter(s => s)
+                        exclude_keywords: document.getElementById('exclude_keywords').value.split('\n').map(s => s.trim()).filter(s => s),
+                        prompts: collectPrompts()
                     })
                 });
 
