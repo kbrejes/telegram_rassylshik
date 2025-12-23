@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from auth import bot_auth_manager
 from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
-from web.utils import create_new_bot_client
+from web.utils import get_or_create_bot_client
 from session_config import get_agent_session_path
 
 logger = logging.getLogger(__name__)
@@ -77,17 +77,18 @@ async def create_telegram_channel(request: CreateChannelRequest):
                 "message": "Бот не авторизован. Сначала пройдите авторизацию на странице /auth"
             }
 
-        client = await create_new_bot_client()
+        client, should_disconnect = await get_or_create_bot_client()
 
         if not await client.is_user_authorized():
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
             return {
                 "success": False,
                 "message": "Сессия бота недействительна. Пройдите авторизацию заново."
             }
 
         try:
-            
+
             result = await client(TgCreateChannel(
                 title=request.title,
                 about=request.about,
@@ -108,7 +109,8 @@ async def create_telegram_channel(request: CreateChannelRequest):
             }
 
         finally:
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
 
     except Exception as e:
         logger.error(f"Ошибка создания канала: {e}")
@@ -140,10 +142,11 @@ async def create_telegram_crm_group(request: CreateCrmGroupRequest):
                 "message": "Бот не авторизован. Сначала пройдите авторизацию на странице /auth"
             }
 
-        client = await create_new_bot_client()
+        client, should_disconnect = await get_or_create_bot_client()
 
         if not await client.is_user_authorized():
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
             return {
                 "success": False,
                 "message": "Сессия бота недействительна. Пройдите авторизацию заново."
@@ -251,7 +254,8 @@ async def create_telegram_crm_group(request: CreateCrmGroupRequest):
             }
 
         finally:
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
 
     except Exception as e:
         logger.error(f"Ошибка создания CRM группы: {e}")
@@ -279,10 +283,11 @@ async def add_agents_to_crm(request: AddAgentsToCrmRequest):
         if not channel or not channel.agents:
             return {"success": False, "message": "Канал не найден или нет агентов"}
 
-        client = await create_new_bot_client()
+        client, should_disconnect = await get_or_create_bot_client()
 
         if not await client.is_user_authorized():
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
             return {"success": False, "message": "Сессия бота недействительна"}
 
         try:
@@ -326,7 +331,8 @@ async def add_agents_to_crm(request: AddAgentsToCrmRequest):
             }
 
         finally:
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
 
     except Exception as e:
         logger.error(f"Ошибка добавления агентов: {e}")
@@ -364,10 +370,11 @@ async def create_channel_full(data: FullChannelCreateRequest):
                 "message": "Бот не авторизован. Сначала пройдите авторизацию на странице /auth"
             }
 
-        client = await create_new_bot_client()
+        client, should_disconnect = await get_or_create_bot_client()
 
         if not await client.is_user_authorized():
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
             return {"success": False, "message": "Сессия бота недействительна"}
 
         try:
@@ -600,7 +607,8 @@ async def create_channel_full(data: FullChannelCreateRequest):
             }
 
         finally:
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
 
     except Exception as e:
         logger.error(f"Ошибка создания полного канала: {e}")
