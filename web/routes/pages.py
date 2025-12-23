@@ -38,6 +38,7 @@ async def new_channel_page(request: Request):
 async def edit_channel_page(request: Request, channel_id: str):
     """Страница редактирования канала"""
     from fastapi import HTTPException
+    config_manager.load()
     channel = config_manager.get_channel(channel_id)
     if not channel:
         raise HTTPException(404, "Канал не найден")
