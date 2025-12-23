@@ -17,45 +17,56 @@ SOURCE_LISTS_FILE = BASE_DIR.parent / "configs" / "source_lists.json"
 async def create_new_bot_client() -> "TelegramClient":
     """
     Создаёт клиент бота для веб-запросов.
-    Использует ту же сессию что и бот (абсолютный путь).
-    НЕ копирует сессию - это вызывает AuthKeyDuplicatedError!
+    Использует StringSession чтобы избежать database is locked.
+    Читает auth_key из SQLite файла и создаёт in-memory сессию.
 
     Returns:
         TelegramClient: новый подключенный клиент
     """
     from telethon import TelegramClient
+    from telethon.sessions import StringSession
     from config import config
-    from auth.base import TimeoutSQLiteSession
     from session_config import get_bot_session_path
+    import sqlite3
 
-    # Используем абсолютный путь к сессии с таймаутом для избежания database is locked
     bot_session_path = get_bot_session_path()
-    session = TimeoutSQLiteSession(bot_session_path)
-    client = TelegramClient(session, config.API_ID, config.API_HASH)
+    session_file = f"{bot_session_path}.session"
+
+    # Читаем auth_key из SQLite файла (только чтение, без блокировки)
+    try:
+        conn = sqlite3.connect(f"file:{session_file}?mode=ro", uri=True)
+        cursor = conn.cursor()
+        cursor.execute("SELECT dc_id, server_address, port, auth_key FROM sessions")
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            dc_id, server_address, port, auth_key = row
+            # Создаём StringSession с auth_key
+            string_session = StringSession()
+            string_session.set_dc(dc_id, server_address, port)
+            string_session.auth_key = type('AuthKey', (), {'key': auth_key})()
+            client = TelegramClient(string_session, config.API_ID, config.API_HASH)
+        else:
+            # Fallback: пустая сессия
+            client = TelegramClient(StringSession(), config.API_ID, config.API_HASH)
+    except Exception as e:
+        logger.warning(f"Не удалось прочитать сессию: {e}, создаём новую")
+        client = TelegramClient(StringSession(), config.API_ID, config.API_HASH)
+
     await client.connect()
     return client
 
 
 async def get_or_create_bot_client() -> Tuple["TelegramClient", bool]:
     """
-    Возвращает клиент бота. Пытается использовать существующий клиент из работающего бота,
-    чтобы избежать database is locked. Если бот не запущен, создаёт новый клиент.
+    Создаёт новый клиент бота для веб-запросов.
+    Использует StringSession чтобы избежать database locked и event loop конфликтов.
 
     Returns:
         tuple: (client, should_disconnect) - клиент и флаг нужно ли отключать после использования
     """
-    try:
-        from bot_multi import get_bot_client
-        existing_client = get_bot_client()
-        if existing_client:
-            logger.debug("Используем существующий клиент бота")
-            return existing_client, False
-    except ImportError:
-        pass
-    except Exception as e:
-        logger.debug(f"Не удалось получить клиент бота: {e}")
-
-    # Создаём новый клиент через копию сессии
+    # Всегда создаём новый клиент с StringSession (не шарим между event loops)
     client = await create_new_bot_client()
     return client, True
 
