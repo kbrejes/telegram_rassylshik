@@ -456,20 +456,16 @@ async def create_channel_full(data: FullChannelCreateRequest):
             for agent_session in data.agents:
                 logger.info(f"  Попытка добавить агента: {agent_session}")
                 try:
-                    from auth.base import TimeoutSQLiteSession
-                    import os
+                    from agent_pool import get_or_create_agent
 
-                    # Используем абсолютный путь без копирования
-                    agent_session_path = get_agent_session_path(agent_session)
-
-                    if not os.path.exists(f"{agent_session_path}.session"):
-                        logger.warning(f"  Сессия агента не найдена: {agent_session_path}.session")
-                        agents_errors.append(f"{agent_session}: сессия не найдена")
+                    # Используем глобальный пул агентов (переиспользует существующее подключение)
+                    agent = await get_or_create_agent(agent_session, phone="")
+                    if not agent or not agent.client:
+                        logger.warning(f"  Не удалось получить агента: {agent_session}")
+                        agents_errors.append(f"{agent_session}: не удалось подключиться")
                         continue
 
-                    agent_tg_session = TimeoutSQLiteSession(agent_session_path)
-                    agent_client = TelegramClient(agent_tg_session, config.API_ID, config.API_HASH)
-                    await agent_client.connect()
+                    agent_client = agent.client
 
                     if await agent_client.is_user_authorized():
                         agent_me = await agent_client.get_me()
@@ -498,7 +494,7 @@ async def create_channel_full(data: FullChannelCreateRequest):
                         logger.warning(f"  Агент не авторизован")
                         agents_errors.append(f"{agent_session}: не авторизован")
 
-                    await agent_client.disconnect()
+                    # НЕ отключаем агента - он используется глобально
 
                 except Exception as e:
                     agents_errors.append(f"{agent_session}: {str(e)}")

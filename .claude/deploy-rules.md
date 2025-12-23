@@ -83,3 +83,43 @@ cd /home/brejestovski_kirill/telegram_rassylshik && sudo nohup python3 main_mult
 1. Docker контейнеры и образы удалены с сервера
 2. Всегда проверять `docker ps` перед деплоем
 3. Проверять из какой директории запущен процесс через `/proc/{pid}/cwd`
+
+---
+
+# Инцидент 2024-12-23: DATABASE_PATH в .env
+
+## Симптомы
+```
+sqlite3.OperationalError: unable to open database file
+```
+
+## Причина
+В `.env` файле был путь от Docker: `DATABASE_PATH=/app/data/jobs.db`
+Этот путь не существует на хосте.
+
+## Решение
+```bash
+sudo sed -i 's|DATABASE_PATH=/app/data/jobs.db|DATABASE_PATH=jobs.db|' /home/brejestovski_kirill/telegram_rassylshik/.env
+```
+
+---
+
+# Рефакторинг сессий 2024-12-23
+
+## Проблема
+Сессии создавались в разных местах с относительными путями:
+- `bot_session.session` в CWD
+- `sessions/agent_*.session`
+- Копирование сессий в web/app.py вызывало AuthKeyDuplicatedError
+
+## Решение
+Создан `session_config.py` с абсолютными путями:
+- `get_bot_session_path()` → `/абсолютный/путь/sessions/bot_session`
+- `get_agent_session_path(name)` → `/абсолютный/путь/sessions/{name}`
+
+Все сессии теперь в одном месте:
+```
+/home/brejestovski_kirill/telegram_rassylshik/sessions/
+├── bot_session.session
+└── agent_*.session
+```
