@@ -12,6 +12,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from auth import bot_auth_manager
 from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
 from web.utils import create_new_bot_client
+from session_config import get_agent_session_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/telegram", tags=["telegram"])
@@ -211,7 +212,7 @@ async def create_telegram_crm_group(request: CreateCrmGroupRequest):
                             if not agent_session:
                                 continue
                             try:
-                                agent_session_path = f"sessions/{agent_session}"
+                                agent_session_path = get_agent_session_path(agent_session)
                                 agent_tg_session = TimeoutSQLiteSession(agent_session_path)
                                 agent_client = TelegramClient(agent_tg_session, config.API_ID, config.API_HASH)
                                 await agent_client.connect()
@@ -292,7 +293,7 @@ async def add_agents_to_crm(request: AddAgentsToCrmRequest):
             for agent_config in channel.agents:
                 agent_session = agent_config.session_name if hasattr(agent_config, 'session_name') else str(agent_config)
                 try:
-                    agent_session_path = f"sessions/{agent_session}"
+                    agent_session_path = get_agent_session_path(agent_session)
                     agent_tg_session = TimeoutSQLiteSession(agent_session_path)
                     agent_client = TelegramClient(agent_tg_session, config.API_ID, config.API_HASH)
                     await agent_client.connect()
@@ -455,22 +456,19 @@ async def create_channel_full(data: FullChannelCreateRequest):
             for agent_session in data.agents:
                 logger.info(f"  Попытка добавить агента: {agent_session}")
                 try:
+                    from auth.base import TimeoutSQLiteSession
                     import os
-                    import shutil
 
-                    # Копируем сессию агента чтобы избежать database lock
-                    original_agent_session = f"sessions/{agent_session}.session"
-                    temp_agent_session_path = f"sessions/{agent_session}_web_temp"
-                    temp_agent_session_file = f"{temp_agent_session_path}.session"
+                    # Используем абсолютный путь без копирования
+                    agent_session_path = get_agent_session_path(agent_session)
 
-                    if os.path.exists(original_agent_session):
-                        shutil.copy2(original_agent_session, temp_agent_session_file)
-                    else:
-                        logger.warning(f"  Сессия агента не найдена: {original_agent_session}")
+                    if not os.path.exists(f"{agent_session_path}.session"):
+                        logger.warning(f"  Сессия агента не найдена: {agent_session_path}.session")
                         agents_errors.append(f"{agent_session}: сессия не найдена")
                         continue
 
-                    agent_client = TelegramClient(temp_agent_session_path, config.API_ID, config.API_HASH)
+                    agent_tg_session = TimeoutSQLiteSession(agent_session_path)
+                    agent_client = TelegramClient(agent_tg_session, config.API_ID, config.API_HASH)
                     await agent_client.connect()
 
                     if await agent_client.is_user_authorized():
@@ -501,10 +499,6 @@ async def create_channel_full(data: FullChannelCreateRequest):
                         agents_errors.append(f"{agent_session}: не авторизован")
 
                     await agent_client.disconnect()
-
-                    # Удаляем временную копию
-                    if os.path.exists(temp_agent_session_file):
-                        os.remove(temp_agent_session_file)
 
                 except Exception as e:
                     agents_errors.append(f"{agent_session}: {str(e)}")

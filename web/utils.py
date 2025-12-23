@@ -1,6 +1,4 @@
 """Утилиты и общие функции для веб-интерфейса"""
-import os
-import shutil
 import json
 import logging
 from pathlib import Path
@@ -18,27 +16,22 @@ SOURCE_LISTS_FILE = BASE_DIR.parent / "configs" / "source_lists.json"
 
 async def create_new_bot_client() -> "TelegramClient":
     """
-    Создаёт НОВЫЙ клиент бота для веб-запросов.
-    Использует КОПИЮ сессии чтобы избежать database is locked.
+    Создаёт клиент бота для веб-запросов.
+    Использует ту же сессию что и бот (абсолютный путь).
+    НЕ копирует сессию - это вызывает AuthKeyDuplicatedError!
 
     Returns:
         TelegramClient: новый подключенный клиент
     """
     from telethon import TelegramClient
     from config import config
+    from auth.base import TimeoutSQLiteSession
+    from session_config import get_bot_session_path
 
-    original_session = f"{config.SESSION_NAME}.session"
-    web_session_path = "sessions/web_bot_session"
-    web_session_file = f"{web_session_path}.session"
-
-    # Копируем сессию если оригинал существует и новее копии
-    if os.path.exists(original_session):
-        if not os.path.exists(web_session_file) or \
-           os.path.getmtime(original_session) > os.path.getmtime(web_session_file):
-            os.makedirs("sessions", exist_ok=True)
-            shutil.copy2(original_session, web_session_file)
-
-    client = TelegramClient(web_session_path, config.API_ID, config.API_HASH)
+    # Используем абсолютный путь к сессии с таймаутом для избежания database is locked
+    bot_session_path = get_bot_session_path()
+    session = TimeoutSQLiteSession(bot_session_path)
+    client = TelegramClient(session, config.API_ID, config.API_HASH)
     await client.connect()
     return client
 
@@ -80,8 +73,10 @@ async def get_agent_client(session_name: str) -> Tuple["TelegramClient", bool]:
     from auth.base import TimeoutSQLiteSession
     from telethon import TelegramClient
     from config import config
+    from session_config import get_agent_session_path
 
-    session_path = f"sessions/{session_name}"
+    # Используем абсолютный путь к сессии агента
+    session_path = get_agent_session_path(session_name)
     session = TimeoutSQLiteSession(session_path)
     client = TelegramClient(session, config.API_ID, config.API_HASH)
     await client.connect()
@@ -131,10 +126,11 @@ def save_source_lists(lists: List[Dict[str, Any]]) -> None:
 
 def get_available_agents() -> List[Dict[str, str]]:
     """Get list of all authorized agent sessions"""
+    from session_config import SESSIONS_DIR
+
     agents = []
-    sessions_dir = BASE_DIR.parent / "sessions"
-    if sessions_dir.exists():
-        for session_file in sessions_dir.glob("agent_*.session"):
+    if SESSIONS_DIR.exists():
+        for session_file in SESSIONS_DIR.glob("agent_*.session"):
             session_name = session_file.stem
             agents.append({
                 "session_name": session_name,
