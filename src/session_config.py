@@ -10,8 +10,8 @@
 import os
 from pathlib import Path
 
-# Определяем базовую директорию проекта (где лежит этот файл)
-PROJECT_ROOT = Path(__file__).parent.absolute()
+# Определяем базовую директорию проекта (родитель директории src/)
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
 # Директория для всех сессий (абсолютный путь!)
 SESSIONS_DIR = PROJECT_ROOT / "sessions"
