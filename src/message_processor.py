@@ -3,12 +3,65 @@
 """
 import re
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from telethon.tl.types import Message, User, Chat, Channel
-from config import config
+from src.config import config
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ContactInfo:
+    """Контактная информация из сообщения"""
+    telegram: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Optional[str]]:
+        """Для обратной совместимости"""
+        return {'telegram': self.telegram, 'email': self.email, 'phone': self.phone}
+
+    def has_any(self) -> bool:
+        """Есть ли хотя бы один контакт"""
+        return bool(self.telegram or self.email or self.phone)
+
+
+@dataclass
+class PaymentInfo:
+    """Информация об оплате из сообщения"""
+    amount: Optional[str] = None
+    currency: Optional[str] = None  # 'RUB', 'USD', 'EUR'
+    payment_type: Optional[str] = None  # 'в час', 'в месяц', 'за проект'
+    raw: Optional[str] = None  # Исходная строка
+
+    def to_dict(self) -> Dict[str, Optional[str]]:
+        """Для обратной совместимости"""
+        return {
+            'amount': self.amount,
+            'currency': self.currency,
+            'type': self.payment_type,
+            'raw': self.raw
+        }
+
+
+@dataclass
+class SenderInfo:
+    """Информация об отправителе сообщения"""
+    id: Optional[int] = None
+    username: Optional[str] = None
+    first_name: Optional[str] = None
+    full_name: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Optional[str]]:
+        """Для обратной совместимости"""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'first_name': self.first_name,
+            'full_name': self.full_name
+        }
 
 
 class MessageProcessor:

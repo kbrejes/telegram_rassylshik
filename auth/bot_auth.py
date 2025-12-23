@@ -4,7 +4,7 @@
 from typing import Optional
 from telethon import TelegramClient
 from .base import TelegramAuthManager
-from session_config import get_bot_session_path
+from src.session_config import get_bot_session_path
 import logging
 
 logger = logging.getLogger(__name__)

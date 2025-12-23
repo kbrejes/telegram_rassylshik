@@ -11,8 +11,8 @@ from fastapi.staticfiles import StaticFiles
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
-from config_manager import ConfigManager
-from session_config import get_bot_session_path, SESSIONS_DIR
+from src.config_manager import ConfigManager
+from src.session_config import get_bot_session_path, SESSIONS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def execute_telegram_deletion(entity_id: int, entity_type: str) -> bool:
         from telethon.tl.functions.channels import DeleteChannelRequest
         from telethon.errors import FloodWaitError
         from telethon import TelegramClient
-        from config import config
+        from src.config import config
 
         # Используем ту же сессию что и бот (абсолютный путь)
         # НЕ копируем сессию - это вызывает AuthKeyDuplicatedError!
@@ -118,7 +118,8 @@ from web.routes.pages import router as pages_router
 from web.routes.channels import router as channels_router
 from web.routes.agents import router as agents_router, templates_router, source_lists_router
 from web.routes.auth import router as auth_router, bot_state
-from web.routes.telegram import router as telegram_router, full_create_router
+from web.routes.telegram import router as telegram_router
+from web.routes.channel_creation import router as channel_creation_router
 
 # Register all routers
 app.include_router(pages_router)
@@ -128,7 +129,7 @@ app.include_router(templates_router)
 app.include_router(source_lists_router)
 app.include_router(auth_router)
 app.include_router(telegram_router)
-app.include_router(full_create_router)
+app.include_router(channel_creation_router)
 
 
 # ==================== Stats Endpoint ====================

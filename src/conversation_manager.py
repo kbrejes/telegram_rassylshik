@@ -9,7 +9,8 @@ from typing import Optional, Dict
 from telethon import TelegramClient, events
 from telethon import errors
 
-from database import db
+from src.database import db
+from utils.telegram_ids import extract_topic_id_from_message
 
 # Forum topics support (requires Telethon 1.37+)
 try:
@@ -264,53 +265,30 @@ class ConversationManager:
                     logger.error(f"  Ошибка get_me(): {e}")
                     # Продолжаем обработку если не можем проверить
                 
-                # Определяем topic_id
-                topic_id = None
-                
-                # Способ 1: через reply_to.reply_to_top_id
-                if message.reply_to:
-                    topic_id = getattr(message.reply_to, 'reply_to_top_id', None)
-                    if not topic_id:
-                        # Проверяем, является ли это форум-топиком
-                        is_forum_topic = getattr(message.reply_to, 'forum_topic', False)
-                        if is_forum_topic:
-                            reply_to_msg_id = getattr(message.reply_to, 'reply_to_msg_id', None)
-                            if reply_to_msg_id:
-                                topic_id = reply_to_msg_id
-                
-                # Способ 2: прямой атрибут сообщения
-                if not topic_id:
-                    topic_id = getattr(message, 'reply_to_top_id', None)
-                
-                # Способ 3: через message_thread_id
-                if not topic_id:
-                    topic_id = getattr(message, 'message_thread_id', None)
-                
-                # Способ 4: проверяем кэш message_id -> topic_id
+                # Extract topic_id from message attributes
+                topic_id = extract_topic_id_from_message(message)
+
+                # Fallback: check message_id -> topic_id cache
                 if not topic_id:
                     topic_id = self._message_to_topic_cache.get(message.id)
                 
-                # Способ 5: через API
+                # Fallback: fetch full message via API
                 if not topic_id and not message.reply_to:
                     try:
                         full_message = await self.group_monitor_client.get_messages(
                             self.group_id,
                             ids=message.id
                         )
-                        if full_message and hasattr(full_message, 'reply_to') and full_message.reply_to:
-                            topic_id = getattr(full_message.reply_to, 'reply_to_top_id', None)
-                            if not topic_id:
-                                reply_to_msg_id = getattr(full_message.reply_to, 'reply_to_msg_id', None)
-                                if reply_to_msg_id:
-                                    topic_id = reply_to_msg_id
+                        if full_message:
+                            topic_id = extract_topic_id_from_message(full_message)
                     except Exception:
                         pass
-                
+
                 if not topic_id:
-                    logger.warning(f"  Пропуск: topic_id не определен. reply_to={message.reply_to}")
+                    logger.warning(f"  Skip: topic_id not found. reply_to={message.reply_to}")
                     return
 
-                logger.info(f"  topic_id={topic_id}, кэш: {self._reverse_topic_cache}")
+                logger.info(f"  topic_id={topic_id}, cache: {self._reverse_topic_cache}")
 
                 # Находим контакт для этого топика - сначала в памяти, потом в БД
                 contact_id = self.get_contact_id(topic_id)
@@ -342,14 +320,8 @@ class ConversationManager:
                     logger.info(f"  📤 Отправка контакту {contact_id} из топика {topic_id}: '{message_text[:50]}...'")
 
                     # Игнорируем служебные сообщения (от бота, AI, агентов)
-                    service_prefixes = (
-                        "🤖 **Агент (",
-                        "🤖 **AI:",
-                        "📌 **Новый контакт:",
-                        "📋 **Вакансия из",
-                        "👤 **",
-                    )
-                    if any(message_text.startswith(prefix) for prefix in service_prefixes):
+                    from src.constants import is_service_message
+                    if is_service_message(message_text):
                         logger.debug(f"  Пропуск: служебное сообщение")
                         return
 

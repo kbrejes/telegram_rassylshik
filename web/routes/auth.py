@@ -10,7 +10,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from auth import bot_auth_manager
-from session_config import get_bot_session_path
+from src.session_config import get_bot_session_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/bot", tags=["bot-auth"])

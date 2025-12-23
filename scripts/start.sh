@@ -31,7 +31,7 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
+if ! docker compose version &> /dev/null; then
     echo "❌ Docker Compose не установлен!"
     echo "Установите Docker Compose: https://docs.docker.com/compose/install/"
     exit 1
@@ -44,14 +44,14 @@ echo "✅ Все проверки пройдены"
 echo ""
 
 # Проверка session файла для определения первого запуска
-if [ ! -f "data/bot_session.session" ]; then
+if [ ! -f "sessions/bot_session.session" ]; then
     echo "🔐 Первый запуск - требуется авторизация в Telegram"
     echo ""
     echo "Запуск бота для авторизации..."
     echo "Вам нужно будет ввести код из SMS"
     echo ""
-    docker-compose run --rm bot python main.py
-    
+    docker compose run --rm bot python main_multi.py
+
     echo ""
     echo "✅ Авторизация завершена!"
     echo ""
@@ -59,7 +59,7 @@ fi
 
 # Запуск в фоновом режиме
 echo "🚀 Запуск бота в фоновом режиме..."
-docker-compose up -d
+docker compose up -d
 
 echo ""
 echo "=================================="
@@ -67,12 +67,12 @@ echo "✅ Бот успешно запущен!"
 echo "=================================="
 echo ""
 echo "Полезные команды:"
-echo "  docker-compose logs -f bot     # Просмотр логов"
-echo "  docker-compose stop bot        # Остановить бота"
-echo "  docker-compose restart bot     # Перезапустить бота"
-echo "  docker-compose down            # Остановить все контейнеры"
+echo "  docker compose logs -f bot     # Просмотр логов"
+echo "  docker compose stop bot        # Остановить бота"
+echo "  docker compose restart bot     # Перезапустить бота"
+echo "  docker compose down            # Остановить все контейнеры"
 echo ""
 echo "Для просмотра логов выполните:"
-echo "  docker-compose logs -f bot"
+echo "  docker compose logs -f bot"
 echo ""
 

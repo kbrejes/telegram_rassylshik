@@ -81,5 +81,29 @@ def delete_session(session_name: str) -> bool:
     return deleted
 
 
+def delete_session_file(session_path: str) -> bool:
+    """
+    Удаляет сессию по полному пути.
+
+    Args:
+        session_path: Полный путь к сессии (без или с расширением)
+    """
+    # Убираем расширение если есть
+    path = Path(session_path)
+    if path.suffix in [".session", ".session-journal"]:
+        path = path.with_suffix("")
+
+    deleted = False
+    for ext in [".session", ".session-journal"]:
+        file_path = Path(str(path) + ext)
+        if file_path.exists():
+            try:
+                file_path.unlink()
+                deleted = True
+            except Exception:
+                pass
+    return deleted
+
+
 # Для обратной совместимости
 BOT_SESSION_PATH = get_bot_session_path()

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, Dict
 from telethon import TelegramClient, errors
 from telethon.sessions import SQLiteSession
-from config import config
+from src.config import config
 import logging
 import sqlite3
 import os

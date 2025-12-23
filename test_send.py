@@ -3,7 +3,7 @@
 """
 import asyncio
 from telethon import TelegramClient
-from config import config
+from src.config import config
 import sys
 
 async def test_send():

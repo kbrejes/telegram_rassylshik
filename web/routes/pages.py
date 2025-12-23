@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from config_manager import ConfigManager
+from src.config_manager import ConfigManager
 
 router = APIRouter()
 

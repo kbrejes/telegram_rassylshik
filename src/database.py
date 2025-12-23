@@ -5,7 +5,7 @@ import aiosqlite
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict
-from config import config
+from src.config import config
 
 logger = logging.getLogger(__name__)
 

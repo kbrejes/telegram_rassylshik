@@ -14,9 +14,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем код приложения
-COPY *.py ./
+COPY main_multi.py bot_multi.py test_send.py ./
 COPY templates.json ./
 COPY channels.txt ./
+
+# Копируем src/ (core modules)
+COPY src/ ./src/
 
 # Копируем веб-интерфейс
 COPY web/ ./web/

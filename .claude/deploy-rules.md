@@ -104,6 +104,23 @@ sudo sed -i 's|DATABASE_PATH=/app/data/jobs.db|DATABASE_PATH=jobs.db|' /home/bre
 
 ---
 
+# Рефакторинг 2024-12-23: Чистка скриптов
+
+## Удалено
+- `server.sh` - устаревший Google Cloud скрипт (использовал Docker, противоречил текущему деплою)
+
+## Обновлено
+- `scripts/start.sh` - унифицирован синтаксис `docker compose`, путь к сессии, точка входа `main_multi.py`
+- `scripts/start_multi.sh` - добавлены проверки .env, Python, создание директорий
+
+## Текущие скрипты:
+- `scripts/start.sh` - локальный запуск через Docker
+- `scripts/start_multi.sh` - локальный запуск без Docker (прямой Python)
+- `scripts/start_railway.sh` - деплой на Railway.app
+- `scripts/update_on_server.sh` - обновление на сервере через Docker
+
+---
+
 # Рефакторинг сессий 2024-12-23
 
 ## Проблема

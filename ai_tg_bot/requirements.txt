@@ -1,6 +1,0 @@
-faiss-cpu
-numpy
-telethon
-openai
-python-dotenv
-notion-client

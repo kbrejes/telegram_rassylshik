@@ -1,3 +1,0 @@
-You are a helpful assistant.
-You remember previous messages in the conversation.
-Answer concisely and clearly.

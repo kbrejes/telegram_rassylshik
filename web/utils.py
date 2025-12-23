@@ -14,44 +14,66 @@ SOURCE_LISTS_FILE = BASE_DIR.parent / "configs" / "source_lists.json"
 
 # ============== Telegram Client ==============
 
+def _read_session_string() -> str:
+    """
+    Читает сессию из SQLite и конвертирует в StringSession формат.
+    """
+    from telethon.sessions import SQLiteSession
+    from src.session_config import get_bot_session_path
+    import struct
+    import base64
+
+    bot_session_path = get_bot_session_path()
+
+    # Временно открываем SQLiteSession для чтения
+    temp_session = SQLiteSession(bot_session_path)
+
+    if temp_session.auth_key:
+        # Формат StringSession: 1 byte dc_id + 4 bytes ipv4 + 2 bytes port + 256 bytes auth_key
+        dc_id = temp_session.dc_id
+        # Получаем IP адрес DC
+        dc_addresses = {
+            1: "149.154.175.53",
+            2: "149.154.167.51",
+            3: "149.154.175.100",
+            4: "149.154.167.91",
+            5: "91.108.56.130",
+        }
+        ip = dc_addresses.get(dc_id, "149.154.167.51")
+        ip_bytes = bytes(map(int, ip.split('.')))
+        port = 443
+
+        data = struct.pack('>B4sH', dc_id, ip_bytes, port) + temp_session.auth_key.key
+        session_str = '1' + base64.urlsafe_b64encode(data).decode('ascii')
+
+        temp_session.close()
+        return session_str
+
+    temp_session.close()
+    return ""
+
+
 async def create_new_bot_client() -> "TelegramClient":
     """
     Создаёт клиент бота для веб-запросов.
     Использует StringSession чтобы избежать database is locked.
-    Читает auth_key из SQLite файла и создаёт in-memory сессию.
 
     Returns:
         TelegramClient: новый подключенный клиент
     """
     from telethon import TelegramClient
     from telethon.sessions import StringSession
-    from config import config
-    from session_config import get_bot_session_path
-    import sqlite3
+    from src.config import config
 
-    bot_session_path = get_bot_session_path()
-    session_file = f"{bot_session_path}.session"
-
-    # Читаем auth_key из SQLite файла (только чтение, без блокировки)
     try:
-        conn = sqlite3.connect(f"file:{session_file}?mode=ro", uri=True)
-        cursor = conn.cursor()
-        cursor.execute("SELECT dc_id, server_address, port, auth_key FROM sessions")
-        row = cursor.fetchone()
-        conn.close()
-
-        if row:
-            dc_id, server_address, port, auth_key = row
-            # Создаём StringSession с auth_key
-            string_session = StringSession()
-            string_session.set_dc(dc_id, server_address, port)
-            string_session.auth_key = type('AuthKey', (), {'key': auth_key})()
-            client = TelegramClient(string_session, config.API_ID, config.API_HASH)
+        session_str = _read_session_string()
+        if session_str:
+            client = TelegramClient(StringSession(session_str), config.API_ID, config.API_HASH)
         else:
-            # Fallback: пустая сессия
+            logger.warning("Не удалось прочитать сессию, создаём пустую")
             client = TelegramClient(StringSession(), config.API_ID, config.API_HASH)
     except Exception as e:
-        logger.warning(f"Не удалось прочитать сессию: {e}, создаём новую")
+        logger.warning(f"Ошибка чтения сессии: {e}")
         client = TelegramClient(StringSession(), config.API_ID, config.API_HASH)
 
     await client.connect()
@@ -83,8 +105,8 @@ async def get_agent_client(session_name: str) -> Tuple["TelegramClient", bool]:
     """
     from auth.base import TimeoutSQLiteSession
     from telethon import TelegramClient
-    from config import config
-    from session_config import get_agent_session_path
+    from src.config import config
+    from src.session_config import get_agent_session_path
 
     # Используем абсолютный путь к сессии агента
     session_path = get_agent_session_path(session_name)
@@ -137,7 +159,7 @@ def save_source_lists(lists: List[Dict[str, Any]]) -> None:
 
 def get_available_agents() -> List[Dict[str, str]]:
     """Get list of all authorized agent sessions"""
-    from session_config import SESSIONS_DIR
+    from src.session_config import SESSIONS_DIR
 
     agents = []
     if SESSIONS_DIR.exists():

@@ -8,9 +8,10 @@ from typing import Optional, Union
 from pathlib import Path
 from telethon import TelegramClient, errors
 from telethon.tl.types import User
-from config import config
+from src.config import config
 from utils.retry import FloodWaitTracker, format_wait_time
-from session_config import get_agent_session_path
+from src.session_config import get_agent_session_path, delete_session_file
+from auth.base import TimeoutSQLiteSession
 
 logger = logging.getLogger(__name__)
 
@@ -40,31 +41,33 @@ class AgentAccount:
     async def connect(self) -> bool:
         """
         Подключение к Telegram
-        
+
         Returns:
             True если подключение успешно
         """
         try:
+            # Используем TimeoutSQLiteSession для избежания "database is locked"
+            session = TimeoutSQLiteSession(self.session_name)
             self.client = TelegramClient(
-                self.session_name,
+                session,
                 config.API_ID,
                 config.API_HASH
             )
-            
+
             await self.client.connect()
-            
+
             if not await self.client.is_user_authorized():
                 if not self.phone:
                     logger.error(f"Агент {self.session_name}: Требуется номер телефона для первого входа")
                     return False
-                
+
                 logger.info(f"Агент {self.session_name}: Начинается аутентификация...")
                 await self.client.send_code_request(self.phone)
                 logger.info(f"Агент {self.session_name}: Код отправлен на {self.phone}")
-                
+
                 # Запросит код в терминале
                 await self.client.start(phone=self.phone)
-            
+
             self._is_connected = True
             me = await self.client.get_me()
             username = f"@{me.username}" if me.username else "без username"
@@ -78,9 +81,20 @@ class AgentAccount:
                 logger.warning(f"Агент {self.session_name}: catch_up ошибка: {e}")
 
             return True
-            
+
+        except errors.AuthKeyDuplicatedError:
+            # Сессия используется с другого IP - нужно пересоздать
+            logger.error(f"Агент {self.session_name}: AuthKeyDuplicatedError - сессия повреждена, удаляем")
+            delete_session_file(self.session_name)
+            self._is_connected = False
+            return False
+
         except Exception as e:
-            logger.error(f"Агент {self.session_name}: Ошибка подключения: {e}")
+            error_str = str(e).lower()
+            if "database is locked" in error_str:
+                logger.warning(f"Агент {self.session_name}: Сессия заблокирована другим процессом")
+            else:
+                logger.error(f"Агент {self.session_name}: Ошибка подключения: {e}")
             self._is_connected = False
             return False
     

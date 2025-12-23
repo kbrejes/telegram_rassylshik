@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
+from src.config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
 from web.utils import ChannelCreateRequest, ChannelUpdateRequest, get_agent_client, create_new_bot_client, PromptsRequest
 from auth import bot_auth_manager
 
@@ -296,7 +296,7 @@ async def delete_channel(channel_id: str, delete_telegram: bool = True):
         if channel.crm_enabled and channel.crm_group_id:
             try:
                 import aiosqlite
-                from config import config
+                from src.config import config
                 async with aiosqlite.connect(config.DATABASE_PATH, timeout=10) as conn:
                     cursor = await conn.execute(
                         "DELETE FROM crm_topic_contacts WHERE group_id = ?",

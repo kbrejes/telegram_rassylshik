@@ -4,8 +4,8 @@ Agent Pool Management for handling multiple Telegram agents with load balancing
 import asyncio
 import logging
 from typing import List, Optional, Dict, Union, Any
-from agent_account import AgentAccount
-from config_manager import AgentConfig
+from src.agent_account import AgentAccount
+from src.config_manager import AgentConfig
 from utils.retry import calculate_backoff, format_wait_time
 
 logger = logging.getLogger(__name__)
@@ -182,6 +182,7 @@ class AgentPool:
     async def periodic_health_check(self, interval: float = 300.0) -> None:
         """
         Фоновая задача для периодической проверки здоровья агентов
+        с автоматическим переподключением.
 
         Args:
             interval: Интервал проверки в секундах (по умолчанию 5 минут)
@@ -194,12 +195,35 @@ class AgentPool:
                 continue
 
             unhealthy_count = 0
-            for agent in self.agents:
+            reconnected_count = 0
+
+            for i, agent in enumerate(self.agents):
                 if not await agent.health_check():
                     unhealthy_count += 1
+                    logger.warning(f"Агент {agent.session_name} недоступен, попытка переподключения...")
+
+                    # Попытка переподключения
+                    try:
+                        # Сначала отключаем
+                        try:
+                            await agent.disconnect()
+                        except Exception:
+                            pass
+
+                        # Пробуем подключиться заново
+                        if await agent.connect():
+                            reconnected_count += 1
+                            logger.info(f"Агент {agent.session_name} успешно переподключен")
+                        else:
+                            logger.error(f"Агент {agent.session_name} не удалось переподключить")
+                    except Exception as e:
+                        logger.error(f"Ошибка переподключения агента {agent.session_name}: {e}")
 
             if unhealthy_count > 0:
-                logger.warning(f"Health check: {unhealthy_count}/{len(self.agents)} агентов недоступны")
+                logger.warning(
+                    f"Health check: {unhealthy_count}/{len(self.agents)} недоступны, "
+                    f"{reconnected_count} переподключены"
+                )
     
     def get_status(self) -> Dict[str, Any]:
         """
