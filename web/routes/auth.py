@@ -10,6 +10,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from auth import bot_auth_manager
+from session_config import get_bot_session_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/bot", tags=["bot-auth"])
@@ -72,11 +73,11 @@ async def upload_session(request: Request):
 
         session_data = base64.b64decode(session_b64)
 
-        # Сохраняем сессию
-        session_path = Path("bot_session.session")
+        # Сохраняем сессию по абсолютному пути
+        session_path = Path(f"{get_bot_session_path()}.session")
         session_path.write_bytes(session_data)
 
-        logger.info("Сессия загружена через API")
+        logger.info(f"Сессия загружена через API: {session_path}")
 
         return {"success": True, "message": "Сессия загружена. Бот перезапустится автоматически."}
 

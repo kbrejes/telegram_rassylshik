@@ -35,6 +35,9 @@ class Config:
     # Пути к файлам
     CHANNELS_FILE = 'channels.txt'
     TEMPLATES_FILE = 'templates.json'
+
+    # DEPRECATED: Используйте session_config.get_bot_session_path()
+    # Оставлено для обратной совместимости
     SESSION_NAME = 'bot_session'
     
     # AI промпт для квалификации вакансий

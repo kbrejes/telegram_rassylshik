@@ -10,13 +10,14 @@ from telethon import TelegramClient, errors
 from telethon.tl.types import User
 from config import config
 from utils.retry import FloodWaitTracker, format_wait_time
+from session_config import get_agent_session_path
 
 logger = logging.getLogger(__name__)
 
 
 class AgentAccount:
     """Представляет Telegram аккаунт агента для автоответов"""
-    
+
     def __init__(
         self,
         session_name: str,
@@ -24,18 +25,13 @@ class AgentAccount:
     ):
         """
         Инициализация агента
-        
+
         Args:
-            session_name: Имя файла сессии
+            session_name: Имя файла сессии (без пути, только имя)
             phone: Номер телефона (нужен для первого входа)
         """
-        # Используем директорию sessions/ если существует
-        sessions_dir = Path("sessions")
-        if sessions_dir.exists():
-            self.session_name = f"sessions/{session_name}"
-        else:
-            self.session_name = session_name
-        
+        # Используем абсолютный путь из session_config
+        self.session_name = get_agent_session_path(session_name)
         self.phone = phone
         self.client: Optional[TelegramClient] = None
         self._is_connected = False

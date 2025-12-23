@@ -17,6 +17,7 @@ from agent_account import AgentAccount
 from agent_pool import AgentPool, disconnect_all_global_agents
 from conversation_manager import ConversationManager
 from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig as AIHandlerConfig
+from session_config import get_bot_session_path
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +72,11 @@ class ChannelNameLogFilter(logging.Filter):
 
 class MultiChannelJobMonitorBot:
     """Класс для мониторинга вакансий с поддержкой множественных output каналов"""
-    
+
     def __init__(self):
+        # Используем абсолютный путь к сессии из session_config
         self.client = TelegramClient(
-            config.SESSION_NAME,
+            get_bot_session_path(),
             config.API_ID,
             config.API_HASH
         )
@@ -108,7 +110,7 @@ class MultiChannelJobMonitorBot:
 
     async def check_session_valid(self) -> bool:
         """Проверяет существует ли валидная сессия"""
-        session_path = Path(f"{config.SESSION_NAME}.session")
+        session_path = Path(f"{get_bot_session_path()}.session")
         if not session_path.exists():
             return False
 

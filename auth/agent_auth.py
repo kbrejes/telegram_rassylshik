@@ -1,10 +1,10 @@
 """
 Модуль для интерактивной аутентификации агентов через веб-интерфейс
 """
-from pathlib import Path
 from typing import Optional, Dict
 from telethon import TelegramClient
 from .base import TelegramAuthManager
+from session_config import get_agent_session_path
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,13 +20,8 @@ class AgentAuthManager(TelegramAuthManager):
         self._phones: Dict[str, str] = {}
 
     def get_session_path(self, identifier: Optional[str] = None) -> str:
-        """Возвращает путь к сессии агента"""
-        if not identifier:
-            raise ValueError("session_name (identifier) is required for agent auth")
-
-        sessions_dir = Path("sessions")
-        sessions_dir.mkdir(exist_ok=True)
-        return f"sessions/{identifier}"
+        """Возвращает абсолютный путь к сессии агента"""
+        return get_agent_session_path(identifier)
 
     def get_pending_client(self, identifier: Optional[str] = None) -> Optional[TelegramClient]:
         """Возвращает pending клиент для агента"""

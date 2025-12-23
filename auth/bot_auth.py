@@ -3,8 +3,8 @@
 """
 from typing import Optional
 from telethon import TelegramClient
-from config import config
 from .base import TelegramAuthManager
+from session_config import get_bot_session_path
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,8 +20,8 @@ class BotAuthManager(TelegramAuthManager):
         self._phone: Optional[str] = None
 
     def get_session_path(self, identifier: Optional[str] = None) -> str:
-        """Возвращает путь к сессии основного бота"""
-        return config.SESSION_NAME
+        """Возвращает абсолютный путь к сессии основного бота"""
+        return get_bot_session_path()
 
     def get_pending_client(self, identifier: Optional[str] = None) -> Optional[TelegramClient]:
         """Возвращает pending клиент"""

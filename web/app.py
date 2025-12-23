@@ -2,7 +2,6 @@
 import os
 import time
 import asyncio
-import shutil
 import logging
 from pathlib import Path
 from typing import List, Dict, Any
@@ -13,6 +12,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from config_manager import ConfigManager
+from session_config import get_bot_session_path, SESSIONS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +41,15 @@ async def execute_telegram_deletion(entity_id: int, entity_type: str) -> bool:
         from telethon import TelegramClient
         from config import config
 
-        # Используем копию сессии чтобы не блокировать основного бота
-        web_session_path = f"sessions/{config.SESSION_NAME}_web"
-        original_session_path = f"{config.SESSION_NAME}.session"
+        # Используем ту же сессию что и бот (абсолютный путь)
+        # НЕ копируем сессию - это вызывает AuthKeyDuplicatedError!
+        bot_session_path = get_bot_session_path()
 
-        if os.path.exists(original_session_path):
-            if not os.path.exists(f"{web_session_path}.session") or \
-               os.path.getmtime(original_session_path) > os.path.getmtime(f"{web_session_path}.session"):
-                shutil.copy2(original_session_path, f"{web_session_path}.session")
-        else:
-            logger.error(f"Сессия бота не найдена: {original_session_path}")
+        if not Path(f"{bot_session_path}.session").exists():
+            logger.error(f"Сессия бота не найдена: {bot_session_path}.session")
             return False
 
-        client = TelegramClient(web_session_path, config.API_ID, config.API_HASH)
+        client = TelegramClient(bot_session_path, config.API_ID, config.API_HASH)
 
         await client.connect()
 
@@ -189,7 +185,7 @@ async def startup_event():
     # Создаем необходимые директории
     Path("configs").mkdir(exist_ok=True)
     Path("logs").mkdir(exist_ok=True)
-    Path("sessions").mkdir(exist_ok=True)
+    # sessions директория создается в session_config.py с абсолютным путем
 
     # Загружаем конфигурацию
     config_manager.load()
