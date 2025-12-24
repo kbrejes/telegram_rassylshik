@@ -3,6 +3,7 @@ Agent Pool Management for handling multiple Telegram agents with load balancing
 """
 import asyncio
 import logging
+import threading
 from typing import List, Optional, Dict, Union, Any
 from src.agent_account import AgentAccount
 from src.config_manager import AgentConfig
@@ -16,12 +17,38 @@ logger = logging.getLogger(__name__)
 _global_agents: Dict[str, AgentAccount] = {}
 _global_agents_lock = asyncio.Lock()
 
+# ID потока, в котором работает основной бот
+# Агенты можно подключать только из этого потока
+_main_thread_id: Optional[int] = None
 
-async def get_or_create_agent(session_name: str, phone: str) -> Optional[AgentAccount]:
+
+def set_main_thread():
+    """Установить текущий поток как главный (вызывается при старте бота)"""
+    global _main_thread_id
+    _main_thread_id = threading.current_thread().ident
+    logger.info(f"Главный поток бота установлен: {_main_thread_id}")
+
+
+def is_main_thread() -> bool:
+    """Проверить, находимся ли мы в главном потоке бота"""
+    return _main_thread_id is None or threading.current_thread().ident == _main_thread_id
+
+
+async def get_or_create_agent(session_name: str, phone: str, allow_create: bool = True) -> Optional[AgentAccount]:
     """
     Получить агента из глобального реестра или создать нового.
     Это гарантирует что один session файл открывается только одним клиентом.
+
+    ВАЖНО: Создание новых агентов разрешено только из главного потока бота.
+    Из веб-интерфейса можно только получить уже подключенных агентов.
+
+    Args:
+        session_name: Имя сессии агента
+        phone: Номер телефона (нужен для первого входа)
+        allow_create: Разрешить создание нового агента (по умолчанию True)
     """
+    current_thread = threading.current_thread().ident
+
     async with _global_agents_lock:
         # Если агент уже подключен - возвращаем его
         if session_name in _global_agents:
@@ -32,6 +59,20 @@ async def get_or_create_agent(session_name: str, phone: str) -> Optional[AgentAc
             else:
                 # Агент был отключен - удаляем из реестра
                 del _global_agents[session_name]
+
+        # Проверяем, можем ли мы создавать нового агента
+        if not allow_create:
+            logger.warning(f"Агент {session_name}: создание запрещено (allow_create=False)")
+            return None
+
+        # Проверяем, находимся ли мы в главном потоке
+        if not is_main_thread():
+            logger.warning(
+                f"Агент {session_name}: попытка создания из не-главного потока "
+                f"(текущий: {current_thread}, главный: {_main_thread_id}). "
+                f"Агенты должны создаваться только в главном потоке бота."
+            )
+            return None
 
         # Создаём нового агента
         agent = AgentAccount(session_name=session_name, phone=phone)
@@ -48,6 +89,19 @@ async def get_or_create_agent(session_name: str, phone: str) -> Optional[AgentAc
             else:
                 logger.error(f"Агент {session_name}: ошибка подключения: {e}")
             return None
+
+
+async def get_existing_agent(session_name: str) -> Optional[AgentAccount]:
+    """
+    Получить только уже подключенного агента (без создания нового).
+    Безопасно для вызова из любого потока.
+    """
+    async with _global_agents_lock:
+        if session_name in _global_agents:
+            agent = _global_agents[session_name]
+            if agent._is_connected:
+                return agent
+        return None
 
 
 async def disconnect_all_global_agents():

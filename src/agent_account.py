@@ -37,6 +37,8 @@ class AgentAccount:
         self.client: Optional[TelegramClient] = None
         self._is_connected = False
         self._flood_tracker = FloodWaitTracker()
+        # Храним event loop в котором был подключен клиент
+        self._connected_loop: Optional[asyncio.AbstractEventLoop] = None
     
     async def connect(self) -> bool:
         """
@@ -69,6 +71,8 @@ class AgentAccount:
                 await self.client.start(phone=self.phone)
 
             self._is_connected = True
+            # Сохраняем event loop в котором подключились
+            self._connected_loop = asyncio.get_running_loop()
             me = await self.client.get_me()
             username = f"@{me.username}" if me.username else "без username"
             logger.info(f"Агент {self.session_name} подключен: {me.first_name} ({username})")
@@ -103,8 +107,54 @@ class AgentAccount:
         if self.client:
             await self.client.disconnect()
             self._is_connected = False
+            self._connected_loop = None
             logger.info(f"Агент {self.session_name} отключен")
-    
+
+    async def ensure_valid_loop(self) -> bool:
+        """
+        Проверяет, что мы в том же event loop где был подключен клиент.
+        Если loop изменился - переподключаемся.
+
+        Returns:
+            True если клиент готов к использованию
+        """
+        if not self._is_connected or not self.client:
+            return False
+
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.error(f"Агент {self.session_name}: Нет активного event loop")
+            return False
+
+        # Если loop тот же - всё ок
+        if self._connected_loop is current_loop:
+            return True
+
+        # Loop изменился - нужно переподключиться
+        logger.warning(
+            f"Агент {self.session_name}: Event loop изменился, переподключение..."
+        )
+
+        # Отключаемся (игнорируем ошибки - клиент мог уже быть в невалидном состоянии)
+        try:
+            if self.client:
+                await self.client.disconnect()
+        except Exception as e:
+            logger.debug(f"Ошибка при отключении перед переподключением: {e}")
+
+        self._is_connected = False
+        self._connected_loop = None
+        self.client = None
+
+        # Переподключаемся в текущем loop
+        if await self.connect():
+            logger.info(f"Агент {self.session_name}: Успешно переподключен в новом loop")
+            return True
+        else:
+            logger.error(f"Агент {self.session_name}: Не удалось переподключиться")
+            return False
+
     async def send_message(
         self,
         user: Union[str, int, User],
@@ -112,44 +162,49 @@ class AgentAccount:
     ) -> bool:
         """
         Отправка сообщения пользователю
-        
+
         Args:
             user: Username (с или без @), user ID, или User объект
             text: Текст сообщения
-            
+
         Returns:
             True если сообщение отправлено успешно
         """
         if not self._is_connected or not self.client:
             logger.error(f"Агент {self.session_name}: Не подключен")
             return False
-        
+
         if not self.is_available():
             logger.warning(f"Агент {self.session_name}: Недоступен (FloodWait)")
             return False
-        
+
+        # Проверяем/восстанавливаем event loop
+        if not await self.ensure_valid_loop():
+            logger.error(f"Агент {self.session_name}: Не удалось валидировать event loop")
+            return False
+
         try:
             # Нормализуем username
             if isinstance(user, str) and not user.startswith('@'):
                 user = f"@{user}"
-            
+
             await self.client.send_message(user, text)
             logger.info(f"Агент {self.session_name}: Сообщение отправлено {user}")
             return True
-            
+
         except errors.FloodWaitError as e:
             logger.warning(f"Агент {self.session_name}: FloodWait {e.seconds} секунд")
             self.handle_flood_wait(e.seconds)
             return False
-            
+
         except errors.UserIsBlockedError:
             logger.error(f"Агент {self.session_name}: Пользователь {user} заблокировал аккаунт")
             return False
-            
+
         except errors.UserPrivacyRestrictedError:
             logger.error(f"Агент {self.session_name}: Нельзя написать {user} из-за настроек приватности")
             return False
-            
+
         except Exception as e:
             logger.error(f"Агент {self.session_name}: Ошибка отправки {user}: {e}")
             return False

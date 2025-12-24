@@ -466,6 +466,11 @@ class CRMHandler:
             return
 
         try:
+            # Проверяем, что агент готов к работе (event loop валиден)
+            if not await agent.ensure_valid_loop():
+                logger.error(f"Агент не готов к работе (event loop изменился)")
+                return
+
             # Резолвим контакт
             contact_user = await self.bot.client.get_entity(contacts['telegram'])
 

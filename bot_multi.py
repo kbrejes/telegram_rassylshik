@@ -119,6 +119,11 @@ class MultiChannelJobMonitorBot:
         """
         logger.info("Запуск Multi-Channel Telegram userbot...")
 
+        # Устанавливаем главный поток для агентов
+        # Агенты должны подключаться только из этого потока
+        from src.agent_pool import set_main_thread
+        set_main_thread()
+
         if not self.client.is_connected():
             await self.client.connect()
 

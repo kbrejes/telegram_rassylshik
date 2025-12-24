@@ -156,13 +156,14 @@ async def create_channel_full(data: FullChannelCreateRequest):
             for agent_session in data.agents:
                 logger.info(f"  Попытка добавить агента: {agent_session}")
                 try:
-                    from src.agent_pool import get_or_create_agent
+                    from src.agent_pool import get_existing_agent
 
-                    # Используем глобальный пул агентов (переиспользует существующее подключение)
-                    agent = await get_or_create_agent(agent_session, phone="")
+                    # Получаем только уже подключенного агента (не создаём новых из веб-интерфейса)
+                    # Агенты подключаются при старте бота и должны быть уже готовы
+                    agent = await get_existing_agent(agent_session)
                     if not agent or not agent.client:
-                        logger.warning(f"  Не удалось получить агента: {agent_session}")
-                        agents_errors.append(f"{agent_session}: не удалось подключиться")
+                        logger.warning(f"  Агент не подключен: {agent_session} (агент должен быть подключен при старте бота)")
+                        agents_errors.append(f"{agent_session}: агент не подключен (перезапустите бота)")
                         continue
 
                     agent_client = agent.client

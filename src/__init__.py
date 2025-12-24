@@ -39,8 +39,8 @@ def get_agent_account():
     return AgentAccount
 
 def get_agent_pool():
-    from src.agent_pool import agent_pool, get_or_create_agent
-    return agent_pool, get_or_create_agent
+    from src.agent_pool import get_or_create_agent, get_existing_agent, set_main_thread, is_main_thread
+    return get_or_create_agent, get_existing_agent, set_main_thread, is_main_thread
 
 def get_message_processor():
     from src.message_processor import message_processor
