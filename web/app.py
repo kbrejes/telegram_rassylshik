@@ -12,7 +12,6 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.config_manager import ConfigManager
-from src.session_config import get_bot_session_path, SESSIONS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -35,33 +34,27 @@ deletion_worker_started = False
 
 async def execute_telegram_deletion(entity_id: int, entity_type: str) -> bool:
     """Выполняет удаление Telegram сущности с обработкой rate limit"""
+    client = None
     try:
         from telethon.tl.functions.channels import DeleteChannelRequest
         from telethon.errors import FloodWaitError
-        from telethon import TelegramClient
-        from src.config import config
+        from web.utils import get_or_create_bot_client
 
-        # Используем ту же сессию что и бот (абсолютный путь)
-        # НЕ копируем сессию - это вызывает AuthKeyDuplicatedError!
-        bot_session_path = get_bot_session_path()
-
-        if not Path(f"{bot_session_path}.session").exists():
-            logger.error(f"Сессия бота не найдена: {bot_session_path}.session")
-            return False
-
-        client = TelegramClient(bot_session_path, config.API_ID, config.API_HASH)
-
-        await client.connect()
+        # Используем StringSession чтобы не блокировать SQLite файл бота
+        # (см. CLAUDE.md: "Each thread must have its own TelegramClient instance")
+        client, should_disconnect = await get_or_create_bot_client()
 
         if not await client.is_user_authorized():
             logger.warning("Бот не авторизован для удаления")
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
             return False
 
         try:
             await client(DeleteChannelRequest(entity_id))
             logger.info(f"Удалён {entity_type}: {entity_id}")
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
             return True
 
         except FloodWaitError as e:
@@ -72,16 +65,23 @@ async def execute_telegram_deletion(entity_id: int, entity_type: str) -> bool:
                 'retry_after': retry_after
             })
             logger.warning(f"Rate limit для {entity_type} {entity_id}, повтор через {e.seconds} сек")
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
             return False
 
         except Exception as e:
             logger.error(f"Ошибка удаления {entity_type} {entity_id}: {e}")
-            await client.disconnect()
+            if should_disconnect:
+                await client.disconnect()
             return False
 
     except Exception as e:
         logger.error(f"Ошибка подключения для удаления: {e}")
+        if client:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
         return False
 
 
