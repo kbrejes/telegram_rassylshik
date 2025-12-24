@@ -141,3 +141,16 @@ finally:
 4. **DO NOT** open one session file from multiple processes
 5. **DO NOT** forget `await client.disconnect()` on shutdown
 6. **DO NOT** share TelegramClient instances between threads/event loops
+
+---
+
+## Server Access
+
+**ALWAYS use gcloud for server access, NEVER use direct SSH:**
+```bash
+# CORRECT - use gcloud:
+gcloud compute ssh root@instance-1 --zone=europe-central2-a --command="<command>"
+
+# WRONG - never use direct SSH:
+ssh root@45.93.139.162  # DO NOT USE
+```

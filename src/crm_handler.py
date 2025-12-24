@@ -496,13 +496,14 @@ class CRMHandler:
             topic_id = conv_manager.get_topic_id(contact_user.id)
 
             if not topic_id:
-                sender_name = f"{contact_user.first_name}"
-                if contact_user.username:
-                    sender_name += f" (@{contact_user.username})"
+                # Topic title: just full name (first + last)
+                full_name = contact_user.first_name or ""
+                if contact_user.last_name:
+                    full_name += f" {contact_user.last_name}"
+                full_name = full_name.strip() or f"User {contact_user.id}"
 
-                topic_title = f"{sender_name} | {chat_title[:80]}"
                 topic_id = await conv_manager.create_topic(
-                    title=topic_title[:128],
+                    title=full_name[:128],
                     contact_id=contact_user.id
                 )
 
@@ -571,7 +572,7 @@ class CRMHandler:
     ):
         """Зеркалирование автоответа в топик"""
         try:
-            agent_message = f"🤖 **Агент ({agent.session_name}):**\n\n{channel.auto_response_template}"
+            agent_message = f"🤖 **Агент:**\n\n{channel.auto_response_template}"
             sent_msg = await agent.client.send_message(
                 entity=channel.crm_group_id,
                 message=agent_message,
@@ -601,7 +602,7 @@ class CRMHandler:
         info_message += f"📍 **Канал вакансии:** {chat_title}\n"
         info_message += f"🔗 **Ссылка:** {message_processor.get_message_link(message, chat)}"
 
-        await conv_manager.send_to_topic(topic_id, info_message)
+        await conv_manager.send_to_topic(topic_id, info_message, link_preview=False)
 
     async def cleanup(self):
         """Очистка ресурсов CRM"""

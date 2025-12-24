@@ -159,15 +159,16 @@ class ConversationManager:
         """Получить ID контакта по ID топика"""
         return self._reverse_topic_cache.get(topic_id)
     
-    async def send_to_topic(self, topic_id: int, text: str, file=None) -> bool:
+    async def send_to_topic(self, topic_id: int, text: str, file=None, link_preview: bool = True) -> bool:
         """
         Отправка сообщения в топик
-        
+
         Args:
             topic_id: ID топика
             text: Текст сообщения
             file: Опциональный медиа файл
-            
+            link_preview: Показывать превью ссылок (default True)
+
         Returns:
             True если отправлено успешно
         """
@@ -176,7 +177,8 @@ class ConversationManager:
                 self.group_id,
                 text,
                 file=file,
-                reply_to=topic_id  # Важно: reply_to для топика
+                reply_to=topic_id,  # Важно: reply_to для топика
+                link_preview=link_preview
             )
             # Сохраняем связь message_id -> topic_id для последующего определения топика
             if sent_message and hasattr(sent_message, 'id'):
