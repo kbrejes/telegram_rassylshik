@@ -175,18 +175,21 @@ async def create_channel_full(data: FullChannelCreateRequest):
                             if invite_hash.startswith("+"):
                                 invite_hash = invite_hash[1:]
 
+                            logger.info(f"  Joining with invite hash: {invite_hash}")
                             await agent_client(ImportChatInviteRequest(invite_hash))
                             agent_name = agent_me.username or agent_me.first_name
                             agents_invited.append(f"@{agent_name}")
                             logger.info(f"  ✅ Агент {agent_session} вступил в CRM группу")
                         except Exception as join_err:
                             err_str = str(join_err)
-                            if "USER_ALREADY_PARTICIPANT" in err_str or "already" in err_str.lower():
+                            # Только USER_ALREADY_PARTICIPANT означает что агент уже в группе
+                            # НЕ используем "already" - это слишком широкое условие
+                            if "USER_ALREADY_PARTICIPANT" in err_str:
                                 agents_invited.append(f"@{agent_me.username or agent_me.first_name} (уже в группе)")
                                 logger.info(f"  Агент уже в группе")
                             else:
                                 agents_errors.append(f"{agent_session}: {err_str}")
-                                logger.warning(f"  ❌ Ошибка вступления: {join_err}")
+                                logger.error(f"  ❌ Ошибка вступления агента: {join_err}")
                     else:
                         logger.warning(f"  Агент не авторизован")
                         agents_errors.append(f"{agent_session}: не авторизован")
