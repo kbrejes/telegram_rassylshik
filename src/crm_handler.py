@@ -95,6 +95,15 @@ class CRMHandler:
                 logger.error(f"  Нет доступных агентов для '{channel.name}'")
                 return
 
+            # ВАЖНО: Агент должен "узнать" о CRM группе перед использованием
+            # Группа могла быть создана веб-интерфейсом через другой клиент
+            try:
+                await primary_agent.client.get_entity(channel.crm_group_id)
+                logger.debug(f"  Агент получил доступ к CRM группе {channel.crm_group_id}")
+            except Exception as e:
+                logger.warning(f"  Агент не может получить доступ к CRM группе: {e}")
+                # Продолжаем - возможно группа станет доступна позже
+
             # Создаем conversation manager
             conv_manager = ConversationManager(
                 client=primary_agent.client,
