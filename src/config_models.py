@@ -73,6 +73,32 @@ class AIConfig:
 
 
 @dataclass
+class JobAnalyzerConfig:
+    """Configuration for LLM-based job analyzer."""
+    enabled: bool = True
+    min_salary_rub: int = 70_000
+    llm_provider: str = "groq"
+    llm_model: str = "llama-3.3-70b-versatile"
+
+    def to_dict(self) -> dict:
+        return {
+            'enabled': self.enabled,
+            'min_salary_rub': self.min_salary_rub,
+            'llm_provider': self.llm_provider,
+            'llm_model': self.llm_model,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'JobAnalyzerConfig':
+        return cls(
+            enabled=data.get('enabled', True),
+            min_salary_rub=data.get('min_salary_rub', 70_000),
+            llm_provider=data.get('llm_provider', 'groq'),
+            llm_model=data.get('llm_model', 'llama-3.3-70b-versatile'),
+        )
+
+
+@dataclass
 class PromptsConfig:
     """Конфигурация промптов для AI"""
     base_context: str = ""
