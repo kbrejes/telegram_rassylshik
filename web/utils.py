@@ -95,7 +95,11 @@ async def get_or_create_bot_client() -> Tuple["TelegramClient", bool]:
 
 async def get_agent_client(session_name: str) -> Tuple["TelegramClient", bool]:
     """
-    Создаёт клиент для агента.
+    Создаёт клиент для агента используя StringSession.
+
+    ВАЖНО: Используем StringSession чтобы не блокировать SQLite файл.
+    Бот может держать SQLite сессию открытой, поэтому web должен
+    использовать StringSession (см. CLAUDE.md).
 
     Args:
         session_name: Имя сессии агента (без расширения .session)
@@ -103,17 +107,53 @@ async def get_agent_client(session_name: str) -> Tuple["TelegramClient", bool]:
     Returns:
         tuple: (client, should_disconnect)
     """
-    from auth.base import TimeoutSQLiteSession
     from telethon import TelegramClient
+    from telethon.sessions import StringSession, SQLiteSession
+    from telethon.crypto import AuthKey
     from src.config import config
     from src.session_config import get_agent_session_path
+    import sqlite3
+    import struct
 
-    # Используем абсолютный путь к сессии агента
+    # Получаем путь к SQLite сессии
     session_path = get_agent_session_path(session_name)
-    session = TimeoutSQLiteSession(session_path)
-    client = TelegramClient(session, config.API_ID, config.API_HASH)
-    await client.connect()
-    return client, True
+    session_file = f"{session_path}.session"
+
+    # Читаем auth_key из SQLite и создаём StringSession
+    # Это кратковременное чтение, не держим файл открытым
+    try:
+        conn = sqlite3.connect(session_file, timeout=5.0)
+        cursor = conn.cursor()
+
+        # Читаем данные сессии
+        cursor.execute("SELECT dc_id, server_address, port, auth_key FROM sessions")
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            raise ValueError(f"Сессия {session_name} пустая или повреждена")
+
+        dc_id, server_address, port, auth_key_data = row
+
+        if not auth_key_data:
+            raise ValueError(f"Сессия {session_name} не авторизована")
+
+        # Создаём StringSession и устанавливаем данные
+        string_session = StringSession()
+        string_session.set_dc(dc_id, server_address, port)
+        # Создаём AuthKey из бинарных данных
+        string_session._auth_key = AuthKey(auth_key_data)
+
+        client = TelegramClient(string_session, config.API_ID, config.API_HASH)
+        await client.connect()
+        return client, True
+
+    except sqlite3.OperationalError as e:
+        if "database is locked" in str(e):
+            raise Exception(f"Сессия {session_name} заблокирована. Попробуйте позже.")
+        raise
+    except Exception as e:
+        raise Exception(f"Не удалось загрузить сессию {session_name}: {e}")
 
 
 # ============== Templates & Source Lists ==============
