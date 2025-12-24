@@ -155,18 +155,14 @@ async def create_channel_full(data: FullChannelCreateRequest):
 
             for agent_session in data.agents:
                 logger.info(f"  Попытка добавить агента: {agent_session}")
+                agent_client = None
+                should_disconnect = False
                 try:
-                    from src.agent_pool import get_existing_agent
-
-                    # Получаем только уже подключенного агента (не создаём новых из веб-интерфейса)
-                    # Агенты подключаются при старте бота и должны быть уже готовы
-                    agent = await get_existing_agent(agent_session)
-                    if not agent or not agent.client:
-                        logger.warning(f"  Агент не подключен: {agent_session} (агент должен быть подключен при старте бота)")
-                        agents_errors.append(f"{agent_session}: агент не подключен (перезапустите бота)")
-                        continue
-
-                    agent_client = agent.client
+                    # ВАЖНО: Создаём ОТДЕЛЬНЫЙ временный клиент для веб-интерфейса
+                    # Нельзя использовать агентов из agent_pool - они подключены в другом event loop (бота)
+                    # См. CLAUDE.md: "Each thread must have its own TelegramClient instance"
+                    from web.utils import get_agent_client
+                    agent_client, should_disconnect = await get_agent_client(agent_session)
 
                     if await agent_client.is_user_authorized():
                         agent_me = await agent_client.get_me()
@@ -195,11 +191,16 @@ async def create_channel_full(data: FullChannelCreateRequest):
                         logger.warning(f"  Агент не авторизован")
                         agents_errors.append(f"{agent_session}: не авторизован")
 
-                    # НЕ отключаем агента - он используется глобально
-
                 except Exception as e:
                     agents_errors.append(f"{agent_session}: {str(e)}")
                     logger.error(f"  ❌ Не удалось добавить агента {agent_session}: {e}")
+                finally:
+                    # Всегда отключаем временный клиент
+                    if agent_client and should_disconnect:
+                        try:
+                            await agent_client.disconnect()
+                        except Exception:
+                            pass
 
             # Проверяем что хотя бы один агент добавлен
             if not agents_invited:

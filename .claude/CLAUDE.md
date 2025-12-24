@@ -90,6 +90,49 @@
 
 ---
 
+## Telethon Event Loops - CRITICAL
+
+**From official Telethon docs: https://docs.telethon.dev/en/stable/concepts/asyncio.html**
+
+### The Rule
+**Each thread must have its own TelegramClient instance. You CANNOT share clients across threads/event loops.**
+
+Telethon clients are bound to the event loop where they connected. Using a client from a different event loop causes:
+```
+RuntimeError: The asyncio event loop must not change after connection
+```
+
+### Our Architecture
+- **Main thread**: `asyncio.run(run_bot())` - bot client + agents connected here
+- **Web thread**: uvicorn creates its own event loop
+
+### NEVER DO THIS
+```python
+# In web route (uvicorn thread):
+from src.agent_pool import get_existing_agent
+agent = await get_existing_agent(session_name)  # Connected in bot thread!
+await agent.client.send_message(...)  # ERROR: different event loop!
+```
+
+### CORRECT APPROACH
+```python
+# In web route: create a SEPARATE temporary client
+from web.utils import get_agent_client
+agent_client, should_disconnect = await get_agent_client(session_name)
+try:
+    await agent_client.send_message(...)
+finally:
+    if should_disconnect:
+        await agent_client.disconnect()
+```
+
+### Summary
+- **Bot thread agents** (`agent_pool.py`): Used only by bot's message handlers
+- **Web thread operations**: Create temporary clients via `get_agent_client()`
+- **Never share clients between threads**
+
+---
+
 ## Common Mistakes - DO NOT
 
 1. **DO NOT** create `TelegramClient` directly without `TimeoutSQLiteSession`
@@ -97,3 +140,4 @@
 3. **DO NOT** ignore `AuthKeyDuplicatedError`
 4. **DO NOT** open one session file from multiple processes
 5. **DO NOT** forget `await client.disconnect()` on shutdown
+6. **DO NOT** share TelegramClient instances between threads/event loops

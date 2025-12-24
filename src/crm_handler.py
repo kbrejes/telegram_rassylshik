@@ -466,9 +466,9 @@ class CRMHandler:
             return
 
         try:
-            # Проверяем, что агент готов к работе (event loop валиден)
-            if not await agent.ensure_valid_loop():
-                logger.error(f"Агент не готов к работе (event loop изменился)")
+            # Проверяем, что агент используется из правильного потока
+            if not agent.is_valid_loop():
+                logger.error(f"Агент вызван из неправильного event loop")
                 return
 
             # Резолвим контакт

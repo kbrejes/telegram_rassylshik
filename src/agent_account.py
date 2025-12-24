@@ -110,13 +110,15 @@ class AgentAccount:
             self._connected_loop = None
             logger.info(f"Агент {self.session_name} отключен")
 
-    async def ensure_valid_loop(self) -> bool:
+    def is_valid_loop(self) -> bool:
         """
         Проверяет, что мы в том же event loop где был подключен клиент.
-        Если loop изменился - переподключаемся.
+
+        ВАЖНО: Не пытается переподключиться! Переподключение из другого потока
+        сломает агента для основного потока бота.
 
         Returns:
-            True если клиент готов к использованию
+            True если текущий loop совпадает с loop подключения
         """
         if not self._is_connected or not self.client:
             return False
@@ -124,36 +126,17 @@ class AgentAccount:
         try:
             current_loop = asyncio.get_running_loop()
         except RuntimeError:
-            logger.error(f"Агент {self.session_name}: Нет активного event loop")
             return False
 
-        # Если loop тот же - всё ок
         if self._connected_loop is current_loop:
             return True
 
-        # Loop изменился - нужно переподключиться
-        logger.warning(
-            f"Агент {self.session_name}: Event loop изменился, переподключение..."
+        # Loop изменился - это означает вызов из неправильного потока
+        logger.error(
+            f"Агент {self.session_name}: Попытка использования из неправильного event loop! "
+            f"Агенты из agent_pool можно использовать только из потока бота."
         )
-
-        # Отключаемся (игнорируем ошибки - клиент мог уже быть в невалидном состоянии)
-        try:
-            if self.client:
-                await self.client.disconnect()
-        except Exception as e:
-            logger.debug(f"Ошибка при отключении перед переподключением: {e}")
-
-        self._is_connected = False
-        self._connected_loop = None
-        self.client = None
-
-        # Переподключаемся в текущем loop
-        if await self.connect():
-            logger.info(f"Агент {self.session_name}: Успешно переподключен в новом loop")
-            return True
-        else:
-            logger.error(f"Агент {self.session_name}: Не удалось переподключиться")
-            return False
+        return False
 
     async def send_message(
         self,
@@ -178,9 +161,8 @@ class AgentAccount:
             logger.warning(f"Агент {self.session_name}: Недоступен (FloodWait)")
             return False
 
-        # Проверяем/восстанавливаем event loop
-        if not await self.ensure_valid_loop():
-            logger.error(f"Агент {self.session_name}: Не удалось валидировать event loop")
+        # Проверяем что мы в правильном event loop
+        if not self.is_valid_loop():
             return False
 
         try:
