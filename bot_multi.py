@@ -18,6 +18,7 @@ from src.crm_handler import CRMHandler
 from src.session_config import get_bot_session_path, get_agent_session_path, SESSIONS_DIR
 from src.connection_status import status_manager
 from src.command_queue import command_queue
+from src.job_analyzer import JobAnalyzer, JobAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,9 @@ class MultiChannelJobMonitorBot:
         # CRM функциональность (вынесено в отдельный модуль)
         self.crm = CRMHandler(self)
 
+        # Job analyzer (LLM-based filtering)
+        self.job_analyzer: Optional[JobAnalyzer] = None
+
         # Для отслеживания изменений конфигурации
         self.config_file_path = Path("configs/channels_config.json")
         self.last_config_mtime = None
@@ -153,10 +157,13 @@ class MultiChannelJobMonitorBot:
         
         # Загрузка конфигурации output каналов
         await self.load_output_channels()
-        
+
         # Загрузка всех уникальных input источников
         await self.load_input_sources()
-        
+
+        # Инициализация LLM job analyzer
+        await self._init_job_analyzer()
+
         # Инициализация CRM агентов и conversation managers
         await self.crm.setup_agents(self.output_channels, self.config_manager)
         
@@ -237,10 +244,24 @@ class MultiChannelJobMonitorBot:
                     )
             
             logger.info(f"Всего загружено {len(self.monitored_sources)} источников для мониторинга")
-        
+
         except Exception as e:
             logger.error(f"Ошибка при загрузке input источников: {e}")
-    
+
+    async def _init_job_analyzer(self):
+        """Initialize LLM-based job analyzer."""
+        try:
+            self.job_analyzer = JobAnalyzer(
+                providers_config=self.config_manager.llm_providers,
+                min_salary_rub=70_000,
+                provider_name="groq",
+            )
+            await self.job_analyzer.initialize()
+            logger.info("Job analyzer initialized (LLM-based filtering enabled)")
+        except Exception as e:
+            logger.warning(f"Job analyzer init failed, will use regex only: {e}")
+            self.job_analyzer = None
+
     def _setup_log_filter(self):
         """Настраивает фильтр для замены ID каналов на имена в логах"""
         telethon_logger = logging.getLogger('telethon.client.updates')
@@ -562,28 +583,68 @@ class MultiChannelJobMonitorBot:
     async def process_message(self, message, chat):
         """
         Обрабатывает сообщение из отслеживаемого чата для всех output каналов
-        
+
         Args:
             message: Объект сообщения Telethon
             chat: Объект чата
         """
         # Получаем название чата
         chat_title = self._get_chat_title(chat)
-        
+
         logger.info(f"Получено сообщение {message.id} из чата '{chat_title}'")
-        
+
         # Первичная фильтрация
         if not message_processor.should_process_message(message):
             return
-        
+
         # Проверка на дубликат
         is_duplicate = await db.check_duplicate(message.id, chat.id)
         if is_duplicate:
             logger.debug(f"Сообщение {message.id} уже обрабатывалось ранее")
             return
-        
-        # Извлечение информации
-        contacts = message_processor.extract_contact_info(message.text)
+
+        # === LLM Job Analysis ===
+        analysis: Optional[JobAnalysisResult] = None
+        if self.job_analyzer:
+            try:
+                analysis = await self.job_analyzer.analyze(message.text)
+
+                if not analysis.is_relevant:
+                    # Save as filtered by AI
+                    await db.save_job(
+                        message_id=message.id,
+                        chat_id=chat.id,
+                        chat_title=chat_title,
+                        message_text=message.text,
+                        position=None,
+                        skills=[],
+                        is_relevant=False,
+                        ai_reason=analysis.rejection_reason or "Filtered by AI",
+                        status='filtered_by_ai'
+                    )
+                    logger.info(f"Filtered by AI: {analysis.rejection_reason}")
+                    return
+
+                logger.debug(f"AI analysis passed: {analysis.analysis_summary}")
+
+            except Exception as e:
+                logger.warning(f"Job analysis error, continuing with regex: {e}")
+                # Continue with traditional flow on error
+
+        # Use LLM-extracted contact or fall back to regex
+        if analysis and analysis.contact_username:
+            contacts = {
+                'telegram': analysis.contact_username,
+                'email': None,
+                'phone': None
+            }
+            # Still extract email/phone with regex
+            regex_contacts = message_processor.extract_contact_info(message.text)
+            contacts['email'] = regex_contacts.get('email')
+            contacts['phone'] = regex_contacts.get('phone')
+        else:
+            contacts = message_processor.extract_contact_info(message.text)
+
         keywords = message_processor.extract_keywords(message.text)
         payment_info = message_processor.extract_payment_info(message.text)
         
