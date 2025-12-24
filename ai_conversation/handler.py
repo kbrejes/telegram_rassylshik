@@ -7,18 +7,27 @@ Integrates with bot_multi.py for seamless lead engagement.
 Two-level system:
 1. StateAnalyzer - determines conversation phase
 2. PhasePromptBuilder - builds dynamic system prompts
+
+Self-correcting system:
+- Tracks conversation outcomes
+- A/B tests prompt variants
+- Auto-improves based on results
 """
 
 import asyncio
 import random
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, Callable, Awaitable, List
+from typing import Optional, Dict, Any, Callable, Awaitable, List, TYPE_CHECKING
 
 from .llm_client import UnifiedLLMClient
 from .memory import ConversationMemory
 from .state_analyzer import StateAnalyzer, StateStorage, ConversationState, AnalysisResult
 from .phase_prompts import PhasePromptBuilder, ensure_prompts_directory
+from .correction_applier import CorrectionApplier
+
+if TYPE_CHECKING:
+    from src.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +51,10 @@ class AIConfig:
     prompts_dir: str = "prompts"
     states_dir: str = "data/conversation_states"
 
+    # Self-correcting system settings
+    use_self_correction: bool = True  # Enable A/B testing and prompt optimization
+    enable_contact_learning: bool = True  # Enable per-contact-type learning
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AIConfig":
         """Create from dictionary."""
@@ -63,6 +76,8 @@ class AIConfig:
             use_state_analyzer=data.get("use_state_analyzer", True),
             prompts_dir=data.get("prompts_dir", "prompts"),
             states_dir=data.get("states_dir", "data/conversation_states"),
+            use_self_correction=data.get("use_self_correction", True),
+            enable_contact_learning=data.get("enable_contact_learning", True),
         )
 
 
@@ -98,6 +113,7 @@ class AIConversationHandler:
         config: AIConfig,
         providers_config: Optional[Dict[str, Any]] = None,
         channel_id: str = "",
+        database: Optional["Database"] = None,
     ):
         """
         Initialize AI handler.
@@ -106,10 +122,12 @@ class AIConversationHandler:
             config: AI configuration
             providers_config: LLM providers config from channels_config.json
             channel_id: Channel ID for logging/tracking
+            database: Database instance for self-correction (optional)
         """
         self.config = config
         self.channel_id = channel_id
         self.providers_config = providers_config or {}
+        self.database = database
 
         self.llm: Optional[UnifiedLLMClient] = None
         self.memory: Optional[ConversationMemory] = None
@@ -118,6 +136,12 @@ class AIConversationHandler:
         self.state_analyzer: Optional[StateAnalyzer] = None
         self.prompt_builder: Optional[PhasePromptBuilder] = None
         self.state_storage: Optional[StateStorage] = None
+
+        # Self-correction components
+        self.correction_applier: Optional[CorrectionApplier] = None
+
+        # Track experiment assignments per contact
+        self._contact_experiments: Dict[int, Dict[str, Any]] = {}
 
         self._initialized = False
         self._message_counts: Dict[int, int] = {}  # contact_id -> message count
@@ -163,6 +187,14 @@ class AIConversationHandler:
                 self.prompt_builder = PhasePromptBuilder(self.config.prompts_dir)
 
                 logger.info(f"[AI] State analyzer enabled for channel {self.channel_id}")
+
+            # Initialize self-correction system
+            if self.config.use_self_correction and self.database:
+                self.correction_applier = CorrectionApplier(
+                    db=self.database,
+                    llm=self.llm
+                )
+                logger.info(f"[AI] Self-correction enabled for channel {self.channel_id}")
 
             self._initialized = True
             logger.info(f"[AI] Handler initialized for channel {self.channel_id}")
@@ -262,9 +294,11 @@ class AIConversationHandler:
         Generate response using two-level state analyzer system.
 
         1. Analyze conversation to determine phase
-        2. Build phase-specific system prompt
-        3. Generate response
-        4. Update state after response
+        2. Get A/B variant if experiment is active
+        3. Build phase-specific system prompt
+        4. Add contact-type-specific additions
+        5. Generate response
+        6. Update state and track outcome
         """
         # Get working memory
         working_memory = self.memory.get_working_memory(contact_id)
@@ -281,15 +315,42 @@ class AIConversationHandler:
         # 2. Get current state
         state = self.state_analyzer.get_state(contact_id)
 
-        # 3. Build phase-specific system prompt
-        system_prompt = self.prompt_builder.build_system_prompt(
-            phase=analysis.phase,
-            analysis=analysis,
-            state=state,
-            include_founders=analysis.mention_founders,
-        )
+        # 3. Check for A/B experiment variant
+        variant_info = None
+        if self.correction_applier:
+            variant_info = await self.correction_applier.get_variant_for_contact(
+                contact_id=contact_id,
+                prompt_type="phase",
+                prompt_name=analysis.phase
+            )
+            if variant_info.get("experiment_id"):
+                self._contact_experiments[contact_id] = variant_info
+                logger.debug(
+                    f"[AI] Contact {contact_id} assigned to variant "
+                    f"{variant_info['variant']} in experiment {variant_info['experiment_id']}"
+                )
 
-        # 4. Build messages for LLM
+        # 4. Build phase-specific system prompt
+        # Use variant content if available, otherwise use default
+        if variant_info and variant_info.get("content"):
+            system_prompt = variant_info["content"]
+        else:
+            system_prompt = self.prompt_builder.build_system_prompt(
+                phase=analysis.phase,
+                analysis=analysis,
+                state=state,
+                include_founders=analysis.mention_founders,
+            )
+
+        # 5. Add contact-type-specific prompt additions
+        if self.correction_applier and self.config.enable_contact_learning:
+            contact_additions = await self.correction_applier.get_contact_type_additions(
+                working_memory
+            )
+            if contact_additions:
+                system_prompt += contact_additions
+
+        # 6. Build messages for LLM
         messages = [{"role": "system", "content": system_prompt}]
 
         # Add working memory (last N messages)
@@ -306,17 +367,47 @@ class AIConversationHandler:
         # Add current message
         messages.append({"role": "user", "content": message})
 
-        # 5. Generate response
+        # 7. Generate response
         response = await self.llm.achat(messages)
 
-        # 6. Update memory
+        # 8. Update memory
         self.memory.add_message(contact_id, "user", message)
         self.memory.add_message(contact_id, "assistant", response)
 
-        # 7. Update state after response (detect if call was offered)
+        # 9. Update state after response (detect if call was offered)
         self.state_analyzer.update_state_after_response(contact_id, response)
 
+        # 10. Track outcome for self-correction
+        if self.correction_applier:
+            await self._track_outcome_if_terminal(contact_id, working_memory, state)
+
         return response
+
+    async def _track_outcome_if_terminal(
+        self,
+        contact_id: int,
+        messages: List[Dict[str, str]],
+        state: ConversationState
+    ):
+        """Track outcome if conversation reached a terminal state."""
+        # Get experiment info for this contact
+        exp_info = self._contact_experiments.get(contact_id, {})
+
+        outcome = await self.correction_applier.record_conversation_outcome(
+            contact_id=contact_id,
+            channel_id=self.channel_id,
+            messages=messages,
+            state=state,
+            prompt_version_id=exp_info.get("version_id"),
+            experiment_id=exp_info.get("experiment_id"),
+            variant=exp_info.get("variant")
+        )
+
+        if outcome.outcome != "ongoing":
+            logger.info(
+                f"[AI] Recorded terminal outcome '{outcome.outcome}' "
+                f"for contact {contact_id}"
+            )
 
     def add_operator_message(self, contact_id: int, message: str):
         """
@@ -404,13 +495,30 @@ class AIConversationHandler:
             "active_conversations": len(self._message_counts),
             "total_messages": sum(self._message_counts.values()),
             "state_analyzer_enabled": self.config.use_state_analyzer,
+            "self_correction_enabled": self.correction_applier is not None,
         }
 
         # Add state analyzer stats if enabled
         if self.state_analyzer and self.state_storage:
             stats["states_cached"] = len(self.state_storage._cache)
 
+        # Add experiments being tracked
+        stats["contacts_in_experiments"] = len(self._contact_experiments)
+
         return stats
+
+    async def get_optimization_stats(self) -> Optional[Dict[str, Any]]:
+        """Get self-correction optimization statistics."""
+        if not self.correction_applier:
+            return None
+        return await self.correction_applier.get_optimization_stats()
+
+    async def run_optimization_cycle(self):
+        """Run a self-correction optimization cycle manually."""
+        if not self.correction_applier:
+            logger.warning("[AI] Self-correction not enabled, cannot run optimization")
+            return None
+        return await self.correction_applier.run_optimization_cycle()
 
     def close(self):
         """Cleanup resources."""
@@ -426,14 +534,20 @@ class AIHandlerPool:
     Manages AI handlers lifecycle and provides easy access.
     """
 
-    def __init__(self, providers_config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        providers_config: Optional[Dict[str, Any]] = None,
+        database: Optional["Database"] = None
+    ):
         """
         Initialize handler pool.
 
         Args:
             providers_config: LLM providers configuration
+            database: Database instance for self-correction
         """
         self.providers_config = providers_config or {}
+        self.database = database
         self.handlers: Dict[str, AIConversationHandler] = {}
 
     async def get_or_create(
@@ -456,6 +570,7 @@ class AIHandlerPool:
                 config=ai_config,
                 providers_config=self.providers_config,
                 channel_id=channel_id,
+                database=self.database,
             )
             await handler.initialize()
             self.handlers[channel_id] = handler
