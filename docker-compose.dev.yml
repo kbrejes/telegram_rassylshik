@@ -1,0 +1,98 @@
+version: '3.8'
+
+# Development docker-compose with optional services
+# Usage: docker-compose -f docker-compose.dev.yml up [service_name]
+
+services:
+  # =============================================================
+  # LOCAL LLM - Ollama
+  # Start: docker-compose -f docker-compose.dev.yml up ollama
+  # Pull models: docker exec ollama ollama pull qwen2.5:3b
+  # =============================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: dev_ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    # GPU support (uncomment if you have nvidia GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # =============================================================
+  # VECTOR DATABASE - Weaviate
+  # Start: docker-compose -f docker-compose.dev.yml up weaviate
+  # =============================================================
+  weaviate:
+    image: semitechnologies/weaviate:1.22.4
+    container_name: dev_weaviate
+    ports:
+      - "8081:8080"  # 8081 to avoid conflict with web app
+      - "50051:50051"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none'
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    restart: unless-stopped
+
+  # =============================================================
+  # WEB INTERFACE ONLY (no bot)
+  # Start: docker-compose -f docker-compose.dev.yml up web
+  # Access: http://localhost:8080
+  # =============================================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: dev_web
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WEB_PORT=8080
+    env_file:
+      - .env
+    command: python -m uvicorn web.app:app --host 0.0.0.0 --port 8080 --reload
+    restart: unless-stopped
+
+  # =============================================================
+  # FULL BOT + WEB (production-like)
+  # Start: docker-compose -f docker-compose.dev.yml up bot
+  # =============================================================
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: dev_bot
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - ./sessions:/app/sessions
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    command: python main_multi.py
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  weaviate_data:
