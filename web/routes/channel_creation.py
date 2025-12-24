@@ -182,11 +182,11 @@ async def create_channel_full(data: FullChannelCreateRequest):
                             logger.info(f"  ✅ Агент {agent_session} вступил в CRM группу")
                         except Exception as join_err:
                             err_str = str(join_err)
-                            # Только USER_ALREADY_PARTICIPANT означает что агент уже в группе
-                            # НЕ используем "already" - это слишком широкое условие
-                            if "USER_ALREADY_PARTICIPANT" in err_str:
-                                agents_invited.append(f"@{agent_me.username or agent_me.first_name} (уже в группе)")
-                                logger.info(f"  Агент уже в группе")
+                            # Агент уже в группе - это успех!
+                            # Бывает когда бот и агент - один и тот же аккаунт (бот создал группу = агент уже в ней)
+                            if "USER_ALREADY_PARTICIPANT" in err_str or "already a participant" in err_str.lower():
+                                agents_invited.append(f"@{agent_me.username or agent_me.first_name} (создатель группы)")
+                                logger.info(f"  ✅ Агент уже в группе (бот и агент - один аккаунт)")
                             else:
                                 agents_errors.append(f"{agent_session}: {err_str}")
                                 logger.error(f"  ❌ Ошибка вступления агента: {join_err}")
