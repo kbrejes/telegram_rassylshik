@@ -33,8 +33,9 @@ class HumanBehavior:
     Simulates human-like behavior for message sending.
 
     Features:
-    - Random delays between messages (30s - 3min)
-    - Occasional longer delays (12-20min, once per hour)
+    - 70% instant responses (5-15 seconds)
+    - 30% slower responses (30s - 3min)
+    - Occasional longer delays (12-20min, twice per day)
     - Typing indicator before messages
     - Easy toggle for testing
     """
@@ -48,17 +49,22 @@ class HumanBehavior:
         """
         self.enabled = enabled
 
-        # Track last long delay per contact to ensure once-per-hour
+        # Track last long delay per contact
         self._last_long_delay: Dict[int, float] = {}
 
-        # Configuration
-        self.MIN_DELAY_SECONDS = 30
-        self.MAX_DELAY_SECONDS = 180  # 3 minutes
+        # Instant response (70% chance)
+        self.INSTANT_RESPONSE_CHANCE = 0.70
+        self.INSTANT_DELAY_MIN = 5  # 5 seconds
+        self.INSTANT_DELAY_MAX = 15  # 15 seconds
 
+        # Normal response (30% chance)
+        self.NORMAL_DELAY_MIN = 30  # 30 seconds
+        self.NORMAL_DELAY_MAX = 180  # 3 minutes
+
+        # Long delay (twice per day per contact)
         self.LONG_DELAY_MIN = 720  # 12 minutes
         self.LONG_DELAY_MAX = 1200  # 20 minutes
-        self.LONG_DELAY_INTERVAL = 3600  # 1 hour between long delays
-        self.LONG_DELAY_CHANCE = 0.15  # 15% chance when eligible
+        self.LONG_DELAY_INTERVAL = 43200  # 12 hours between long delays (twice a day)
 
         # Typing speed (chars per second) - humans type 40-80 WPM
         self.TYPING_SPEED_MIN = 4  # slow typer
@@ -78,43 +84,44 @@ class HumanBehavior:
         """
         Check if we should do a long delay for this contact.
 
-        Long delays happen:
-        - At most once per hour per contact
-        - With 15% probability when eligible
+        Long delays happen twice per day per contact (every 12 hours).
         """
         now = time.time()
         last_long = self._last_long_delay.get(contact_id, 0)
 
-        # Check if enough time has passed since last long delay
-        if now - last_long < self.LONG_DELAY_INTERVAL:
-            return False
-
-        # Random chance
-        return random.random() < self.LONG_DELAY_CHANCE
+        # Check if enough time has passed since last long delay (12 hours)
+        return now - last_long >= self.LONG_DELAY_INTERVAL
 
     def _calculate_delay(self, message_length: int, contact_id: int) -> float:
         """
         Calculate delay before responding.
 
-        Longer messages = slightly longer "thinking" time.
+        - 70% chance: instant response (5-15 seconds)
+        - 30% chance: normal response (30s - 3min)
+        - If eligible: long delay (12-20 min, twice per day)
         """
-        # Base delay: 30s - 3min
-        base_delay = random.uniform(self.MIN_DELAY_SECONDS, self.MAX_DELAY_SECONDS)
-
-        # Add time based on message complexity (longer = more thinking)
-        # ~1-3 seconds per 50 chars
-        complexity_delay = (message_length / 50) * random.uniform(1, 3)
-
-        delay = base_delay + complexity_delay
-
-        # Check for long delay (once per hour)
+        # First check for long delay (twice per day)
         if self._should_long_delay(contact_id):
             delay = random.uniform(self.LONG_DELAY_MIN, self.LONG_DELAY_MAX)
             self._last_long_delay[contact_id] = time.time()
             logger.info(f"[HUMAN] Long delay triggered for {contact_id}: {delay/60:.1f} min")
+            return delay
 
-        # Cap at max
-        return min(delay, self.LONG_DELAY_MAX)
+        # 70% instant, 30% normal
+        if random.random() < self.INSTANT_RESPONSE_CHANCE:
+            # Instant response: 5-15 seconds
+            delay = random.uniform(self.INSTANT_DELAY_MIN, self.INSTANT_DELAY_MAX)
+            logger.debug(f"[HUMAN] Instant response for {contact_id}: {delay:.0f}s")
+        else:
+            # Normal response: 30s - 3min
+            delay = random.uniform(self.NORMAL_DELAY_MIN, self.NORMAL_DELAY_MAX)
+            # Add small complexity factor for longer messages
+            complexity_delay = (message_length / 100) * random.uniform(1, 5)
+            delay += complexity_delay
+            delay = min(delay, self.NORMAL_DELAY_MAX)
+            logger.debug(f"[HUMAN] Normal delay for {contact_id}: {delay:.0f}s")
+
+        return delay
 
     def _calculate_typing_duration(self, message_length: int) -> float:
         """
