@@ -105,8 +105,9 @@ async def run_playground(
     """Run interactive playground."""
     print_header()
 
-    # Get channel config
-    channels = config_manager.output_channels
+    # Load config and get channels
+    config_manager.load()
+    channels = config_manager.channels
     if not channels:
         print(f"{Colors.RED}No channels configured!{Colors.ENDC}")
         return
@@ -127,15 +128,20 @@ async def run_playground(
         storage.clear(contact_id)
         print(f"{Colors.YELLOW}Working memory cleared.{Colors.ENDC}")
 
-    # Create AI handler
+    # Create AI handler using channel's AI config
+    ch_ai = channel.ai_config  # This is already an AIConfig dataclass
     ai_config = AIConfig(
         mode="auto",
-        llm_provider=channel.ai_config.get("llm_provider", "groq"),
-        llm_model=channel.ai_config.get("llm_model", "llama-3.3-70b-versatile"),
-        persona_file=channel.ai_config.get("persona_file", "personas/default.txt"),
-        use_state_analyzer=channel.ai_config.get("use_state_analyzer", True),
-        prompts_dir=channel.ai_config.get("prompts_dir", "prompts"),
-        states_dir=channel.ai_config.get("states_dir", "data/conversation_states"),
+        llm_provider=ch_ai.llm_provider,
+        llm_model=ch_ai.llm_model,
+        persona_file=ch_ai.persona_file,
+        use_state_analyzer=True,
+        prompts_dir="prompts",
+        states_dir="data/conversation_states",
+        context_window_messages=ch_ai.context_window_messages,
+        use_weaviate=ch_ai.use_weaviate,
+        weaviate_host=ch_ai.weaviate_host,
+        weaviate_port=ch_ai.weaviate_port,
     )
 
     handler = AIConversationHandler(
