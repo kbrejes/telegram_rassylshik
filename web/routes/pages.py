@@ -76,3 +76,12 @@ async def status_redirect():
     """Redirect /status to /agents"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/agents", status_code=301)
+
+
+@router.get("/ai-stats")
+async def ai_stats_page(request: Request):
+    """AI self-correction stats dashboard"""
+    return templates.TemplateResponse(
+        "ai_stats.html",
+        {"request": request}
+    )

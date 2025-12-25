@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Stats - Job Notification Bot</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #1976d2;
+        }
+
+        .stat-card .label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .stat-card.success .value { color: #4caf50; }
+        .stat-card.warning .value { color: #ff9800; }
+        .stat-card.error .value { color: #f44336; }
+
+        .section {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 1.5rem;
+        }
+
+        .section h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #1976d2;
+            padding-bottom: 10px;
+        }
+
+        .outcome-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .outcome-badge.call_scheduled { background: #c8e6c9; color: #2e7d32; }
+        .outcome-badge.declined { background: #ffcdd2; color: #c62828; }
+        .outcome-badge.disengaged { background: #fff3e0; color: #e65100; }
+        .outcome-badge.ongoing { background: #e3f2fd; color: #1565c0; }
+
+        .outcomes-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .outcomes-table th, .outcomes-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .outcomes-table th {
+            background: #f5f5f5;
+            font-weight: 600;
+        }
+
+        .outcomes-table tr:hover {
+            background: #f9f9f9;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+
+        .breakdown-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .breakdown-item {
+            background: #f5f5f5;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .breakdown-item .count {
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        .nav-link {
+            color: #1976d2;
+            text-decoration: none;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+
+        .refresh-btn {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .refresh-btn:hover {
+            background: #1565c0;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>AI Self-Correction Stats</h1>
+            <p><a href="/" class="nav-link">&larr; Back to Channels</a> | <a href="/agents" class="nav-link">Agents</a></p>
+        </div>
+
+        <div id="loading" class="loading">Loading stats...</div>
+
+        <div id="content" style="display: none;">
+            <!-- Stats Overview -->
+            <div class="stats-grid" id="stats-grid"></div>
+
+            <!-- Outcome Breakdown -->
+            <div class="section">
+                <h3>Outcome Breakdown</h3>
+                <div class="breakdown-list" id="outcome-breakdown"></div>
+            </div>
+
+            <!-- Recent Outcomes -->
+            <div class="section">
+                <h3>Recent Outcomes</h3>
+                <div id="recent-outcomes"></div>
+            </div>
+
+            <!-- Experiments -->
+            <div class="section">
+                <h3>A/B Experiments</h3>
+                <div id="experiments"></div>
+            </div>
+
+            <!-- Suggestions -->
+            <div class="section">
+                <h3>Prompt Improvement Suggestions</h3>
+                <div id="suggestions"></div>
+            </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <button class="refresh-btn" onclick="loadStats()">Refresh Stats</button>
+        </div>
+    </div>
+
+    <script>
+        async function loadStats() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('content').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/ai/stats');
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load stats');
+                }
+
+                renderStats(data);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+            } catch (error) {
+                document.getElementById('loading').innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">⚠️</div>
+                        <div>Error loading stats: ${error.message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        function renderStats(data) {
+            const stats = data.stats;
+
+            // Stats grid
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="stat-card">
+                    <div class="value">${stats.total_outcomes}</div>
+                    <div class="label">Total Outcomes</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="value">${stats.outcome_breakdown.call_scheduled || 0}</div>
+                    <div class="label">Calls Scheduled</div>
+                </div>
+                <div class="stat-card error">
+                    <div class="value">${stats.outcome_breakdown.declined || 0}</div>
+                    <div class="label">Declined</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="value">${stats.outcome_breakdown.disengaged || 0}</div>
+                    <div class="label">Disengaged</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">${stats.experiments_count}</div>
+                    <div class="label">Experiments</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">${stats.suggestions_count}</div>
+                    <div class="label">Suggestions</div>
+                </div>
+            `;
+
+            // Outcome breakdown
+            const breakdown = stats.outcome_breakdown;
+            if (Object.keys(breakdown).length > 0) {
+                document.getElementById('outcome-breakdown').innerHTML = Object.entries(breakdown)
+                    .map(([outcome, count]) => `
+                        <div class="breakdown-item">
+                            <span class="outcome-badge ${outcome}">${outcome}</span>
+                            <span class="count">${count}</span>
+                        </div>
+                    `).join('');
+            } else {
+                document.getElementById('outcome-breakdown').innerHTML = '<div class="empty-state">No outcomes recorded yet</div>';
+            }
+
+            // Recent outcomes
+            if (data.recent_outcomes.length > 0) {
+                document.getElementById('recent-outcomes').innerHTML = `
+                    <table class="outcomes-table">
+                        <thead>
+                            <tr>
+                                <th>Contact</th>
+                                <th>Outcome</th>
+                                <th>Messages</th>
+                                <th>Channel</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.recent_outcomes.map(o => `
+                                <tr>
+                                    <td>${o.contact_id}</td>
+                                    <td><span class="outcome-badge ${o.outcome}">${o.outcome}</span></td>
+                                    <td>${o.total_messages || '-'}</td>
+                                    <td>${o.channel_id}</td>
+                                    <td>${o.created_at || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                document.getElementById('recent-outcomes').innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📊</div>
+                        <div>No outcomes recorded yet. Start conversations to see data here.</div>
+                    </div>
+                `;
+            }
+
+            // Experiments
+            if (data.experiments.length > 0) {
+                document.getElementById('experiments').innerHTML = `
+                    <table class="outcomes-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Started</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.experiments.map(e => `
+                                <tr>
+                                    <td>${e.name}</td>
+                                    <td>${e.prompt_type}</td>
+                                    <td>${e.status}</td>
+                                    <td>${e.start_date || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                document.getElementById('experiments').innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">🧪</div>
+                        <div>No A/B experiments yet. They will be created automatically after enough data is collected.</div>
+                    </div>
+                `;
+            }
+
+            // Suggestions
+            if (data.suggestions.length > 0) {
+                document.getElementById('suggestions').innerHTML = `
+                    <table class="outcomes-table">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Reasoning</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.suggestions.map(s => `
+                                <tr>
+                                    <td>${s.status}</td>
+                                    <td>${s.reasoning || '-'}</td>
+                                    <td>${s.created_at || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                document.getElementById('suggestions').innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">💡</div>
+                        <div>No prompt improvement suggestions yet. The system will analyze failed conversations and suggest improvements.</div>
+                    </div>
+                `;
+            }
+        }
+
+        // Load on page load
+        loadStats();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadStats, 30000);
+    </script>
+</body>
+</html>

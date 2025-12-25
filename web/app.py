@@ -121,6 +121,7 @@ from web.routes.auth import router as auth_router, bot_state
 from web.routes.telegram import router as telegram_router
 from web.routes.channel_creation import router as channel_creation_router
 from web.routes.status import router as status_router
+from web.routes.ai_stats import router as ai_stats_router
 
 # Register all routers
 app.include_router(pages_router)
@@ -132,6 +133,7 @@ app.include_router(auth_router)
 app.include_router(telegram_router)
 app.include_router(channel_creation_router)
 app.include_router(status_router)
+app.include_router(ai_stats_router)
 
 
 # ==================== Stats Endpoint ====================
