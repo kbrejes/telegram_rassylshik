@@ -52,9 +52,9 @@ class AIConfig:
     prompts_dir: str = "prompts"
     states_dir: str = "data/conversation_states"
 
-    # Self-correcting system settings
-    use_self_correction: bool = True  # Enable A/B testing and prompt optimization
-    enable_contact_learning: bool = True  # Enable per-contact-type learning
+    # Self-correcting system settings (disabled - replaced by playground testing)
+    use_self_correction: bool = False
+    enable_contact_learning: bool = False
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AIConfig":
@@ -77,8 +77,8 @@ class AIConfig:
             use_state_analyzer=data.get("use_state_analyzer", True),
             prompts_dir=data.get("prompts_dir", "prompts"),
             states_dir=data.get("states_dir", "data/conversation_states"),
-            use_self_correction=data.get("use_self_correction", True),
-            enable_contact_learning=data.get("enable_contact_learning", True),
+            use_self_correction=data.get("use_self_correction", False),
+            enable_contact_learning=data.get("enable_contact_learning", False),
         )
 
 
