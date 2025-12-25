@@ -278,6 +278,16 @@
             min-height: 100px;
             resize: vertical;
         }
+
+        .textarea-auto {
+            width: 100% !important;
+            min-height: 60px;
+            max-height: 600px;
+            overflow-y: auto;
+            resize: none;
+            box-sizing: border-box;
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -408,33 +418,33 @@
 
                         <div style="margin-bottom: 15px;">
                             <label><strong>Базовый контекст</strong></label>
-                            <textarea id="prompt_base_context" class="textarea" style="min-height: 150px;" placeholder="Загрузка..."></textarea>
+                            <textarea id="prompt_base_context" class="textarea textarea-auto" placeholder="Загрузка..."></textarea>
                             <p class="help-text">Общий контекст и стиль общения AI</p>
                         </div>
 
                         <div style="margin-bottom: 15px;">
                             <label><strong>Discovery (знакомство)</strong></label>
-                            <textarea id="prompt_discovery" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                            <textarea id="prompt_discovery" class="textarea textarea-auto" placeholder="Загрузка..."></textarea>
                         </div>
 
                         <div style="margin-bottom: 15px;">
                             <label><strong>Engagement (вовлечение)</strong></label>
-                            <textarea id="prompt_engagement" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                            <textarea id="prompt_engagement" class="textarea textarea-auto" placeholder="Загрузка..."></textarea>
                         </div>
 
                         <div style="margin-bottom: 15px;">
                             <label><strong>Call Ready (готов к звонку)</strong></label>
-                            <textarea id="prompt_call_ready" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                            <textarea id="prompt_call_ready" class="textarea textarea-auto" placeholder="Загрузка..."></textarea>
                         </div>
 
                         <div style="margin-bottom: 15px;">
                             <label><strong>Call Pending (звонок запланирован)</strong></label>
-                            <textarea id="prompt_call_pending" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                            <textarea id="prompt_call_pending" class="textarea textarea-auto" placeholder="Загрузка..."></textarea>
                         </div>
 
                         <div>
                             <label><strong>Call Declined (звонок отклонен)</strong></label>
-                            <textarea id="prompt_call_declined" class="textarea" style="min-height: 100px;" placeholder="Загрузка..."></textarea>
+                            <textarea id="prompt_call_declined" class="textarea textarea-auto" placeholder="Загрузка..."></textarea>
                         </div>
                     </div>
                 </div>
@@ -490,12 +500,25 @@
         let agentAuthState = { step: 'phone', sessionName: null };
         let defaultPrompts = {};
 
+        // Auto-resize textarea to fit content
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 600) + 'px';
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
             await loadAvailableAgents();
             await loadSavedTemplates();
             await loadSavedSourceLists();
             await loadDefaultPrompts();
+
+            // Setup auto-resize for all textareas with textarea-auto class
+            document.querySelectorAll('.textarea-auto').forEach(textarea => {
+                textarea.addEventListener('input', () => autoResize(textarea));
+                // Initial resize after content is loaded
+                setTimeout(() => autoResize(textarea), 100);
+            });
         });
 
         // Load default prompts from server
@@ -533,6 +556,15 @@
         function toggleSection(header) {
             const section = header.parentElement;
             section.classList.toggle('open');
+
+            // Auto-resize textareas when section opens
+            if (section.classList.contains('open')) {
+                setTimeout(() => {
+                    section.querySelectorAll('.textarea-auto').forEach(textarea => {
+                        autoResize(textarea);
+                    });
+                }, 10);
+            }
         }
 
         // Load available agents from backend
@@ -556,12 +588,18 @@
             let html = '';
             availableAgents.forEach(agent => {
                 const isSelected = selectedAgents.includes(agent.session_name);
+                // Build meta info: @username | phone
+                let meta = '';
+                if (agent.username) meta = `@${agent.username}`;
+                if (agent.phone) meta += (meta ? ' | ' : '') + agent.phone;
+                if (!meta) meta = agent.session_name;
+
                 html += `
                     <div class="agent-card ${isSelected ? 'selected' : ''}"
                          onclick="toggleAgent('${agent.session_name}')">
                         <span class="checkmark">✓</span>
                         <div class="agent-name">${agent.name || 'Агент'}</div>
-                        <div class="agent-phone">${agent.phone}</div>
+                        <div class="agent-phone">${meta}</div>
                     </div>
                 `;
             });
@@ -758,12 +796,20 @@
                     const data = await response.json();
 
                     if (data.success) {
-                        agentAuthState.step = 'code';
-                        agentAuthState.sessionName = data.session_name;
-                        document.getElementById('agent_code_section').style.display = 'block';
-                        btn.textContent = 'Подтвердить код';
-                        status.textContent = 'Код отправлен в Telegram';
-                        status.className = 'status-message success';
+                        // Check if already authenticated
+                        if (data.already_authenticated) {
+                            status.textContent = '✅ Агент уже существует: ' + (data.name || 'Успешно');
+                            status.className = 'status-message success';
+                            await loadAvailableAgents();
+                            setTimeout(closeAgentModal, 1500);
+                        } else {
+                            agentAuthState.step = 'code';
+                            agentAuthState.sessionName = data.session_name;
+                            document.getElementById('agent_code_section').style.display = 'block';
+                            btn.textContent = 'Подтвердить код';
+                            status.textContent = 'Код отправлен в Telegram';
+                            status.className = 'status-message success';
+                        }
                     } else {
                         status.textContent = data.message || 'Ошибка';
                         status.className = 'status-message error';

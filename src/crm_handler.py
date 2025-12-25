@@ -4,6 +4,7 @@ CRM Handler - логика автоответов, топиков и транс�
 """
 import asyncio
 import logging
+import time
 from typing import Dict, List, Optional, Set, TYPE_CHECKING
 
 from telethon import TelegramClient, events
@@ -12,6 +13,7 @@ from telethon.tl.types import User, Chat, Channel
 from src.agent_account import AgentAccount
 from src.agent_pool import AgentPool
 from src.conversation_manager import ConversationManager
+from src.connection_status import status_manager
 from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig as AIHandlerConfig
 from src.config_manager import ChannelConfig
 
@@ -100,8 +102,12 @@ class CRMHandler:
             try:
                 await primary_agent.client.get_entity(channel.crm_group_id)
                 logger.debug(f"  Агент получил доступ к CRM группе {channel.crm_group_id}")
+                # Update CRM status as accessible
+                status_manager.update_crm_status(channel.id, channel.crm_group_id, True)
             except Exception as e:
                 logger.warning(f"  Агент не может получить доступ к CRM группе: {e}")
+                # Update CRM status as inaccessible
+                status_manager.update_crm_status(channel.id, channel.crm_group_id, False, str(e))
                 # Продолжаем - возможно группа станет доступна позже
 
             # Создаем conversation manager
@@ -143,13 +149,25 @@ class CRMHandler:
         """Инициализация AI handler для канала"""
         try:
             ai_config = AIHandlerConfig.from_dict(channel.ai_config.to_dict())
+            start_time = time.time()
             ai_handler = await self.ai_handler_pool.get_or_create(
                 channel_id=channel.id,
                 ai_config=ai_config,
             )
+            latency_ms = int((time.time() - start_time) * 1000)
             self.ai_handlers[channel.id] = ai_handler
+
+            # Update LLM status
+            provider_name = ai_config.provider if hasattr(ai_config, 'provider') else "groq"
+            status_manager.update_llm_status(provider_name, True, latency_ms)
+
             logger.info(f"  AI handler инициализирован (mode: {ai_config.mode})")
         except Exception as ai_error:
+            # Update LLM status as unreachable
+            provider_name = "groq"  # Default provider
+            if hasattr(channel, 'ai_config') and hasattr(channel.ai_config, 'provider'):
+                provider_name = channel.ai_config.provider
+            status_manager.update_llm_status(provider_name, False, error=str(ai_error))
             logger.warning(f"  Не удалось инициализировать AI: {ai_error}")
 
     def _register_contact_message_handler(self, agent_client: TelegramClient, channel_id: str):

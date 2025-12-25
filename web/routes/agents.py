@@ -10,6 +10,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from auth import agent_auth_manager
+from src.connection_status import status_manager
 from web.utils import (
     AgentAuthInitRequest, AgentAuthVerifyRequest, AgentAuthPasswordRequest,
     SaveTemplateRequest, SaveSourceListRequest,
@@ -121,13 +122,50 @@ async def agent_auth_start(request: AgentAuthStartRequest):
 
         logger.info(f"Начало авторизации агента: phone={request.phone}, session={session_name}")
         result = await agent_auth_manager.init_auth(request.phone, session_name)
+        logger.info(f"Init auth result for {session_name}: {result}")
 
-        if result.get("success") or result.get("needs_code"):
+        # If already authenticated, save status and return success immediately
+        if result.get("already_authenticated"):
+            user_info = result.get("user_info", {})
+            status_manager.update_agent_status(
+                session_name,
+                status="disconnected",
+                phone=user_info.get("phone", ""),
+                user_info=_transform_user_info(user_info)
+            )
+            return {
+                "success": True,
+                "already_authenticated": True,
+                "session_name": session_name,
+                "name": user_info.get("name", "Agent")
+            }
+
+        if result.get("needs_code"):
             return {"success": True, "session_name": session_name, "message": "Код отправлен"}
+
         return result
     except Exception as e:
         logger.error(f"Ошибка инициализации авторизации агента: {e}")
         return {"success": False, "message": str(e)}
+
+
+def _transform_user_info(auth_user_info: dict) -> dict:
+    """Transform auth user_info format to status user_info format."""
+    if not auth_user_info:
+        return None
+
+    # Auth returns: {name, username, id, phone?}
+    # Status expects: {id, first_name, last_name, username, phone?}
+    name = auth_user_info.get("name", "")
+    name_parts = name.split(" ", 1)
+
+    return {
+        "id": auth_user_info.get("id"),
+        "first_name": name_parts[0] if name_parts else "",
+        "last_name": name_parts[1] if len(name_parts) > 1 else "",
+        "username": auth_user_info.get("username"),
+        "phone": auth_user_info.get("phone")
+    }
 
 
 @router.post("/auth/verify")
@@ -136,9 +174,16 @@ async def agent_auth_verify(request: AgentAuthVerifyRequest):
     try:
         logger.info(f"Проверка кода для агента: session={request.session_name}")
         result = await agent_auth_manager.verify_code(request.session_name, request.code)
+        logger.info(f"Auth result for {request.session_name}: authenticated={result.get('authenticated')}, needs_password={result.get('needs_password')}, user_info={result.get('user_info')}")
 
         if result.get("authenticated"):
             user_info = result.get("user_info", {})
+            # Save user_info to connection status (transformed format)
+            status_manager.update_agent_status(
+                request.session_name,
+                status="disconnected",
+                user_info=_transform_user_info(user_info)
+            )
             return {"success": True, "name": user_info.get("name", "Агент")}
         elif result.get("needs_password"):
             return {"success": False, "requires_2fa": True, "message": "Требуется 2FA пароль"}
@@ -154,9 +199,16 @@ async def agent_auth_2fa(request: AgentAuthPasswordRequest):
     try:
         logger.info(f"Проверка 2FA для агента: session={request.session_name}")
         result = await agent_auth_manager.verify_password(request.session_name, request.password)
+        logger.info(f"2FA result for {request.session_name}: authenticated={result.get('authenticated')}, user_info={result.get('user_info')}")
 
         if result.get("authenticated"):
             user_info = result.get("user_info", {})
+            # Save user_info to connection status (transformed format)
+            status_manager.update_agent_status(
+                request.session_name,
+                status="disconnected",
+                user_info=_transform_user_info(user_info)
+            )
             return {"success": True, "name": user_info.get("name", "Агент")}
         return {"success": False, "message": result.get("message", "Неверный пароль")}
     except Exception as e:

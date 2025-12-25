@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agents - Job Notification Bot</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .dashboard-header h2 {
+            margin: 0;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 15px;
+        }
+
+        .agent-card {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 4px solid #9e9e9e;
+            transition: all 0.2s;
+        }
+
+        .agent-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .agent-card.connected {
+            border-left-color: #4caf50;
+        }
+
+        .agent-card.disconnected {
+            border-left-color: #9e9e9e;
+        }
+
+        .agent-card.flood_wait {
+            border-left-color: #ff9800;
+        }
+
+        .agent-card.error {
+            border-left-color: #f44336;
+        }
+
+        .agent-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .agent-card-header .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .agent-card-header .dot.connected {
+            background: #4caf50;
+            box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
+        }
+
+        .agent-card-header .dot.disconnected {
+            background: #9e9e9e;
+        }
+
+        .agent-card-header .dot.flood_wait {
+            background: #ff9800;
+            box-shadow: 0 0 8px rgba(255, 152, 0, 0.5);
+        }
+
+        .agent-card-header .dot.error {
+            background: #f44336;
+            box-shadow: 0 0 8px rgba(244, 67, 54, 0.5);
+        }
+
+        .agent-card-header .name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            flex: 1;
+        }
+
+        .agent-card-meta {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 12px;
+        }
+
+        .agent-card-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .add-agent-card {
+            background: #f8f9fa;
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 30px 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 120px;
+        }
+
+        .add-agent-card:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .add-agent-card .icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        .modal-content .form-group {
+            margin-bottom: 15px;
+        }
+
+        .modal-content label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .modal-content .input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+        }
+
+        .status-message {
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+
+        .status-message.info {
+            background: #cce5ff;
+            color: #004085;
+            display: block;
+        }
+
+        .loading-inline {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.success { background: #4caf50; }
+        .toast.error { background: #f44336; }
+        .toast.info { background: #2196f3; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .last-updated {
+            text-align: center;
+            color: #999;
+            font-size: 0.85rem;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Agents</h1>
+            <p><a href="/" class="nav-link">Back to Channels</a></p>
+        </div>
+
+        <!-- Bot Status -->
+        <div class="card">
+            <h2>Bot Status</h2>
+            <div id="bot-status" class="status-item disconnected">
+                <div class="status-info">
+                    <span class="status-dot disconnected"></span>
+                    <div class="status-details">
+                        <div class="status-name">Main Bot</div>
+                        <div class="status-meta" id="bot-meta">Checking...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agents -->
+        <div class="card">
+            <div class="dashboard-header">
+                <h2>Agents</h2>
+                <div class="header-actions">
+                    <button onclick="showAddAgentModal()" class="button button-primary button-small">+ Add Agent</button>
+                    <button onclick="connectAll()" class="button button-success button-small">Connect All</button>
+                    <button onclick="disconnectAll()" class="button button-warning button-small">Disconnect All</button>
+                </div>
+            </div>
+
+            <div class="agent-grid" id="agents-grid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading agents...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="last-updated" id="last-updated">
+            Last updated: --
+        </div>
+    </div>
+
+    <!-- Add Agent Modal -->
+    <div class="modal" id="add-agent-modal">
+        <div class="modal-content">
+            <h3>Add New Agent</h3>
+
+            <div class="form-group">
+                <label>Phone Number</label>
+                <input type="text" id="agent-phone" class="input" placeholder="+1 234 567 8900">
+            </div>
+
+            <div class="form-group" id="code-section" style="display: none;">
+                <label>Verification Code</label>
+                <input type="text" id="agent-code" class="input" placeholder="12345">
+            </div>
+
+            <div class="form-group" id="2fa-section" style="display: none;">
+                <label>2FA Password</label>
+                <input type="password" id="agent-2fa" class="input" placeholder="Password">
+            </div>
+
+            <div id="modal-status" class="status-message"></div>
+
+            <div class="modal-actions">
+                <button onclick="closeAddAgentModal()" class="button button-secondary">Cancel</button>
+                <button onclick="processAgentAuth()" class="button button-primary" id="auth-btn">Send Code</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pollingInterval = null;
+        let agentAuthState = { step: 'phone', sessionName: null };
+        let deletedAgents = new Set();  // Track recently deleted agents to hide them
+
+        // Fetch and display all status
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                if (data.success) {
+                    updateBotStatus(data.status.bot);
+                    updateAgentsGrid(data.status.agents);
+
+                    document.getElementById('last-updated').textContent =
+                        `Last updated: ${new Date(data.last_updated).toLocaleTimeString()}`;
+                }
+            } catch (error) {
+                console.error('Error loading status:', error);
+            }
+        }
+
+        // Load available sessions
+        async function loadSessions() {
+            try {
+                const response = await fetch('/api/status/sessions');
+                const data = await response.json();
+                return data.success ? data.sessions : [];
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+                return [];
+            }
+        }
+
+        function updateBotStatus(bot) {
+            const container = document.getElementById('bot-status');
+            const meta = document.getElementById('bot-meta');
+
+            if (bot.connected && bot.authorized) {
+                container.className = 'status-item connected';
+                container.querySelector('.status-dot').className = 'status-dot connected';
+                const userInfo = bot.user_info;
+                meta.textContent = userInfo
+                    ? `Connected as ${userInfo.first_name || ''} (@${userInfo.username || 'N/A'})`
+                    : 'Connected and authorized';
+            } else if (bot.connected) {
+                container.className = 'status-item flood_wait';
+                container.querySelector('.status-dot').className = 'status-dot yellow';
+                meta.textContent = 'Connected but not authorized';
+            } else {
+                container.className = 'status-item disconnected';
+                container.querySelector('.status-dot').className = 'status-dot disconnected';
+                meta.textContent = 'Disconnected';
+            }
+        }
+
+        async function updateAgentsGrid(agents) {
+            const container = document.getElementById('agents-grid');
+            const sessions = await loadSessions();
+
+            // Merge agents and sessions
+            const allAgents = new Map();
+
+            // Add registered agents
+            if (agents) {
+                for (const [name, agent] of Object.entries(agents)) {
+                    if (!deletedAgents.has(name)) {
+                        allAgents.set(name, { ...agent, registered: true });
+                    }
+                }
+            }
+
+            // Add sessions not in agents
+            for (const session of sessions) {
+                if (!allAgents.has(session.session_name) && !deletedAgents.has(session.session_name)) {
+                    allAgents.set(session.session_name, {
+                        status: 'disconnected',
+                        phone: '',
+                        user_info: session.user_info,
+                        registered: false
+                    });
+                }
+            }
+
+            let html = '';
+
+            for (const [sessionName, agent] of allAgents) {
+                const statusClass = agent.status || 'disconnected';
+                const userInfo = agent.user_info;
+
+                // Display name: use full name from user_info, fallback to session name
+                let displayName = sessionName;
+                if (userInfo) {
+                    const fullName = [userInfo.first_name, userInfo.last_name].filter(Boolean).join(' ');
+                    if (fullName) displayName = fullName;
+                }
+
+                // Meta: @username | phone
+                let meta = '';
+                if (userInfo) {
+                    if (userInfo.username) meta = `@${userInfo.username}`;
+                    if (userInfo.phone) meta += (meta ? ' | ' : '') + userInfo.phone;
+                }
+
+                if (agent.error_message) {
+                    meta += (meta ? ' - ' : '') + agent.error_message;
+                }
+
+                if (agent.flood_wait_until) {
+                    const remaining = Math.max(0, Math.ceil((agent.flood_wait_until - Date.now()/1000) / 60));
+                    meta += ` (wait ${remaining}m)`;
+                }
+
+                html += `
+                    <div class="agent-card ${statusClass}">
+                        <div class="agent-card-header">
+                            <span class="dot ${statusClass}"></span>
+                            <span class="name">${displayName}</span>
+                        </div>
+                        <div class="agent-card-meta">${meta || 'No info'}</div>
+                        <div class="agent-card-actions">
+                            ${statusClass === 'connected'
+                                ? `<button onclick="disconnectAgent('${sessionName}')" class="button button-warning button-small">Disconnect</button>`
+                                : `<button onclick="connectAgent('${sessionName}')" class="button button-success button-small">Connect</button>`
+                            }
+                            <button onclick="deleteAgent('${sessionName}')" class="button button-danger button-small">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Add "Add Agent" card
+            html += `
+                <div class="add-agent-card" onclick="showAddAgentModal()">
+                    <div class="icon">+</div>
+                    <div>Add New Agent</div>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // Agent control functions
+        async function connectAgent(sessionName) {
+            showToast(`Connecting ${sessionName}...`, 'info');
+            try {
+                const response = await fetch(`/api/status/agents/${sessionName}/connect`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(`Connect queued for ${sessionName}`);
+                    setTimeout(loadStatus, 1000);
+                } else {
+                    showToast(`Error: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function disconnectAgent(sessionName) {
+            try {
+                const response = await fetch(`/api/status/agents/${sessionName}/disconnect`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(`Disconnected ${sessionName}`);
+                    setTimeout(loadStatus, 1000);
+                } else {
+                    showToast(`Error: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function deleteAgent(sessionName) {
+            if (!confirm(`Delete agent ${sessionName}?\nThis will remove the session file.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/status/agents/${sessionName}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(`Deleted ${sessionName}`);
+                    // Track as deleted so it won't reappear on status reload
+                    deletedAgents.add(sessionName);
+                    // Immediately remove the card from DOM
+                    const cards = document.querySelectorAll('.agent-card');
+                    cards.forEach(card => {
+                        if (card.querySelector('.name')?.textContent === sessionName) {
+                            card.remove();
+                        }
+                    });
+                } else {
+                    showToast(`Error: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function connectAll() {
+            showToast('Connecting all agents...', 'info');
+            try {
+                const response = await fetch('/api/status/agents/connect-all', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Connect all queued');
+                    setTimeout(loadStatus, 2000);
+                } else {
+                    showToast(`Error: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function disconnectAll() {
+            if (!confirm('Disconnect all agents?')) return;
+
+            try {
+                const response = await fetch('/api/status/agents/disconnect-all', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Disconnected all agents');
+                    setTimeout(loadStatus, 2000);
+                } else {
+                    showToast(`Error: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Add Agent Modal
+        function showAddAgentModal() {
+            document.getElementById('add-agent-modal').classList.add('active');
+            agentAuthState = { step: 'phone', sessionName: null };
+            document.getElementById('agent-phone').value = '';
+            document.getElementById('agent-code').value = '';
+            document.getElementById('agent-2fa').value = '';
+            document.getElementById('code-section').style.display = 'none';
+            document.getElementById('2fa-section').style.display = 'none';
+            document.getElementById('auth-btn').textContent = 'Send Code';
+            document.getElementById('modal-status').className = 'status-message';
+        }
+
+        function closeAddAgentModal() {
+            document.getElementById('add-agent-modal').classList.remove('active');
+        }
+
+        async function processAgentAuth() {
+            const btn = document.getElementById('auth-btn');
+            const status = document.getElementById('modal-status');
+
+            btn.disabled = true;
+
+            try {
+                if (agentAuthState.step === 'phone') {
+                    const phone = document.getElementById('agent-phone').value.trim();
+                    if (!phone) {
+                        status.textContent = 'Enter phone number';
+                        status.className = 'status-message error';
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    btn.innerHTML = 'Sending... <span class="loading-inline"></span>';
+
+                    const response = await fetch('/api/agents/auth/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone })
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        // Check if already authenticated (session exists)
+                        if (data.already_authenticated) {
+                            status.textContent = 'Agent already exists: ' + (data.name || 'Success');
+                            status.className = 'status-message success';
+                            setTimeout(() => {
+                                closeAddAgentModal();
+                                loadStatus();
+                            }, 1500);
+                        } else {
+                            agentAuthState.step = 'code';
+                            agentAuthState.sessionName = data.session_name;
+                            document.getElementById('code-section').style.display = 'block';
+                            btn.textContent = 'Verify Code';
+                            status.textContent = 'Code sent to Telegram';
+                            status.className = 'status-message success';
+                        }
+                    } else {
+                        status.textContent = data.message || 'Error';
+                        status.className = 'status-message error';
+                    }
+                } else if (agentAuthState.step === 'code') {
+                    const code = document.getElementById('agent-code').value.trim();
+                    if (!code) {
+                        status.textContent = 'Enter verification code';
+                        status.className = 'status-message error';
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    btn.innerHTML = 'Verifying... <span class="loading-inline"></span>';
+
+                    const response = await fetch('/api/agents/auth/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            session_name: agentAuthState.sessionName,
+                            code
+                        })
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        status.textContent = 'Agent connected: ' + (data.name || 'Success');
+                        status.className = 'status-message success';
+                        setTimeout(() => {
+                            closeAddAgentModal();
+                            loadStatus();
+                        }, 1500);
+                    } else if (data.requires_2fa) {
+                        agentAuthState.step = '2fa';
+                        document.getElementById('2fa-section').style.display = 'block';
+                        btn.textContent = 'Verify Password';
+                        status.textContent = '2FA password required';
+                        status.className = 'status-message info';
+                    } else {
+                        status.textContent = data.message || 'Invalid code';
+                        status.className = 'status-message error';
+                    }
+                } else if (agentAuthState.step === '2fa') {
+                    const password = document.getElementById('agent-2fa').value;
+
+                    btn.innerHTML = 'Verifying... <span class="loading-inline"></span>';
+
+                    const response = await fetch('/api/agents/auth/2fa', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            session_name: agentAuthState.sessionName,
+                            password
+                        })
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        status.textContent = 'Agent connected: ' + (data.name || 'Success');
+                        status.className = 'status-message success';
+                        setTimeout(() => {
+                            closeAddAgentModal();
+                            loadStatus();
+                        }, 1500);
+                    } else {
+                        status.textContent = data.message || 'Invalid password';
+                        status.className = 'status-message error';
+                    }
+                }
+            } catch (e) {
+                status.textContent = 'Connection error';
+                status.className = 'status-message error';
+            }
+
+            btn.disabled = false;
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Polling
+        function startPolling() {
+            loadStatus();
+            pollingInterval = setInterval(loadStatus, 5000);
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                clearInterval(pollingInterval);
+            } else {
+                startPolling();
+            }
+        });
+
+        // Close modal on outside click
+        document.getElementById('add-agent-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'add-agent-modal') {
+                closeAddAgentModal();
+            }
+        });
+
+        // Initial load
+        startPolling();
+    </script>
+</body>
+</html>

@@ -14,70 +14,56 @@ SOURCE_LISTS_FILE = BASE_DIR.parent / "configs" / "source_lists.json"
 
 # ============== Telegram Client ==============
 
-def _read_session_string() -> str:
-    """
-    Читает сессию из SQLite и конвертирует в StringSession формат.
-    """
-    from telethon.sessions import SQLiteSession
-    from src.session_config import get_bot_session_path
-    import struct
-    import base64
-
-    bot_session_path = get_bot_session_path()
-
-    # Временно открываем SQLiteSession для чтения
-    temp_session = SQLiteSession(bot_session_path)
-
-    if temp_session.auth_key:
-        # Формат StringSession: 1 byte dc_id + 4 bytes ipv4 + 2 bytes port + 256 bytes auth_key
-        dc_id = temp_session.dc_id
-        # Получаем IP адрес DC
-        dc_addresses = {
-            1: "149.154.175.53",
-            2: "149.154.167.51",
-            3: "149.154.175.100",
-            4: "149.154.167.91",
-            5: "91.108.56.130",
-        }
-        ip = dc_addresses.get(dc_id, "149.154.167.51")
-        ip_bytes = bytes(map(int, ip.split('.')))
-        port = 443
-
-        data = struct.pack('>B4sH', dc_id, ip_bytes, port) + temp_session.auth_key.key
-        session_str = '1' + base64.urlsafe_b64encode(data).decode('ascii')
-
-        temp_session.close()
-        return session_str
-
-    temp_session.close()
-    return ""
-
-
 async def create_new_bot_client() -> "TelegramClient":
     """
     Создаёт клиент бота для веб-запросов.
-    Использует StringSession чтобы избежать database is locked.
+    Читает auth_key из SQLite и создаёт StringSession.
 
     Returns:
         TelegramClient: новый подключенный клиент
     """
     from telethon import TelegramClient
     from telethon.sessions import StringSession
+    from telethon.crypto import AuthKey
     from src.config import config
+    from src.session_config import get_bot_session_path
+    import sqlite3
+
+    session_path = get_bot_session_path()
+    session_file = f"{session_path}.session"
 
     try:
-        session_str = _read_session_string()
-        if session_str:
-            client = TelegramClient(StringSession(session_str), config.API_ID, config.API_HASH)
-        else:
-            logger.warning("Не удалось прочитать сессию, создаём пустую")
-            client = TelegramClient(StringSession(), config.API_ID, config.API_HASH)
-    except Exception as e:
-        logger.warning(f"Ошибка чтения сессии: {e}")
-        client = TelegramClient(StringSession(), config.API_ID, config.API_HASH)
+        # Читаем данные сессии напрямую из SQLite
+        conn = sqlite3.connect(session_file, timeout=5.0)
+        cursor = conn.cursor()
+        cursor.execute("SELECT dc_id, server_address, port, auth_key FROM sessions")
+        row = cursor.fetchone()
+        conn.close()
 
-    await client.connect()
-    return client
+        if not row:
+            raise ValueError("Сессия бота пустая или повреждена")
+
+        dc_id, server_address, port, auth_key_data = row
+
+        if not auth_key_data:
+            raise ValueError("Сессия бота не авторизована")
+
+        # Создаём StringSession и устанавливаем данные
+        string_session = StringSession()
+        string_session.set_dc(dc_id, server_address, port)
+        string_session._auth_key = AuthKey(auth_key_data)
+
+        client = TelegramClient(string_session, config.API_ID, config.API_HASH)
+        await client.connect()
+        return client
+
+    except sqlite3.OperationalError as e:
+        if "database is locked" in str(e):
+            raise Exception("Сессия бота заблокирована. Попробуйте позже.")
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка создания клиента бота: {e}")
+        raise
 
 
 async def get_or_create_bot_client() -> Tuple["TelegramClient", bool]:
@@ -198,17 +184,42 @@ def save_source_lists(lists: List[Dict[str, Any]]) -> None:
 
 
 def get_available_agents() -> List[Dict[str, str]]:
-    """Get list of all authorized agent sessions"""
+    """Get list of all authorized agent sessions with user info from status"""
     from src.session_config import SESSIONS_DIR
+    from src.connection_status import status_manager
+
+    # Get status data for user info
+    status = status_manager.get_all_status()
+    agents_status = status.get("agents", {})
 
     agents = []
     if SESSIONS_DIR.exists():
         for session_file in SESSIONS_DIR.glob("agent_*.session"):
             session_name = session_file.stem
+
+            # Get user info from status if available
+            agent_data = agents_status.get(session_name, {})
+            user_info = agent_data.get("user_info") or {}
+
+            # Build display name from user_info
+            if user_info:
+                first_name = user_info.get("first_name", "")
+                last_name = user_info.get("last_name", "")
+                full_name = f"{first_name} {last_name}".strip()
+                display_name = full_name if full_name else session_name
+                phone = user_info.get("phone", "")
+                username = user_info.get("username")
+            else:
+                display_name = session_name.replace("agent_", "Агент ")
+                phone = ""
+                username = None
+
             agents.append({
                 "session_name": session_name,
-                "phone": "",
-                "name": session_name.replace("agent_", "Агент ")
+                "phone": phone,
+                "name": display_name,
+                "username": username,
+                "status": agent_data.get("status", "disconnected")
             })
     return agents
 

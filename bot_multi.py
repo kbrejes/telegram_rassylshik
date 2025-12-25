@@ -13,9 +13,11 @@ from src.config import config
 from src.database import db
 from src.message_processor import message_processor
 from src.config_manager import ConfigManager, ChannelConfig, AIConfig
-from src.agent_pool import disconnect_all_global_agents
+from src.agent_pool import disconnect_all_global_agents, get_or_create_agent, get_existing_agent
 from src.crm_handler import CRMHandler
-from src.session_config import get_bot_session_path
+from src.session_config import get_bot_session_path, get_agent_session_path, SESSIONS_DIR
+from src.connection_status import status_manager
+from src.command_queue import command_queue
 
 logger = logging.getLogger(__name__)
 
@@ -208,15 +210,31 @@ class MultiChannelJobMonitorBot:
                         # Иначе это username, получаем entity
                         entity = await self.client.get_entity(source)
                         channel_id = entity.id
-                    
+
                     # Получаем название канала
                     channel_title = self._get_chat_title(entity)
-                    
+
                     self.monitored_sources.add(channel_id)
                     self.channel_names[channel_id] = channel_title
-                
+
+                    # Update source status
+                    status_manager.update_source_status(
+                        source,
+                        channel_id=channel_id,
+                        accessible=True,
+                        is_member=True,
+                        title=channel_title
+                    )
+
                 except Exception as e:
                     logger.error(f"  ✗ Ошибка загрузки источника '{source}': {e}")
+                    # Update source status as inaccessible
+                    status_manager.update_source_status(
+                        source,
+                        accessible=False,
+                        is_member=False,
+                        error=str(e)
+                    )
             
             logger.info(f"Всего загружено {len(self.monitored_sources)} источников для мониторинга")
         
@@ -241,15 +259,15 @@ class MultiChannelJobMonitorBot:
             try:
                 message = event.message
                 chat = await event.get_chat()
-                
+
                 # Проверяем, нужно ли мониторить этот чат
                 if chat.id not in self.monitored_sources:
                     return
-                
+
                 # Игнорируем собственные сообщения
                 if message.out:
                     return
-                
+
                 await self.process_message(message, chat)
             
             except Exception as e:
@@ -285,6 +303,174 @@ class MultiChannelJobMonitorBot:
             except Exception as e:
                 logger.error(f"Ошибка при проверке конфигурации: {e}")
     
+    async def process_commands(self):
+        """Background task to process commands from web interface"""
+        logger.info("Command processor started (checking every 2 seconds)")
+
+        while True:
+            try:
+                await asyncio.sleep(2)
+
+                # Cleanup old commands periodically
+                command_queue.cleanup_old_commands(max_age_hours=1)
+
+                # Get pending commands
+                pending = command_queue.get_pending_commands()
+                if not pending:
+                    continue
+
+                for cmd in pending:
+                    command_queue.mark_processing(cmd.id)
+                    logger.info(f"Processing command: {cmd.type} -> {cmd.target}")
+
+                    try:
+                        if cmd.type == "connect_agent":
+                            await self._cmd_connect_agent(cmd.target)
+                            command_queue.mark_completed(cmd.id, True, f"Agent {cmd.target} connected")
+
+                        elif cmd.type == "disconnect_agent":
+                            await self._cmd_disconnect_agent(cmd.target)
+                            command_queue.mark_completed(cmd.id, True, f"Agent {cmd.target} disconnected")
+
+                        elif cmd.type == "delete_agent":
+                            await self._cmd_delete_agent(cmd.target)
+                            command_queue.mark_completed(cmd.id, True, f"Agent {cmd.target} deleted")
+
+                        elif cmd.type == "connect_all":
+                            count = await self._cmd_connect_all()
+                            command_queue.mark_completed(cmd.id, True, f"Connected {count} agents")
+
+                        elif cmd.type == "disconnect_all":
+                            count = await self._cmd_disconnect_all()
+                            command_queue.mark_completed(cmd.id, True, f"Disconnected {count} agents")
+
+                        elif cmd.type == "health_check":
+                            await self._cmd_health_check()
+                            command_queue.mark_completed(cmd.id, True, "Health check completed")
+
+                        else:
+                            command_queue.mark_completed(cmd.id, False, f"Unknown command: {cmd.type}")
+
+                    except Exception as e:
+                        logger.error(f"Error executing command {cmd.id}: {e}")
+                        command_queue.mark_completed(cmd.id, False, str(e))
+
+            except Exception as e:
+                logger.error(f"Error in command processor: {e}")
+
+    async def _cmd_connect_agent(self, session_name: str):
+        """Connect a specific agent"""
+        session_path = get_agent_session_path(session_name)
+        if not Path(f"{session_path}.session").exists():
+            raise FileNotFoundError(f"Session file not found: {session_name}")
+
+        # Find phone from config
+        phone = None
+        for channel in self.output_channels:
+            if channel.crm_enabled:
+                for agent in channel.agents:
+                    if agent.session_name == session_name:
+                        phone = agent.phone
+                        break
+                if phone:
+                    break
+
+        if not phone:
+            # Try to get from existing agent status
+            status = status_manager.get_all_status()
+            agent_status = status.get("agents", {}).get(session_name, {})
+            phone = agent_status.get("phone", "")
+
+        agent = await get_or_create_agent(session_name, phone or "")
+        if agent and agent.client.is_connected():
+            user_info = None
+            try:
+                me = await agent.client.get_me()
+                user_info = {
+                    "id": me.id,
+                    "first_name": me.first_name,
+                    "last_name": me.last_name,
+                    "username": me.username,
+                    "phone": me.phone
+                }
+            except Exception:
+                pass
+            status_manager.update_agent_status(session_name, "connected", phone or "", user_info=user_info)
+            logger.info(f"Agent {session_name} connected successfully")
+        else:
+            status_manager.update_agent_status(session_name, "error", phone or "", error="Failed to connect")
+            raise Exception(f"Failed to connect agent {session_name}")
+
+    async def _cmd_disconnect_agent(self, session_name: str):
+        """Disconnect a specific agent"""
+        agent = await get_existing_agent(session_name)
+        if agent:
+            await agent.disconnect()
+            status_manager.update_agent_status(session_name, "disconnected")
+            logger.info(f"Agent {session_name} disconnected")
+        else:
+            status_manager.update_agent_status(session_name, "disconnected")
+            logger.info(f"Agent {session_name} was not connected")
+
+    async def _cmd_delete_agent(self, session_name: str):
+        """Disconnect and delete agent session file"""
+        # First disconnect
+        await self._cmd_disconnect_agent(session_name)
+
+        # Remove from status tracking
+        status_manager.remove_agent_status(session_name)
+
+        # Delete session file
+        session_file = SESSIONS_DIR / f"{session_name}.session"
+        if session_file.exists():
+            session_file.unlink()
+            logger.info(f"Deleted session file: {session_file}")
+
+    async def _cmd_connect_all(self) -> int:
+        """Connect all agents from configuration"""
+        count = 0
+        for channel in self.output_channels:
+            if channel.crm_enabled:
+                for agent_config in channel.agents:
+                    try:
+                        await self._cmd_connect_agent(agent_config.session_name)
+                        count += 1
+                    except Exception as e:
+                        logger.error(f"Failed to connect {agent_config.session_name}: {e}")
+        return count
+
+    async def _cmd_disconnect_all(self) -> int:
+        """Disconnect all agents"""
+        count = await disconnect_all_global_agents()
+        # Update status for all agents
+        status = status_manager.get_all_status()
+        for session_name in status.get("agents", {}).keys():
+            status_manager.update_agent_status(session_name, "disconnected")
+        return count
+
+    async def _cmd_health_check(self):
+        """Check health of all connections"""
+        # Bot status
+        try:
+            if self.client.is_connected():
+                me = await self.client.get_me()
+                user_info = {
+                    "id": me.id,
+                    "first_name": me.first_name,
+                    "last_name": me.last_name,
+                    "username": me.username,
+                    "phone": me.phone
+                }
+                status_manager.update_bot_status(True, True, user_info)
+            else:
+                status_manager.update_bot_status(False, False)
+        except Exception as e:
+            logger.error(f"Bot health check failed: {e}")
+            status_manager.update_bot_status(False, False)
+
+        # Agent statuses are updated by agent_pool callbacks
+        logger.info("Health check completed")
+
     async def reload_configuration(self):
         """Перезагрузка конфигурации без перезапуска бота"""
         try:
@@ -619,16 +805,33 @@ class MultiChannelJobMonitorBot:
         """Основной цикл работы бота"""
         logger.info("Бот начал мониторинг сообщений...")
         logger.info("Нажмите Ctrl+C для остановки")
-        
-        # Запускаем фоновую задачу мониторинга конфигурации
+
+        # Update bot status
+        try:
+            me = await self.client.get_me()
+            user_info = {
+                "id": me.id,
+                "first_name": me.first_name,
+                "last_name": me.last_name,
+                "username": me.username,
+                "phone": me.phone
+            }
+            status_manager.update_bot_status(True, True, user_info)
+        except Exception as e:
+            logger.error(f"Failed to update bot status: {e}")
+            status_manager.update_bot_status(True, False)
+
+        # Запускаем фоновые задачи
         config_watcher = asyncio.create_task(self.watch_config_changes())
-        
+        command_processor = asyncio.create_task(self.process_commands())
+
         try:
             await self.client.run_until_disconnected()
         except KeyboardInterrupt:
             logger.info("Получен сигнал остановки")
         finally:
-            config_watcher.cancel()  # Останавливаем watcher
+            config_watcher.cancel()
+            command_processor.cancel()
             await self.stop()
     
     async def stop(self):
@@ -636,11 +839,19 @@ class MultiChannelJobMonitorBot:
         logger.info("Остановка бота...")
         self.is_running = False
 
+        # Update bot status
+        status_manager.update_bot_status(False, False)
+
         # Очищаем CRM ресурсы
         await self.crm.cleanup()
 
         # Отключаем всех глобальных агентов
         await disconnect_all_global_agents()
+
+        # Update all agents to disconnected
+        status = status_manager.get_all_status()
+        for session_name in status.get("agents", {}).keys():
+            status_manager.update_agent_status(session_name, "disconnected")
 
         # Закрываем соединение с БД
         await db.close()

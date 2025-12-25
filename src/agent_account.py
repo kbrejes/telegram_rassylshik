@@ -4,6 +4,7 @@ Agent account management for Telegram user accounts
 """
 import asyncio
 import logging
+import time
 from typing import Optional, Union
 from pathlib import Path
 from telethon import TelegramClient, errors
@@ -12,6 +13,7 @@ from src.config import config
 from utils.retry import FloodWaitTracker, format_wait_time
 from src.session_config import get_agent_session_path, delete_session_file
 from auth.base import TimeoutSQLiteSession
+from src.connection_status import status_manager
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +217,18 @@ class AgentAccount:
             seconds: Количество секунд ожидания
         """
         self._flood_tracker.set_flood_wait(seconds)
+        flood_wait_until = time.time() + seconds
+
+        # Update status with flood wait info
+        # Extract just the session name from full path for status update
+        session_name_only = Path(self.session_name).name
+        status_manager.update_agent_status(
+            session_name_only,
+            "flood_wait",
+            self.phone or "",
+            flood_wait_until=flood_wait_until
+        )
+
         logger.warning(
             f"Агент {self.session_name}: Недоступен {format_wait_time(seconds)}"
         )

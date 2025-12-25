@@ -148,9 +148,22 @@ finally:
 
 **ALWAYS use gcloud for server access, NEVER use direct SSH:**
 ```bash
-# CORRECT - use gcloud:
-gcloud compute ssh root@instance-1 --zone=europe-central2-a --command="<command>"
+# CORRECT - use gcloud with IAP tunnel:
+gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap
+
+# With command:
+gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap --command="sudo <command>"
 
 # WRONG - never use direct SSH:
-ssh root@45.93.139.162  # DO NOT USE
+ssh root@35.188.128.163  # DO NOT USE
+```
+
+**Project path on server:**
+```
+/home/brejestovski_kirill/telegram_rassylshik/
+```
+
+**Check logs on server:**
+```bash
+gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap --command="sudo tail -100 /home/brejestovski_kirill/telegram_rassylshik/logs/bot_multi.log"
 ```

@@ -1,0 +1,148 @@
+{
+  "commands": [
+    {
+      "id": "cmd_9f87fa6d",
+      "type": "delete_agent",
+      "target": "bot_session",
+      "created_at": "2025-12-25T16:15:49.669595",
+      "status": "failed",
+      "result_message": "database is locked"
+    },
+    {
+      "id": "cmd_5c8d8e06",
+      "type": "delete_agent",
+      "target": "bot_session",
+      "created_at": "2025-12-25T16:16:24.923875",
+      "status": "failed",
+      "result_message": "database is locked"
+    },
+    {
+      "id": "cmd_360438ca",
+      "type": "delete_agent",
+      "target": "bot_session",
+      "created_at": "2025-12-25T16:16:30.777819",
+      "status": "failed",
+      "result_message": "database is locked"
+    },
+    {
+      "id": "cmd_9b116614",
+      "type": "delete_agent",
+      "target": "bot_session",
+      "created_at": "2025-12-25T16:19:42.363701",
+      "status": "failed",
+      "result_message": "database is locked"
+    },
+    {
+      "id": "cmd_0930cd1a",
+      "type": "delete_agent",
+      "target": "bot_session",
+      "created_at": "2025-12-25T16:19:45.729401",
+      "status": "failed",
+      "result_message": "database is locked"
+    },
+    {
+      "id": "cmd_96e937d0",
+      "type": "delete_agent",
+      "target": "agent_2604",
+      "created_at": "2025-12-25T16:20:29.956774",
+      "status": "completed",
+      "result_message": "Agent agent_2604 deleted"
+    },
+    {
+      "id": "cmd_30c13733",
+      "type": "delete_agent",
+      "target": "bot_session",
+      "created_at": "2025-12-25T16:21:17.058654",
+      "status": "failed",
+      "result_message": "database is locked"
+    },
+    {
+      "id": "cmd_21cc986d",
+      "type": "delete_agent",
+      "target": "agent_3004",
+      "created_at": "2025-12-25T16:33:15.364639",
+      "status": "completed",
+      "result_message": "Agent agent_3004 deleted"
+    },
+    {
+      "id": "cmd_bd11932a",
+      "type": "connect_agent",
+      "target": "agent_3004",
+      "created_at": "2025-12-25T16:34:54.061766",
+      "status": "completed",
+      "result_message": "Agent agent_3004 connected"
+    },
+    {
+      "id": "cmd_3d8ae86f",
+      "type": "delete_agent",
+      "target": "agent_3004",
+      "created_at": "2025-12-25T16:36:45.859426",
+      "status": "completed",
+      "result_message": "Agent agent_3004 deleted"
+    },
+    {
+      "id": "cmd_ba0f6730",
+      "type": "delete_agent",
+      "target": "agent_3004",
+      "created_at": "2025-12-25T16:46:46.465084",
+      "status": "completed",
+      "result_message": "Agent agent_3004 deleted"
+    },
+    {
+      "id": "cmd_d31db654",
+      "type": "delete_agent",
+      "target": "agent_1067",
+      "created_at": "2025-12-25T16:46:48.433991",
+      "status": "completed",
+      "result_message": "Agent agent_1067 deleted"
+    },
+    {
+      "id": "cmd_c4f3a9b0",
+      "type": "delete_agent",
+      "target": "agent_1067",
+      "created_at": "2025-12-25T16:54:58.300967",
+      "status": "completed",
+      "result_message": "Agent agent_1067 deleted"
+    },
+    {
+      "id": "cmd_64e91df7",
+      "type": "delete_agent",
+      "target": "agent_1067",
+      "created_at": "2025-12-25T16:56:10.039562",
+      "status": "completed",
+      "result_message": "Agent agent_1067 deleted"
+    },
+    {
+      "id": "cmd_7c43643a",
+      "type": "delete_agent",
+      "target": "agent_0272",
+      "created_at": "2025-12-25T16:57:38.247604",
+      "status": "completed",
+      "result_message": "Agent agent_0272 deleted"
+    },
+    {
+      "id": "cmd_a5b61605",
+      "type": "delete_agent",
+      "target": "agent_1067",
+      "created_at": "2025-12-25T16:57:43.339285",
+      "status": "completed",
+      "result_message": "Agent agent_1067 deleted"
+    },
+    {
+      "id": "cmd_08d29968",
+      "type": "connect_agent",
+      "target": "agent_1067",
+      "created_at": "2025-12-25T16:58:17.486387",
+      "status": "completed",
+      "result_message": "Agent agent_1067 connected"
+    },
+    {
+      "id": "cmd_832a7510",
+      "type": "connect_agent",
+      "target": "agent_3004",
+      "created_at": "2025-12-25T17:05:07.566415",
+      "status": "completed",
+      "result_message": "Agent agent_3004 connected"
+    }
+  ]
+}

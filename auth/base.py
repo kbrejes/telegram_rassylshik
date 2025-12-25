@@ -202,7 +202,7 @@ class TelegramAuthManager(ABC):
             session_path = self.get_session_path(identifier)
 
             # Проверяем существующую сессию
-            existing = await self._check_existing_session(session_path, include_phone=identifier is None)
+            existing = await self._check_existing_session(session_path, include_phone=True)
             if existing:
                 # Если это ошибка сессии - возвращаем её, пользователь должен попробовать снова
                 if existing.get("session_conflict") or existing.get("session_invalid") or existing.get("session_corrupted"):
@@ -316,7 +316,7 @@ class TelegramAuthManager(ABC):
 
             # Получаем информацию о пользователе
             me = await client.get_me()
-            user_info = self._format_user_info(me, include_phone=identifier is None)
+            user_info = self._format_user_info(me, include_phone=True)
 
             logger.info(f"Аутентификация успешна: {user_info['name']} (@{user_info['username']})")
 
@@ -387,7 +387,7 @@ class TelegramAuthManager(ABC):
 
             # Получаем информацию о пользователе
             me = await client.get_me()
-            user_info = self._format_user_info(me, include_phone=identifier is None)
+            user_info = self._format_user_info(me, include_phone=True)
 
             logger.info(f"2FA аутентификация успешна: {user_info['name']} (@{user_info['username']})")
 
@@ -455,7 +455,7 @@ class TelegramAuthManager(ABC):
                 return {
                     "exists": True,
                     "authenticated": True,
-                    "user_info": self._format_user_info(me, include_phone=identifier is None)
+                    "user_info": self._format_user_info(me, include_phone=True)
                 }
 
             await client.disconnect()

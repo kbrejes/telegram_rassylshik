@@ -7,6 +7,7 @@ import threading
 from typing import List, Optional, Dict, Union, Any
 from src.agent_account import AgentAccount
 from src.config_manager import AgentConfig
+from src.connection_status import status_manager
 from utils.retry import calculate_backoff, format_wait_time
 
 logger = logging.getLogger(__name__)
@@ -79,15 +80,34 @@ async def get_or_create_agent(session_name: str, phone: str, allow_create: bool 
         try:
             if await agent.connect():
                 _global_agents[session_name] = agent
+
+                # Update status with user info
+                user_info = None
+                try:
+                    me = await agent.client.get_me()
+                    user_info = {
+                        "id": me.id,
+                        "first_name": me.first_name,
+                        "last_name": me.last_name,
+                        "username": me.username,
+                        "phone": me.phone
+                    }
+                except Exception:
+                    pass
+                status_manager.update_agent_status(session_name, "connected", phone, user_info=user_info)
+
                 return agent
             else:
+                status_manager.update_agent_status(session_name, "error", phone, error="Failed to connect")
                 return None
         except Exception as e:
             # Если ошибка "database is locked" - возможно другой процесс уже подключил
             if "database is locked" in str(e):
                 logger.warning(f"Агент {session_name}: database is locked - уже используется")
+                status_manager.update_agent_status(session_name, "error", phone, error="Database locked")
             else:
                 logger.error(f"Агент {session_name}: ошибка подключения: {e}")
+                status_manager.update_agent_status(session_name, "error", phone, error=str(e))
             return None
 
 
@@ -104,16 +124,21 @@ async def get_existing_agent(session_name: str) -> Optional[AgentAccount]:
         return None
 
 
-async def disconnect_all_global_agents():
+async def disconnect_all_global_agents() -> int:
     """Отключить всех агентов в глобальном реестре"""
+    count = 0
     async with _global_agents_lock:
         for session_name, agent in list(_global_agents.items()):
             try:
                 await agent.disconnect()
+                status_manager.update_agent_status(session_name, "disconnected")
+                count += 1
             except Exception as e:
                 logger.error(f"Ошибка отключения агента {session_name}: {e}")
+                status_manager.update_agent_status(session_name, "error", error=str(e))
         _global_agents.clear()
         logger.info("Все глобальные агенты отключены")
+    return count
 
 
 class AgentPool:

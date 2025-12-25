@@ -107,7 +107,7 @@ class MessageProcessor:
     def extract_contact_info(self, text: str) -> Dict[str, Optional[str]]:
         """
         Извлекает контактную информацию из текста
-        
+
         Returns:
             Словарь с найденными контактами
         """
@@ -116,22 +116,30 @@ class MessageProcessor:
             'email': None,
             'phone': None
         }
-        
-        # Поиск Telegram username
-        telegram_match = re.search(r'@([a-zA-Z0-9_]{5,32})', text)
-        if telegram_match:
-            contacts['telegram'] = f"@{telegram_match.group(1)}"
-        
-        # Поиск email
+
+        # Поиск email FIRST (to avoid matching @gmail from emails)
         email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', text)
         if email_match:
             contacts['email'] = email_match.group(0)
-        
+
+        # Remove emails from text before searching for Telegram usernames
+        text_without_emails = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', text)
+
+        # Поиск Telegram username (must NOT be followed by a dot - that would be email domain)
+        # Also exclude common email domains
+        email_domains = {'gmail', 'mail', 'yandex', 'yahoo', 'outlook', 'hotmail', 'icloud', 'proton', 'rambler'}
+        telegram_match = re.search(r'@([a-zA-Z][a-zA-Z0-9_]{4,31})', text_without_emails)
+        if telegram_match:
+            username = telegram_match.group(1).lower()
+            # Skip if it looks like an email domain
+            if username not in email_domains:
+                contacts['telegram'] = f"@{telegram_match.group(1)}"
+
         # Поиск телефона (упрощенный паттерн)
         phone_match = re.search(r'\+?\d[\d\s\-\(\)]{8,}\d', text)
         if phone_match:
             contacts['phone'] = phone_match.group(0)
-        
+
         return contacts
     
     def extract_payment_info(self, text: str) -> Dict[str, Optional[str]]:

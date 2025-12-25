@@ -59,3 +59,20 @@ async def auth_page(request: Request):
         "bot_auth.html",
         {"request": request}
     )
+
+
+@router.get("/agents")
+async def agents_page(request: Request):
+    """Agents management dashboard"""
+    return templates.TemplateResponse(
+        "status.html",
+        {"request": request}
+    )
+
+
+# Redirect old /status URL to /agents
+@router.get("/status")
+async def status_redirect():
+    """Redirect /status to /agents"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/agents", status_code=301)
