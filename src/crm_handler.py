@@ -428,13 +428,15 @@ class CRMHandler:
 
                 logger.info(f"CRM workflow для канала '{channel.name}'...")
 
+                # Get available agent for topic creation
                 available_agent = agent_pool.get_available_agent()
                 if not available_agent:
                     logger.warning(f"  Нет доступных агентов для '{channel.name}'")
                     continue
 
+                # Auto-response uses pool's send_message with fallback
                 auto_response_sent = await self._send_auto_response(
-                    channel, available_agent, contacts, contacted_users
+                    channel, agent_pool, contacts, contacted_users
                 )
 
                 await self._create_crm_topic(
@@ -449,11 +451,11 @@ class CRMHandler:
     async def _send_auto_response(
         self,
         channel: ChannelConfig,
-        agent: AgentAccount,
+        agent_pool: AgentPool,
         contacts: Dict[str, Optional[str]],
         contacted_users: Set[str]
     ) -> bool:
-        """Отправка автоответа контакту"""
+        """Отправка автоответа контакту с fallback через пул агентов"""
         if not channel.auto_response_enabled or not channel.auto_response_template:
             return False
 
@@ -465,9 +467,11 @@ class CRMHandler:
             return False
 
         try:
-            success = await agent.send_message(
+            # Use pool's send_message which has built-in agent rotation/fallback
+            success = await agent_pool.send_message(
                 telegram_contact,
-                channel.auto_response_template
+                channel.auto_response_template,
+                max_retries=len(agent_pool.agents) if agent_pool.agents else 3
             )
             if success:
                 contacted_users.add(telegram_contact.lower())

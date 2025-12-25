@@ -181,6 +181,12 @@ class AgentAccount:
             self.handle_flood_wait(e.seconds)
             return False
 
+        except errors.PeerFloodError:
+            # Spam limitation from Telegram - treat as 1 hour block
+            logger.warning(f"Агент {self.session_name}: PeerFlood (spam limitation), блокировка на 1 час")
+            self.handle_flood_wait(3600)  # 1 hour
+            return False
+
         except errors.UserIsBlockedError:
             logger.error(f"Агент {self.session_name}: Пользователь {user} заблокировал аккаунт")
             return False
@@ -190,6 +196,12 @@ class AgentAccount:
             return False
 
         except Exception as e:
+            error_str = str(e).lower()
+            # Check for spam-related errors in exception message
+            if "spam" in error_str or "flood" in error_str or "limit" in error_str:
+                logger.warning(f"Агент {self.session_name}: Возможное ограничение спама: {e}")
+                self.handle_flood_wait(1800)  # 30 min
+                return False
             logger.error(f"Агент {self.session_name}: Ошибка отправки {user}: {e}")
             return False
     
