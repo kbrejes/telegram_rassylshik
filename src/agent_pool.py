@@ -187,26 +187,37 @@ class AgentPool:
 
         return connected_count > 0
     
-    def get_available_agent(self) -> Optional[AgentAccount]:
+    def get_available_agent(self, exclude: Optional[List[AgentAccount]] = None) -> Optional[AgentAccount]:
         """
         Получить доступного агента по принципу least-busy
-        
+
+        Args:
+            exclude: Список агентов для исключения (уже попробованные)
+
         Returns:
             Агент с наименьшим временем flood wait или None если все заняты
         """
         if not self._is_initialized or not self.agents:
             return None
-        
-        # Фильтруем доступных агентов
-        available_agents = [agent for agent in self.agents if agent.is_available()]
-        
+
+        exclude_set = set(exclude) if exclude else set()
+
+        # Фильтруем доступных агентов (исключая уже попробованных)
+        available_agents = [
+            agent for agent in self.agents
+            if agent.is_available() and agent not in exclude_set
+        ]
+
         if not available_agents:
-            logger.warning("Все агенты недоступны (FloodWait)")
+            if exclude_set:
+                logger.warning(f"Все агенты недоступны или уже попробованы ({len(exclude_set)} исключено)")
+            else:
+                logger.warning("Все агенты недоступны (FloodWait)")
             return None
-        
+
         # Выбираем агента с наименьшим временем ожидания
         best_agent = min(available_agents, key=lambda a: a.flood_wait_until or 0)
-        
+
         logger.debug(f"Выбран агент: {best_agent.session_name}")
         return best_agent
     
@@ -227,8 +238,10 @@ class AgentPool:
         Returns:
             True если сообщение отправлено успешно
         """
+        tried_agents: List[AgentAccount] = []
+
         for attempt in range(max_retries):
-            agent = self.get_available_agent()
+            agent = self.get_available_agent(exclude=tried_agents)
 
             if not agent:
                 delay = calculate_backoff(attempt, base=1.0, max_delay=30.0)
@@ -240,22 +253,24 @@ class AgentPool:
                     await asyncio.sleep(delay)
                 continue
 
+            tried_agents.append(agent)
+
             try:
                 success = await agent.send_message(user, text)
                 if success:
                     logger.info(f"Сообщение отправлено через агента {agent.session_name}")
                     return True
                 else:
-                    logger.warning(f"Агент {agent.session_name} не смог отправить сообщение")
+                    logger.warning(f"Агент {agent.session_name} не смог отправить, пробуем следующего")
 
             except Exception as e:
                 logger.error(f"Ошибка отправки через агента {agent.session_name}: {e}")
 
-            # Если не удалось - пробуем следующего агента с небольшой задержкой
+            # Небольшая задержка перед следующей попыткой
             if attempt < max_retries - 1:
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
-        logger.error(f"Не удалось отправить сообщение после {max_retries} попыток")
+        logger.error(f"Не удалось отправить сообщение после {len(tried_agents)} агентов")
         return False
 
     async def periodic_health_check(self, interval: float = 300.0) -> None:
