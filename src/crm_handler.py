@@ -15,6 +15,7 @@ from src.agent_pool import AgentPool
 from src.conversation_manager import ConversationManager
 from src.connection_status import status_manager
 from src.database import db
+from src.human_behavior import human_behavior
 from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig as AIHandlerConfig
 from src.config_manager import ChannelConfig
 
@@ -293,6 +294,12 @@ class CRMHandler:
 
         async def send_to_contact(cid: int, text: str) -> bool:
             try:
+                # Show typing indicator before sending
+                await human_behavior.simulate_typing(
+                    client=agent_client,
+                    contact=cid,
+                    message_length=len(text)
+                )
                 sent = await agent_client.send_message(cid, text)
                 if sent:
                     conv_manager.mark_agent_sent_message(sent.id)
