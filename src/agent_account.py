@@ -231,14 +231,20 @@ class AgentAccount:
         self._flood_tracker.set_flood_wait(seconds)
         flood_wait_until = time.time() + seconds
 
-        # Update status with flood wait info
-        # Extract just the session name from full path for status update
+        # Update status with flood wait info, preserving user_info
         session_name_only = Path(self.session_name).name
+
+        # Get existing user_info from status to preserve it
+        existing_status = status_manager.get_all_status()
+        existing_agent = existing_status.get("agents", {}).get(session_name_only, {})
+        user_info = existing_agent.get("user_info")
+
         status_manager.update_agent_status(
             session_name_only,
             "flood_wait",
             self.phone or "",
-            flood_wait_until=flood_wait_until
+            flood_wait_until=flood_wait_until,
+            user_info=user_info
         )
 
         logger.warning(
