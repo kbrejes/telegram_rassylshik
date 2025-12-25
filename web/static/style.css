@@ -670,7 +670,7 @@ body {
     text-decoration: none;
     padding: 0.5rem 1rem;
     border-radius: 20px;
-    background: rgba(255, 255, 255, 0.15);
+    background: transparent;
     transition: all 0.2s;
     font-size: 0.9rem;
     font-weight: 500;
