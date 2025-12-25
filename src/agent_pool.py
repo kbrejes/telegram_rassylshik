@@ -4,6 +4,7 @@ Agent Pool Management for handling multiple Telegram agents with load balancing
 import asyncio
 import logging
 import threading
+import time
 from typing import List, Optional, Dict, Union, Any
 from src.agent_account import AgentAccount
 from src.config_manager import AgentConfig
@@ -95,7 +96,16 @@ async def get_or_create_agent(session_name: str, phone: str, allow_create: bool 
                     }
                 except Exception:
                     pass
-                status_manager.update_agent_status(session_name, "connected", phone, user_info=user_info)
+
+                # Check if agent has active flood_wait - preserve that status
+                if agent.flood_wait_until and agent.flood_wait_until > time.time():
+                    status_manager.update_agent_status(
+                        session_name, "flood_wait", phone,
+                        flood_wait_until=agent.flood_wait_until,
+                        user_info=user_info
+                    )
+                else:
+                    status_manager.update_agent_status(session_name, "connected", phone, user_info=user_info)
 
                 return agent
             else:
