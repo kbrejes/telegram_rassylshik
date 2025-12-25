@@ -299,6 +299,12 @@
                 </div>
             </div>
 
+            <!-- Agent availability summary -->
+            <div id="agents-summary" style="display:none; margin-bottom:15px; padding:10px 15px; background:#f5f5f5; border-radius:8px; font-size:0.9rem;">
+                <span id="agents-available-count"></span> available
+                <span id="agents-limited-info" style="margin-left:15px; color:#e65100;"></span>
+            </div>
+
             <div class="agent-grid" id="agents-grid">
                 <div class="loading">
                     <div class="spinner"></div>
@@ -426,6 +432,29 @@
                 }
             }
 
+            // Calculate summary
+            let connectedCount = 0;
+            let limitedCount = 0;
+            const now = Date.now() / 1000;
+
+            for (const [, agent] of allAgents) {
+                if (agent.status === 'connected') {
+                    if (agent.flood_wait_until && agent.flood_wait_until > now) {
+                        limitedCount++;
+                    } else {
+                        connectedCount++;
+                    }
+                }
+            }
+
+            // Update summary UI
+            const summaryEl = document.getElementById('agents-summary');
+            if (allAgents.size > 0) {
+                summaryEl.style.display = 'block';
+                document.getElementById('agents-available-count').textContent = `${connectedCount}/${allAgents.size}`;
+                document.getElementById('agents-limited-info').textContent = limitedCount > 0 ? `⚠️ ${limitedCount} spam limited` : '';
+            }
+
             let html = '';
 
             for (const [sessionName, agent] of allAgents) {
@@ -450,16 +479,20 @@
                     meta += (meta ? ' - ' : '') + agent.error_message;
                 }
 
+                // Flood wait / spam limit badge
+                let floodBadge = '';
                 if (agent.flood_wait_until) {
                     const remaining = Math.max(0, Math.ceil((agent.flood_wait_until - Date.now()/1000) / 60));
-                    meta += ` (wait ${remaining}m)`;
+                    if (remaining > 0) {
+                        floodBadge = `<span style="background:#ff9800;color:white;padding:2px 8px;border-radius:10px;font-size:0.75rem;margin-left:8px;">SPAM LIMITED ${remaining}m</span>`;
+                    }
                 }
 
                 html += `
                     <div class="agent-card ${statusClass}">
                         <div class="agent-card-header">
                             <span class="dot ${statusClass}"></span>
-                            <span class="name">${displayName}</span>
+                            <span class="name">${displayName}</span>${floodBadge}
                         </div>
                         <div class="agent-card-meta">${meta || 'No info'}</div>
                         <div class="agent-card-actions">
