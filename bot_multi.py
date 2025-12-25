@@ -290,14 +290,17 @@ class MultiChannelJobMonitorBot:
                         continue
 
                     agent_me = await agent.client.get_me()
+                    # Use username if available, otherwise try ID
+                    user_to_invite = f"@{agent_me.username}" if agent_me.username else agent_me.id
                     try:
                         await self.client(InviteToChannelRequest(
                             channel=crm_group,
-                            users=[agent_me.id]
+                            users=[user_to_invite]
                         ))
                         logger.info(f"  ✅ Added {agent_session} to CRM group")
                     except Exception as invite_err:
-                        if "USER_ALREADY_PARTICIPANT" in str(invite_err):
+                        err_str = str(invite_err)
+                        if "USER_ALREADY_PARTICIPANT" in err_str or "already" in err_str.lower():
                             logger.debug(f"  Agent {agent_session} already in CRM group")
                         else:
                             logger.warning(f"  Failed to add {agent_session}: {invite_err}")
