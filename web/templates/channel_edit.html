@@ -312,18 +312,34 @@
 
                 <!-- Input Sources -->
                 <div class="form-group">
-                    <label for="input_sources">Источники для мониторинга *</label>
-                    <textarea
-                        id="input_sources"
-                        name="input_sources"
-                        class="input textarea"
-                        placeholder="@channel1&#10;@channel2&#10;@channel3"
-                        required
-                    >{% if channel %}{{ channel.input_sources|join('\n') }}{% endif %}</textarea>
-                    <span class="help-text">
-                        Список каналов для мониторинга (по одному на строку).
-                        Можно использовать @username или ID канала.
-                    </span>
+                    <label>Источники для мониторинга *</label>
+                    <div class="template-list" id="source_list">
+                        <!-- Source lists loaded dynamically -->
+                    </div>
+
+                    <div class="collapsible-section" id="custom_sources_section">
+                        <div class="collapsible-header" onclick="toggleSection(this)">
+                            <span>Custom sources</span>
+                            <span class="arrow">▼</span>
+                        </div>
+                        <div class="collapsible-content">
+                            <textarea
+                                id="input_sources"
+                                name="input_sources"
+                                class="input textarea"
+                                placeholder="@channel1&#10;@channel2&#10;@channel3"
+                                style="min-height: 100px;"
+                            >{% if channel %}{{ channel.input_sources|join('\n') }}{% endif %}</textarea>
+                            <span class="help-text">
+                                Список каналов для мониторинга (по одному на строку).
+                                Можно использовать @username или ID канала.
+                            </span>
+                            <div style="margin-top: 10px; display: flex; gap: 10px;">
+                                <input type="text" id="new_source_list_name" class="input" placeholder="List name" style="flex: 1;">
+                                <button type="button" class="btn-helper" onclick="saveSourceList()">Save</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- AI Filter Prompt (read-only, from job_analyzer) -->
@@ -494,6 +510,10 @@
         let savedTemplates = [];
         let selectedTemplateId = null;
 
+        // Source list state
+        let savedSourceLists = [];
+        let selectedSourceListId = null;
+
         // Auto-resize textarea to fit content
         function autoResize(textarea) {
             textarea.style.height = 'auto';
@@ -503,6 +523,7 @@
         // Initialize on load
         document.addEventListener('DOMContentLoaded', async () => {
             await loadSavedTemplates();
+            await loadSourceLists();
             await loadFilterPrompt();
             if (!isNew) {
                 await loadAgents();
@@ -647,6 +668,110 @@
             } catch (e) {
                 console.error('Error saving template:', e);
                 showNotification('Error saving template', 'error');
+            }
+        }
+
+        // ==================== Source Lists ====================
+
+        async function loadSourceLists() {
+            try {
+                const response = await fetch('/api/source-lists');
+                const data = await response.json();
+                if (data.success) {
+                    savedSourceLists = data.lists || [];
+                    renderSourceLists();
+                }
+            } catch (e) {
+                console.error('Error loading source lists:', e);
+                savedSourceLists = [];
+                renderSourceLists();
+            }
+        }
+
+        function renderSourceLists() {
+            const list = document.getElementById('source_list');
+            let html = '';
+
+            const sourcesField = document.getElementById('input_sources');
+            const currentSources = sourcesField.value.trim().split('\n').filter(s => s.trim()).sort().join('\n');
+
+            savedSourceLists.forEach(l => {
+                const listSources = (l.sources || []).sort().join('\n');
+                const isSelected = selectedSourceListId === l.id || (selectedSourceListId === null && currentSources === listSources);
+                if (isSelected && selectedSourceListId === null) {
+                    selectedSourceListId = l.id;
+                }
+                const sourceCount = (l.sources || []).length;
+                html += `
+                    <div class="template-option ${isSelected ? 'selected' : ''}" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div onclick="selectSourceList('${l.id}')" style="flex: 1; cursor: pointer;">
+                            <div class="template-name">${isSelected ? '✓ ' : ''}${l.name}</div>
+                            <div class="template-preview">${sourceCount} sources: ${(l.sources || []).slice(0, 3).join(', ')}${sourceCount > 3 ? '...' : ''}</div>
+                        </div>
+                        <button type="button" onclick="event.stopPropagation(); deleteSourceList('${l.id}')" style="background: #ff5252; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 0.8rem;" title="Delete list">✕</button>
+                    </div>
+                `;
+            });
+
+            list.innerHTML = html;
+        }
+
+        function selectSourceList(id) {
+            selectedSourceListId = id;
+            const sourceList = savedSourceLists.find(l => l.id === id);
+            if (sourceList) {
+                document.getElementById('input_sources').value = (sourceList.sources || []).join('\n');
+            }
+            renderSourceLists();
+        }
+
+        async function saveSourceList() {
+            const name = document.getElementById('new_source_list_name').value.trim();
+            const sourcesText = document.getElementById('input_sources').value.trim();
+            const sources = sourcesText.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+
+            if (!name || sources.length === 0) {
+                alert('Enter list name and at least one source');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/source-lists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, sources })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    await loadSourceLists();
+                    document.getElementById('new_source_list_name').value = '';
+                    showNotification('Source list saved!', 'success');
+                }
+            } catch (e) {
+                console.error('Error saving source list:', e);
+                showNotification('Error saving source list', 'error');
+            }
+        }
+
+        async function deleteSourceList(id) {
+            if (!confirm('Delete this source list?')) return;
+
+            try {
+                const response = await fetch(`/api/source-lists/${id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    savedSourceLists = savedSourceLists.filter(l => l.id !== id);
+                    if (selectedSourceListId === id) {
+                        selectedSourceListId = null;
+                    }
+                    renderSourceLists();
+                    showNotification('Source list deleted', 'success');
+                } else {
+                    showNotification('Error deleting source list', 'error');
+                }
+            } catch (e) {
+                console.error('Error deleting source list:', e);
+                showNotification('Error deleting source list', 'error');
             }
         }
 

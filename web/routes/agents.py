@@ -295,3 +295,16 @@ async def save_source_list_endpoint(request: SaveSourceListRequest):
     except Exception as e:
         logger.error(f"Ошибка сохранения списка источников: {e}")
         return {"success": False, "message": str(e)}
+
+
+@source_lists_router.delete("/{list_id}")
+async def delete_source_list_endpoint(list_id: str):
+    """Удалить список каналов-источников"""
+    try:
+        lists = load_source_lists()
+        lists = [l for l in lists if l.get("id") != list_id]
+        save_source_lists(lists)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Ошибка удаления списка источников: {e}")
+        return {"success": False, "message": str(e)}
