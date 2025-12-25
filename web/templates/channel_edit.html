@@ -579,14 +579,39 @@
                     selectedTemplateId = t.id;
                 }
                 html += `
-                    <div class="template-option ${isSelected ? 'selected' : ''}" onclick="selectTemplate('${t.id}')">
-                        <div class="template-name">${isSelected ? '✓ ' : ''}${t.name}</div>
-                        <div class="template-preview">${t.text.substring(0, 60)}${t.text.length > 60 ? '...' : ''}</div>
+                    <div class="template-option ${isSelected ? 'selected' : ''}" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div onclick="selectTemplate('${t.id}')" style="flex: 1; cursor: pointer;">
+                            <div class="template-name">${isSelected ? '✓ ' : ''}${t.name}</div>
+                            <div class="template-preview">${t.text.substring(0, 60)}${t.text.length > 60 ? '...' : ''}</div>
+                        </div>
+                        <button type="button" onclick="event.stopPropagation(); deleteTemplate('${t.id}')" style="background: #ff5252; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 0.8rem;" title="Delete template">✕</button>
                     </div>
                 `;
             });
 
             list.innerHTML = html;
+        }
+
+        async function deleteTemplate(id) {
+            if (!confirm('Delete this template?')) return;
+
+            try {
+                const response = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    savedTemplates = savedTemplates.filter(t => t.id !== id);
+                    if (selectedTemplateId === id) {
+                        selectedTemplateId = null;
+                    }
+                    renderTemplates();
+                    showNotification('Template deleted', 'success');
+                } else {
+                    showNotification('Error deleting template', 'error');
+                }
+            } catch (e) {
+                console.error('Error deleting template:', e);
+                showNotification('Error deleting template', 'error');
+            }
         }
 
         function selectTemplate(id) {

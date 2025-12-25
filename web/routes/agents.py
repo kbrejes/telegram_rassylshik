@@ -250,6 +250,19 @@ async def save_template_endpoint(request: SaveTemplateRequest):
         return {"success": False, "message": str(e)}
 
 
+@templates_router.delete("/{template_id}")
+async def delete_template_endpoint(template_id: str):
+    """Удалить шаблон автоответа"""
+    try:
+        templates = load_templates()
+        templates = [t for t in templates if t.get("id") != template_id]
+        save_templates(templates)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Ошибка удаления шаблона: {e}")
+        return {"success": False, "message": str(e)}
+
+
 # ==================== Source Lists API ====================
 
 source_lists_router = APIRouter(prefix="/api/source-lists", tags=["source-lists"])
