@@ -2,19 +2,28 @@
 API endpoints for AI self-correction stats.
 """
 import logging
+import aiosqlite
+from pathlib import Path
 from fastapi import APIRouter
 from typing import Optional
-from src.database import db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+
+# Database path
+DB_PATH = Path(__file__).parent.parent.parent / "jobs.db"
+
+
+async def get_db_connection():
+    """Get database connection for web context."""
+    return await aiosqlite.connect(str(DB_PATH))
 
 
 @router.get("/stats")
 async def get_ai_stats():
     """Get self-correction system statistics."""
     try:
-        conn = await db._get_connection()
+        conn = await get_db_connection()
 
         # Outcome counts
         cursor = await conn.execute("""
@@ -96,6 +105,8 @@ async def get_ai_stats():
         learning_rows = await cursor.fetchall()
         contact_learnings = {row[0]: row[1] for row in learning_rows}
 
+        await conn.close()
+
         return {
             "success": True,
             "stats": {
@@ -123,7 +134,7 @@ async def get_ai_stats():
 async def get_outcomes(limit: int = 50, offset: int = 0):
     """Get conversation outcomes with pagination."""
     try:
-        conn = await db._get_connection()
+        conn = await get_db_connection()
 
         cursor = await conn.execute(f"""
             SELECT contact_id, outcome, channel_id, outcome_details,
@@ -152,6 +163,8 @@ async def get_outcomes(limit: int = 50, offset: int = 0):
 
         cursor = await conn.execute("SELECT COUNT(*) FROM conversation_outcomes")
         total = (await cursor.fetchone())[0]
+
+        await conn.close()
 
         return {
             "success": True,
