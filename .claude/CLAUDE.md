@@ -167,3 +167,28 @@ ssh root@35.188.128.163  # DO NOT USE
 ```bash
 gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap --command="sudo tail -100 /home/brejestovski_kirill/telegram_rassylshik/logs/bot_multi.log"
 ```
+
+---
+
+## Stable Version
+
+**Current stable:** `stable-2025-12-25`
+- Commit: `9185c0b` (9185c0ba93b79bc6b14b7bfb6e21323333895d5c)
+- Branch: `feature/self-correcting-prompts`
+
+**Features:**
+- Agents management page (`/agents`) - connect, disconnect, add agents
+- Connection status tracking (`src/connection_status.py`)
+- Command queue for web-to-bot communication (`src/command_queue.py`)
+- Channel edit with agent link/unlink UI
+- Phone number included in agent user_info
+
+**Rollback to stable:**
+```bash
+git checkout stable-2025-12-25
+```
+
+**Deploy stable to server:**
+```bash
+gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap --command="cd /home/brejestovski_kirill/telegram_rassylshik && sudo git fetch --tags && sudo git checkout stable-2025-12-25"
+```
