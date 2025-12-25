@@ -85,9 +85,16 @@ class HumanBehavior:
         Check if we should do a long delay for this contact.
 
         Long delays happen twice per day per contact (every 12 hours).
+        First message never gets a long delay.
         """
+        # Never long delay on first interaction (contact not in dict)
+        if contact_id not in self._last_long_delay:
+            # Mark that we've seen this contact, but don't trigger long delay
+            self._last_long_delay[contact_id] = time.time()
+            return False
+
         now = time.time()
-        last_long = self._last_long_delay.get(contact_id, 0)
+        last_long = self._last_long_delay[contact_id]
 
         # Check if enough time has passed since last long delay (12 hours)
         return now - last_long >= self.LONG_DELAY_INTERVAL
