@@ -133,10 +133,12 @@ Signs of PAID ADVERTISEMENT (reject these):
 - Recruiting for network marketing or similar schemes
 
 CONTACT EXTRACTION RULES:
-- Look for @username that is meant for job applications
-- Ignore channel/group mentions like @channel_name, @news, @jobs_channel
-- The contact is usually near words: "писать", "резюме", "связь", "контакт", "HR", "обращаться"
-- If multiple usernames found, pick the one that looks like a person (HR, recruiter)
+- Look for @username of a PERSON (HR, recruiter, hiring manager) to contact for job applications
+- IGNORE channel/group usernames - these usually contain words like: job, jobs, work, career, vacancy, remote, junior, senior, dev, marketing, channel, chat, news, group, hire, hiring
+- Personal usernames usually look like real names: @ivan_petrov, @hr_anna, @recruiter_kate
+- The contact is usually near words: "писать", "резюме", "связь", "контакт", "HR", "обращаться", "откликнуться"
+- If no clear personal contact found, return null - DO NOT return channel usernames
+- If multiple usernames found, pick the one that looks like a person's name
 
 Respond ONLY with valid JSON, no other text."""
 
@@ -309,12 +311,18 @@ Respond in JSON format:
         if not matches:
             return None
 
-        # Filter out common non-contact mentions
+        # Filter out common channel/group patterns
         exclude_patterns = [
+            # English
             'channel', 'group', 'chat', 'news', 'bot',
-            'jobs', 'vacancy', 'work', 'career',
+            'jobs', 'job', 'vacancy', 'work', 'career', 'hire', 'hiring',
+            'remote', 'junior', 'senior', 'dev', 'developer',
+            'marketing', 'design', 'frontend', 'backend',
+            'chiefs', 'chief', 'team', 'community', 'official',
+            # Russian
             'канал', 'группа', 'чат', 'новости', 'бот',
-            'вакансии', 'работа',
+            'вакансии', 'вакансия', 'работа', 'карьера',
+            'удаленка', 'удалёнка', 'джуниор', 'сеньор',
         ]
 
         for username in matches:
@@ -322,5 +330,5 @@ Respond in JSON format:
             if not any(ex in username_lower for ex in exclude_patterns):
                 return f"@{username}"
 
-        # If all filtered out, return first one anyway
-        return f"@{matches[0]}" if matches else None
+        # If all filtered out, don't return channel usernames
+        return None
