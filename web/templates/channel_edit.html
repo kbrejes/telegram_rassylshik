@@ -283,6 +283,7 @@
             <nav class="nav-menu">
                 <a href="/">Channels</a>
                 <a href="/agents">Agents</a>
+                <a href="/vacancy-log">Vacancy Log</a>
                 <a href="/ai-stats">AI Stats</a>
                 <a href="/auth">Bot Auth</a>
             </nav>
@@ -325,39 +326,19 @@
                     </span>
                 </div>
 
-                <!-- Keywords (collapsible) -->
+                <!-- AI Filter Prompt (read-only, from job_analyzer) -->
                 <div class="collapsible-section">
                     <div class="collapsible-header" onclick="toggleSection(this)">
-                        <span>Ключевые слова (фильтры)</span>
+                        <span>AI Filter Prompt (vacancy filtering)</span>
                         <span class="arrow">▼</span>
                     </div>
                     <div class="collapsible-content">
-                        <div style="margin-bottom: 15px;">
-                            <label for="include_keywords"><strong>Включающие слова</strong></label>
-                            <textarea
-                                id="include_keywords"
-                                name="include_keywords"
-                                class="input textarea"
-                                placeholder="python&#10;django&#10;flask"
-                                style="min-height: 80px;"
-                            >{% if channel %}{{ channel.filters.include_keywords|join('\n') }}{% endif %}</textarea>
-                            <span class="help-text">
-                                Если оставить пустым - будут приходить все сообщения из источников.
-                                Если заполнить - сообщение должно содержать хотя бы одно из этих слов.
-                            </span>
-                        </div>
-                        <div>
-                            <label for="exclude_keywords"><strong>Исключающие слова</strong></label>
-                            <textarea
-                                id="exclude_keywords"
-                                name="exclude_keywords"
-                                class="input textarea"
-                                placeholder="junior&#10;стажер&#10;trainee"
-                                style="min-height: 80px;"
-                            >{% if channel %}{{ channel.filters.exclude_keywords|join('\n') }}{% endif %}</textarea>
-                            <span class="help-text">
-                                Сообщения с этими словами будут отфильтрованы
-                            </span>
+                        <p class="help-text" style="margin-bottom: 10px;">
+                            This prompt is used to filter incoming vacancies. AI analyzes each message and decides if it's relevant.
+                            <a href="/vacancy-log" style="color: #667eea;">View filtered messages in Vacancy Log</a>
+                        </p>
+                        <div id="ai-filter-prompt" style="background: #f5f5f5; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; max-height: 300px; overflow-y: auto;">
+                            Loading...
                         </div>
                     </div>
                 </div>
@@ -522,6 +503,7 @@
         // Initialize on load
         document.addEventListener('DOMContentLoaded', async () => {
             await loadSavedTemplates();
+            await loadFilterPrompt();
             if (!isNew) {
                 await loadAgents();
             }
@@ -533,6 +515,22 @@
                 setTimeout(() => autoResize(textarea), 100);
             });
         });
+
+        // Load AI filter prompt
+        async function loadFilterPrompt() {
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt');
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('ai-filter-prompt').textContent = data.prompt;
+                } else {
+                    document.getElementById('ai-filter-prompt').textContent = 'Error loading prompt';
+                }
+            } catch (e) {
+                console.error('Error loading filter prompt:', e);
+                document.getElementById('ai-filter-prompt').textContent = 'Error loading prompt';
+            }
+        }
 
         // Toggle collapsible sections
         function toggleSection(header) {
@@ -855,14 +853,9 @@
                         .split('\n')
                         .map(s => s.trim())
                         .filter(s => s.length > 0),
-                    include_keywords: document.getElementById('include_keywords').value
-                        .split('\n')
-                        .map(s => s.trim())
-                        .filter(s => s.length > 0),
-                    exclude_keywords: document.getElementById('exclude_keywords').value
-                        .split('\n')
-                        .map(s => s.trim())
-                        .filter(s => s.length > 0),
+                    // Keywords deprecated - AI filtering is used instead
+                    include_keywords: [],
+                    exclude_keywords: [],
                     enabled: true, // Always enabled
 
                     // CRM fields - always enabled, keep original crm_group_id

@@ -85,3 +85,12 @@ async def ai_stats_page(request: Request):
         "ai_stats.html",
         {"request": request}
     )
+
+
+@router.get("/vacancy-log")
+async def vacancy_log_page(request: Request):
+    """Vacancy log with AI analysis outcomes"""
+    return templates.TemplateResponse(
+        "vacancy_log.html",
+        {"request": request}
+    )

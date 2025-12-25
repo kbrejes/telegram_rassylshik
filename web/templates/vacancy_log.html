@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vacancy Log - Job Notification Bot</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #1976d2;
+        }
+
+        .stat-card .label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .stat-card.success .value { color: #4caf50; }
+        .stat-card.error .value { color: #f44336; }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+        }
+
+        .filter-btn {
+            padding: 10px 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover {
+            background: #f5f5f5;
+        }
+
+        .filter-btn.active {
+            background: #1976d2;
+            color: white;
+            border-color: #1976d2;
+        }
+
+        .section {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 1.5rem;
+        }
+
+        .section h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #1976d2;
+            padding-bottom: 10px;
+        }
+
+        .vacancy-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .vacancy-table th, .vacancy-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .vacancy-table th {
+            background: #f5f5f5;
+            font-weight: 600;
+        }
+
+        .vacancy-table tr:hover {
+            background: #f9f9f9;
+            cursor: pointer;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-badge.passed {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+
+        .status-badge.filtered {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+
+        .text-preview {
+            max-width: 400px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ai-reason {
+            max-width: 300px;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .pagination button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #f5f5f5;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination .page-info {
+            padding: 8px 16px;
+            color: #666;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: #fff;
+            border-radius: 10px;
+            max-width: 700px;
+            max-height: 80vh;
+            width: 90%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-body .field {
+            margin-bottom: 15px;
+        }
+
+        .modal-body .field-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .modal-body .field-value {
+            color: #666;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .modal-body .full-text {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* Prompt section */
+        .prompt-section {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 1.5rem;
+        }
+
+        .prompt-section h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+        .prompt-box {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .refresh-btn {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .refresh-btn:hover {
+            background: #1565c0;
+        }
+
+        .collapsible-header {
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+        }
+
+        .collapsible-header:hover {
+            color: #1976d2;
+        }
+
+        .arrow {
+            transition: transform 0.2s;
+        }
+
+        .collapsible-section.open .arrow {
+            transform: rotate(180deg);
+        }
+
+        .collapsible-content {
+            display: none;
+            padding-top: 10px;
+        }
+
+        .collapsible-section.open .collapsible-content {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Vacancy Log</h1>
+            <nav class="nav-menu">
+                <a href="/">Channels</a>
+                <a href="/agents">Agents</a>
+                <a href="/vacancy-log" class="active">Vacancy Log</a>
+                <a href="/ai-stats">AI Stats</a>
+                <a href="/auth">Bot Auth</a>
+            </nav>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <div class="value" id="stat-total">-</div>
+                <div class="label">Total Processed</div>
+            </div>
+            <div class="stat-card success">
+                <div class="value" id="stat-passed">-</div>
+                <div class="label">Passed Filter</div>
+            </div>
+            <div class="stat-card error">
+                <div class="value" id="stat-filtered">-</div>
+                <div class="label">Filtered Out</div>
+            </div>
+        </div>
+
+        <!-- AI Filter Prompt (collapsible) -->
+        <div class="prompt-section collapsible-section">
+            <div class="collapsible-header" onclick="toggleSection(this)">
+                <h3 style="margin: 0;">AI Filter Prompt</h3>
+                <span class="arrow">&#9660;</span>
+            </div>
+            <div class="collapsible-content">
+                <div id="filter-prompt" class="prompt-box">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Filter Buttons -->
+        <div class="filter-buttons">
+            <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+            <button class="filter-btn" data-filter="passed" onclick="setFilter('passed')">Passed</button>
+            <button class="filter-btn" data-filter="filtered" onclick="setFilter('filtered')">Filtered</button>
+            <button class="refresh-btn" onclick="loadVacancies()" style="margin-left: auto;">Refresh</button>
+        </div>
+
+        <!-- Vacancy List -->
+        <div class="section">
+            <h3>Recent Vacancies</h3>
+            <div id="loading" class="loading">Loading vacancies...</div>
+            <div id="vacancies-container" style="display: none;">
+                <table class="vacancy-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Source</th>
+                            <th>Text</th>
+                            <th>Status</th>
+                            <th>AI Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vacancies-tbody"></tbody>
+                </table>
+                <div id="empty-state" class="empty-state" style="display: none;">
+                    <div class="icon">📋</div>
+                    <div>No vacancies found</div>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination" style="display: none;">
+                <button id="prev-btn" onclick="prevPage()">Previous</button>
+                <span class="page-info" id="page-info">Page 1</span>
+                <button id="next-btn" onclick="nextPage()">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Vacancy Details</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentFilter = 'all';
+        let currentOffset = 0;
+        const limit = 50;
+        let totalCount = 0;
+        let vacancies = [];
+
+        function toggleSection(header) {
+            const section = header.parentElement;
+            section.classList.toggle('open');
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            currentOffset = 0;
+
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === filter);
+            });
+
+            loadVacancies();
+        }
+
+        async function loadVacancies() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('vacancies-container').style.display = 'none';
+
+            try {
+                const params = new URLSearchParams({
+                    limit: limit,
+                    offset: currentOffset,
+                    filter_status: currentFilter
+                });
+
+                const response = await fetch(`/api/vacancies/log?${params}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load vacancies');
+                }
+
+                vacancies = data.vacancies;
+                totalCount = data.total;
+
+                // Update stats
+                if (data.stats) {
+                    document.getElementById('stat-total').textContent = data.stats.total || 0;
+                    document.getElementById('stat-passed').textContent = data.stats.passed || 0;
+                    document.getElementById('stat-filtered').textContent = data.stats.filtered || 0;
+                }
+
+                renderVacancies();
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('vacancies-container').style.display = 'block';
+
+            } catch (error) {
+                document.getElementById('loading').innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">&#9888;</div>
+                        <div>Error: ${error.message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        async function loadFilterPrompt() {
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt');
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('filter-prompt').textContent = data.prompt;
+                } else {
+                    document.getElementById('filter-prompt').textContent = 'Error loading prompt';
+                }
+            } catch (e) {
+                document.getElementById('filter-prompt').textContent = 'Error loading prompt';
+            }
+        }
+
+        function renderVacancies() {
+            const tbody = document.getElementById('vacancies-tbody');
+            const emptyState = document.getElementById('empty-state');
+            const pagination = document.getElementById('pagination');
+
+            if (vacancies.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.style.display = 'block';
+                pagination.style.display = 'none';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            pagination.style.display = 'flex';
+
+            tbody.innerHTML = vacancies.map((v, idx) => `
+                <tr onclick="showDetails(${idx})">
+                    <td>${formatDate(v.processed_at)}</td>
+                    <td>${escapeHtml(v.chat_title || 'Unknown')}</td>
+                    <td class="text-preview">${escapeHtml(v.text_preview)}</td>
+                    <td>
+                        <span class="status-badge ${v.is_relevant ? 'passed' : 'filtered'}">
+                            ${v.is_relevant ? 'Passed' : 'Filtered'}
+                        </span>
+                    </td>
+                    <td class="ai-reason">${escapeHtml(v.ai_reason || '-')}</td>
+                </tr>
+            `).join('');
+
+            // Update pagination
+            const currentPage = Math.floor(currentOffset / limit) + 1;
+            const totalPages = Math.ceil(totalCount / limit);
+            document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('prev-btn').disabled = currentOffset === 0;
+            document.getElementById('next-btn').disabled = currentOffset + limit >= totalCount;
+        }
+
+        function showDetails(idx) {
+            const v = vacancies[idx];
+            const modal = document.getElementById('modal-overlay');
+            const body = document.getElementById('modal-body');
+
+            body.innerHTML = `
+                <div class="field">
+                    <div class="field-label">Source</div>
+                    <div class="field-value">${escapeHtml(v.chat_title || 'Unknown')}</div>
+                </div>
+                <div class="field">
+                    <div class="field-label">Status</div>
+                    <div class="field-value">
+                        <span class="status-badge ${v.is_relevant ? 'passed' : 'filtered'}">
+                            ${v.is_relevant ? 'Passed' : 'Filtered'}
+                        </span>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="field-label">AI Reason</div>
+                    <div class="field-value">${escapeHtml(v.ai_reason || 'No reason provided')}</div>
+                </div>
+                <div class="field">
+                    <div class="field-label">Processed At</div>
+                    <div class="field-value">${v.processed_at || '-'}</div>
+                </div>
+                <div class="field">
+                    <div class="field-label">Full Message Text</div>
+                    <div class="field-value full-text">${escapeHtml(v.text_full || v.text_preview)}</div>
+                </div>
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function closeModal(event) {
+            if (event && event.target !== document.getElementById('modal-overlay')) return;
+            document.getElementById('modal-overlay').classList.remove('active');
+        }
+
+        function prevPage() {
+            if (currentOffset > 0) {
+                currentOffset -= limit;
+                loadVacancies();
+            }
+        }
+
+        function nextPage() {
+            if (currentOffset + limit < totalCount) {
+                currentOffset += limit;
+                loadVacancies();
+            }
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleString('ru-RU', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        // Load on page load
+        loadVacancies();
+        loadFilterPrompt();
+
+        // Auto-refresh every 60 seconds
+        setInterval(loadVacancies, 60000);
+    </script>
+</body>
+</html>
