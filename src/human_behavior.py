@@ -54,12 +54,12 @@ class HumanBehavior:
 
         # Instant response (70% chance)
         self.INSTANT_RESPONSE_CHANCE = 0.70
-        self.INSTANT_DELAY_MIN = 5  # 5 seconds
-        self.INSTANT_DELAY_MAX = 15  # 15 seconds
+        self.INSTANT_DELAY_MIN = 3  # 3 seconds
+        self.INSTANT_DELAY_MAX = 10  # 10 seconds
 
         # Normal response (30% chance)
-        self.NORMAL_DELAY_MIN = 30  # 30 seconds
-        self.NORMAL_DELAY_MAX = 180  # 3 minutes
+        self.NORMAL_DELAY_MIN = 15  # 15 seconds
+        self.NORMAL_DELAY_MAX = 45  # 45 seconds
 
         # Long delay (twice per day per contact)
         self.LONG_DELAY_MIN = 720  # 12 minutes
@@ -116,17 +116,13 @@ class HumanBehavior:
 
         # 70% instant, 30% normal
         if random.random() < self.INSTANT_RESPONSE_CHANCE:
-            # Instant response: 5-15 seconds
+            # Instant response: 3-10 seconds
             delay = random.uniform(self.INSTANT_DELAY_MIN, self.INSTANT_DELAY_MAX)
-            logger.debug(f"[HUMAN] Instant response for {contact_id}: {delay:.0f}s")
+            logger.info(f"[HUMAN] Instant response for {contact_id}: {delay:.0f}s")
         else:
-            # Normal response: 30s - 3min
+            # Normal response: 15-45 seconds
             delay = random.uniform(self.NORMAL_DELAY_MIN, self.NORMAL_DELAY_MAX)
-            # Add small complexity factor for longer messages
-            complexity_delay = (message_length / 100) * random.uniform(1, 5)
-            delay += complexity_delay
-            delay = min(delay, self.NORMAL_DELAY_MAX)
-            logger.debug(f"[HUMAN] Normal delay for {contact_id}: {delay:.0f}s")
+            logger.info(f"[HUMAN] Normal delay for {contact_id}: {delay:.0f}s")
 
         return delay
 
