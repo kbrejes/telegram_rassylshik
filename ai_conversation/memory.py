@@ -37,7 +37,7 @@ class WorkingMemoryStorage:
     def __init__(
         self,
         storage_dir: str = "data/working_memory",
-        max_messages: int = 12
+        max_messages: int = 24
     ):
         """
         Initialize working memory storage.

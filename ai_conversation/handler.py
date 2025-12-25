@@ -35,12 +35,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AIConfig:
     """Configuration for AI conversation handler."""
-    llm_provider: str = "ollama"
-    llm_model: str = "qwen2.5:3b"
+    llm_provider: str = "groq"
+    llm_model: str = "llama-3.3-70b-versatile"
     persona_file: str = "personas/default.txt"
     mode: str = "auto"  # "auto" | "suggest" | "manual"
     reply_delay_seconds: tuple = (3, 8)  # (min, max) random delay
-    context_window_messages: int = 12
+    context_window_messages: int = 24
     weaviate_host: str = "localhost"
     weaviate_port: int = 8080
     use_weaviate: bool = True
@@ -63,12 +63,12 @@ class AIConfig:
             delay = tuple(delay)
 
         return cls(
-            llm_provider=data.get("llm_provider", "ollama"),
-            llm_model=data.get("llm_model", "qwen2.5:3b"),
+            llm_provider=data.get("llm_provider", "groq"),
+            llm_model=data.get("llm_model", "llama-3.3-70b-versatile"),
             persona_file=data.get("persona_file", "personas/default.txt"),
             mode=data.get("mode", "auto"),
             reply_delay_seconds=delay,
-            context_window_messages=data.get("context_window_messages", 12),
+            context_window_messages=data.get("context_window_messages", 24),
             weaviate_host=data.get("weaviate_host", "localhost"),
             weaviate_port=data.get("weaviate_port", 8080),
             use_weaviate=data.get("use_weaviate", True),
@@ -353,8 +353,9 @@ class AIConversationHandler:
         # 6. Build messages for LLM
         messages = [{"role": "system", "content": system_prompt}]
 
-        # Add working memory (last N messages)
-        messages.extend(working_memory[-6:])
+        # Add working memory (last N messages based on config)
+        context_limit = max(self.config.context_window_messages, 12)
+        messages.extend(working_memory[-context_limit:])
 
         # Add knowledge context if available
         knowledge = self.memory.semantic_recall(message)

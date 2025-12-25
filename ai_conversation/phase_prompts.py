@@ -7,6 +7,7 @@ Loads prompts from prompts/ directory.
 
 import os
 import logging
+from datetime import datetime
 from typing import Dict, Optional
 from pathlib import Path
 
@@ -163,6 +164,14 @@ class PhasePromptBuilder:
             Complete system prompt
         """
         parts = []
+
+        # 0. Current date/time context
+        now = datetime.now()
+        weekdays_ru = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+        months_ru = ["января", "февраля", "марта", "апреля", "мая", "июня",
+                     "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+        date_context = f"Сегодня: {weekdays_ru[now.weekday()]}, {now.day} {months_ru[now.month - 1]} {now.year}, {now.strftime('%H:%M')} МСК"
+        parts.append(date_context)
 
         # 1. Base context (always included)
         base = self._load_prompt("base_context")
