@@ -1,22 +1,6 @@
 {
   "commands": [
     {
-      "id": "cmd_ba0f6730",
-      "type": "delete_agent",
-      "target": "agent_3004",
-      "created_at": "2025-12-25T16:46:46.465084",
-      "status": "completed",
-      "result_message": "Agent agent_3004 deleted"
-    },
-    {
-      "id": "cmd_d31db654",
-      "type": "delete_agent",
-      "target": "agent_1067",
-      "created_at": "2025-12-25T16:46:48.433991",
-      "status": "completed",
-      "result_message": "Agent agent_1067 deleted"
-    },
-    {
       "id": "cmd_c4f3a9b0",
       "type": "delete_agent",
       "target": "agent_1067",
