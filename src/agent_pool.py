@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Union, Any
 from src.agent_account import AgentAccount
 from src.config_manager import AgentConfig
 from src.connection_status import status_manager
+from src.human_behavior import human_behavior
 from utils.retry import calculate_backoff, format_wait_time
 
 logger = logging.getLogger(__name__)
@@ -225,15 +226,19 @@ class AgentPool:
         self,
         user: Union[str, int],
         text: str,
-        max_retries: int = 3
+        max_retries: int = 3,
+        contact_id: Optional[int] = None,
+        simulate_human: bool = True
     ) -> bool:
         """
-        Отправка сообщения через доступного агента с автоматическим переключением
+        Отправка сообщения через доступного агента с автоматическим переключением.
 
         Args:
             user: Username (с или без @), user ID, или User объект
             text: Текст сообщения
             max_retries: Максимальное количество попыток с разными агентами
+            contact_id: ID контакта для отслеживания поведения (опционально)
+            simulate_human: Симулировать человеческое поведение (задержки, typing)
 
         Returns:
             True если сообщение отправлено успешно
@@ -256,6 +261,14 @@ class AgentPool:
             tried_agents.append(agent)
 
             try:
+                # Simulate human behavior (typing indicator) before first attempt only
+                if simulate_human and attempt == 0 and agent.client:
+                    await human_behavior.simulate_typing(
+                        client=agent.client,
+                        contact=user,
+                        message_length=len(text)
+                    )
+
                 success = await agent.send_message(user, text)
                 if success:
                     logger.info(f"Сообщение отправлено через агента {agent.session_name}")

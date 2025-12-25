@@ -20,6 +20,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Callable, Awaitable, List, TYPE_CHECKING
 
+from src.human_behavior import human_behavior
 from .llm_client import UnifiedLLMClient
 from .memory import ConversationMemory
 from .state_analyzer import StateAnalyzer, StateStorage, ConversationState, AnalysisResult
@@ -255,11 +256,13 @@ class AIConversationHandler:
 
             # Handle based on mode
             if self.config.mode == "auto":
-                # Add natural delay
-                delay = random.uniform(*self.config.reply_delay_seconds)
-                await asyncio.sleep(delay)
+                # Add human-like delay before responding
+                await human_behavior.simulate_delay(
+                    message_length=len(message),
+                    contact_id=contact_id
+                )
 
-                # Send directly to contact
+                # Send directly to contact (typing is handled in agent_pool)
                 if send_callback:
                     success = await send_callback(contact_id, response)
                     if success:

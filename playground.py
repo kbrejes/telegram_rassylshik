@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ai_conversation.handler import AIConversationHandler, AIConfig
 from ai_conversation.memory import WorkingMemoryStorage
 from src.config_manager import config_manager
+from src.human_behavior import human_behavior
 
 
 # ANSI colors for terminal output
@@ -101,8 +102,13 @@ async def run_playground(
     reset: bool = False,
     show_memory: bool = False,
     channel_id: str = None,
+    no_delay: bool = True,  # Disable delays by default in playground
 ):
     """Run interactive playground."""
+    # Disable human-like delays for testing (default in playground)
+    if no_delay:
+        human_behavior.disable()
+
     print_header()
 
     # Load config and get channels
@@ -256,6 +262,8 @@ def main():
                        help="Reset working memory before starting")
     parser.add_argument("--show-memory", action="store_true",
                        help="Show memory after each turn")
+    parser.add_argument("--with-delay", action="store_true",
+                       help="Enable human-like delays (disabled by default)")
 
     args = parser.parse_args()
 
@@ -264,6 +272,7 @@ def main():
         reset=args.reset,
         show_memory=args.show_memory,
         channel_id=args.channel,
+        no_delay=not args.with_delay,
     ))
 
 
