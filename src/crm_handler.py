@@ -14,6 +14,7 @@ from src.agent_account import AgentAccount
 from src.agent_pool import AgentPool
 from src.conversation_manager import ConversationManager
 from src.connection_status import status_manager
+from src.database import db
 from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig as AIHandlerConfig
 from src.config_manager import ChannelConfig
 
@@ -53,8 +54,8 @@ class CRMHandler:
         self.contact_to_channel.clear()
         self.ai_handlers.clear()
 
-        # Инициализация AI handler pool
-        self.ai_handler_pool = AIHandlerPool(config_manager.llm_providers)
+        # Инициализация AI handler pool (with database for self-correction)
+        self.ai_handler_pool = AIHandlerPool(config_manager.llm_providers, database=db)
 
         crm_enabled_channels = [ch for ch in output_channels if ch.crm_enabled]
 
