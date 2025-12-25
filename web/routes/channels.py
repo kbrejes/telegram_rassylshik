@@ -106,6 +106,7 @@ async def get_channels():
 @router.get("/{channel_id}")
 async def get_channel(channel_id: str):
     """Получить конфигурацию канала"""
+    config_manager.load()  # Reload config before getting channel
     channel = config_manager.get_channel(channel_id)
     if not channel:
         raise HTTPException(404, "Канал не найден")
@@ -186,6 +187,7 @@ async def create_channel(data: ChannelCreateRequest):
 async def update_channel(channel_id: str, data: ChannelUpdateRequest):
     """Обновить существующий канал"""
     try:
+        config_manager.load()  # Reload config before getting channel
         channel = config_manager.get_channel(channel_id)
         if not channel:
             raise HTTPException(404, "Канал не найден")
@@ -334,6 +336,7 @@ async def delete_channel(channel_id: str, delete_telegram: bool = True):
 @router.get("/{channel_id}/agents")
 async def get_channel_agents(channel_id: str):
     """Получить агентов канала"""
+    config_manager.load()  # Reload config before getting channel
     channel = config_manager.get_channel(channel_id)
     if not channel:
         raise HTTPException(404, "Канал не найден")
