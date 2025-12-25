@@ -166,7 +166,10 @@ class MultiChannelJobMonitorBot:
 
         # Инициализация CRM агентов и conversation managers
         await self.crm.setup_agents(self.output_channels, self.config_manager)
-        
+
+        # Ensure all agents are in their CRM groups
+        await self._ensure_agents_in_crm_groups()
+
         # Настройка фильтра логов
         self._setup_log_filter()
         
@@ -261,6 +264,45 @@ class MultiChannelJobMonitorBot:
         except Exception as e:
             logger.warning(f"Job analyzer init failed, will use regex only: {e}")
             self.job_analyzer = None
+
+    async def _ensure_agents_in_crm_groups(self):
+        """Ensure all linked agents are members of their CRM groups."""
+        from telethon.tl.functions.channels import InviteToChannelRequest
+
+        for channel in self.output_channels:
+            if not channel.crm_enabled or not channel.crm_group_id or not channel.agents:
+                continue
+
+            logger.info(f"Checking agents for CRM group of '{channel.name}'...")
+
+            try:
+                crm_group = await self.client.get_entity(channel.crm_group_id)
+            except Exception as e:
+                logger.warning(f"  Cannot access CRM group {channel.crm_group_id}: {e}")
+                continue
+
+            for agent_config in channel.agents:
+                agent_session = agent_config.session_name
+                try:
+                    agent = await get_existing_agent(agent_session)
+                    if not agent or not agent.client:
+                        logger.warning(f"  Agent {agent_session} not available")
+                        continue
+
+                    agent_me = await agent.client.get_me()
+                    try:
+                        await self.client(InviteToChannelRequest(
+                            channel=crm_group,
+                            users=[agent_me.id]
+                        ))
+                        logger.info(f"  ✅ Added {agent_session} to CRM group")
+                    except Exception as invite_err:
+                        if "USER_ALREADY_PARTICIPANT" in str(invite_err):
+                            logger.debug(f"  Agent {agent_session} already in CRM group")
+                        else:
+                            logger.warning(f"  Failed to add {agent_session}: {invite_err}")
+                except Exception as e:
+                    logger.warning(f"  Error processing agent {agent_session}: {e}")
 
     def _setup_log_filter(self):
         """Настраивает фильтр для замены ID каналов на имена в логах"""
@@ -576,6 +618,9 @@ class MultiChannelJobMonitorBot:
 
             # Переинициализируем CRM агентов для новых каналов
             await self.crm.setup_agents(self.output_channels, self.config_manager)
+
+            # Ensure all agents are in their CRM groups
+            await self._ensure_agents_in_crm_groups()
 
         except Exception as e:
             logger.error(f"Ошибка перезагрузки конфигурации: {e}", exc_info=True)
