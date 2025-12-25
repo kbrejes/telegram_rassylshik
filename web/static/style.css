@@ -656,6 +656,35 @@ body {
     background: #f57c00;
 }
 
+/* Navigation Menu */
+.nav-menu {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.nav-menu a {
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.15);
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.nav-menu a:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.nav-menu a.active {
+    background: rgba(255, 255, 255, 0.3);
+    font-weight: 600;
+}
+
 .nav-link {
     color: white;
     text-decoration: none;

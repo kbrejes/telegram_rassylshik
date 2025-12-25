@@ -279,8 +279,13 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>{% if is_new %}Создание канала{% else %}Редактирование канала{% endif %}</h1>
-            <p>Настройки канала для уведомлений о вакансиях</p>
+            <h1>{% if is_new %}Create Channel{% else %}Edit Channel{% endif %}</h1>
+            <nav class="nav-menu">
+                <a href="/">Channels</a>
+                <a href="/agents">Agents</a>
+                <a href="/ai-stats">AI Stats</a>
+                <a href="/auth">Bot Auth</a>
+            </nav>
         </div>
 
         <div class="card">
