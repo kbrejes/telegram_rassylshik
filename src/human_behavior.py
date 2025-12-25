@@ -66,9 +66,9 @@ class HumanBehavior:
         self.LONG_DELAY_MAX = 1200  # 20 minutes
         self.LONG_DELAY_INTERVAL = 43200  # 12 hours between long delays (twice a day)
 
-        # Typing speed (chars per second) - humans type 40-80 WPM
-        self.TYPING_SPEED_MIN = 4  # slow typer
-        self.TYPING_SPEED_MAX = 8  # fast typer
+        # Typing speed (chars per second) - slower for more realistic feel
+        self.TYPING_SPEED_MIN = 2  # slow typer (~25 WPM)
+        self.TYPING_SPEED_MAX = 4  # normal typer (~50 WPM)
 
     def disable(self):
         """Disable human behavior simulation (for testing)."""
@@ -135,12 +135,12 @@ class HumanBehavior:
         # Base typing time
         typing_time = message_length / chars_per_second
 
-        # Add some "thinking" pauses (10-30% extra)
-        thinking_factor = random.uniform(1.1, 1.3)
+        # Add some "thinking" pauses (20-50% extra for pauses/corrections)
+        thinking_factor = random.uniform(1.2, 1.5)
         typing_time *= thinking_factor
 
-        # Minimum 2s, maximum 30s (Telegram limit)
-        return max(2.0, min(typing_time, 30.0))
+        # Minimum 3s, maximum 45s
+        return max(3.0, min(typing_time, 45.0))
 
     async def simulate_typing(
         self,
@@ -150,6 +150,9 @@ class HumanBehavior:
     ) -> None:
         """
         Show typing indicator for realistic duration.
+
+        Keeps refreshing typing action every 4s since Telegram expires it after ~5s.
+        Message should be sent immediately after this returns.
 
         Args:
             client: Telethon client
@@ -166,14 +169,21 @@ class HumanBehavior:
             duration = self._calculate_typing_duration(message_length)
             logger.debug(f"[HUMAN] Typing for {duration:.1f}s ({message_length} chars)")
 
-            # Send typing action
-            await client(SetTypingRequest(
-                peer=contact,
-                action=SendMessageTypingAction()
-            ))
+            # Keep sending typing action every 4 seconds (Telegram expires after ~5s)
+            elapsed = 0
+            typing_interval = 4.0
 
-            # Wait for typing duration
-            await asyncio.sleep(duration)
+            while elapsed < duration:
+                # Send typing action
+                await client(SetTypingRequest(
+                    peer=contact,
+                    action=SendMessageTypingAction()
+                ))
+
+                # Wait for next interval or remaining time
+                wait_time = min(typing_interval, duration - elapsed)
+                await asyncio.sleep(wait_time)
+                elapsed += wait_time
 
         except Exception as e:
             # Don't fail the message if typing fails
