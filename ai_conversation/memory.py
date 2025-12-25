@@ -2,7 +2,7 @@
 Conversation Memory System
 
 Implements a 4-level memory architecture:
-1. Working Memory - current conversation context (in-memory)
+1. Working Memory - current conversation context (persistent JSON files)
 2. Episodic Memory - past conversations with reflections (Weaviate)
 3. Semantic Memory - knowledge base (Weaviate)
 4. Procedural Memory - behavioral rules (file-based)
@@ -13,12 +13,108 @@ Based on https://github.com/ALucek/agentic-memory
 import os
 import json
 import logging
-from collections import defaultdict, deque
+from collections import deque
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from .llm_client import UnifiedLLMClient
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# WORKING MEMORY STORAGE
+# =============================================================================
+
+class WorkingMemoryStorage:
+    """
+    Persistent storage for working memory (conversation history).
+
+    Stores messages as JSON files in data/working_memory/{contact_id}.json
+    Uses in-memory cache for fast access.
+    """
+
+    def __init__(
+        self,
+        storage_dir: str = "data/working_memory",
+        max_messages: int = 12
+    ):
+        """
+        Initialize working memory storage.
+
+        Args:
+            storage_dir: Directory for JSON files
+            max_messages: Maximum messages to keep per contact
+        """
+        self.storage_dir = Path(storage_dir)
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.max_messages = max_messages
+        self._cache: Dict[int, List[Dict[str, str]]] = {}
+
+    def _get_path(self, contact_id: int) -> Path:
+        """Get file path for contact."""
+        return self.storage_dir / f"{contact_id}.json"
+
+    def load(self, contact_id: int) -> List[Dict[str, str]]:
+        """
+        Load messages for contact.
+
+        Returns cached version if available, otherwise loads from disk.
+        """
+        # Check cache first
+        if contact_id in self._cache:
+            return self._cache[contact_id]
+
+        path = self._get_path(contact_id)
+
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    messages = json.load(f)
+                logger.debug(f"[WORKING] Loaded {len(messages)} messages for {contact_id}")
+            except Exception as e:
+                logger.warning(f"[WORKING] Error loading for {contact_id}: {e}")
+                messages = []
+        else:
+            messages = []
+
+        self._cache[contact_id] = messages
+        return messages
+
+    def save(self, contact_id: int, messages: List[Dict[str, str]]):
+        """Save messages to disk."""
+        path = self._get_path(contact_id)
+
+        # Trim to max messages
+        if len(messages) > self.max_messages:
+            messages = messages[-self.max_messages:]
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(messages, f, ensure_ascii=False, indent=2)
+            self._cache[contact_id] = messages
+            logger.debug(f"[WORKING] Saved {len(messages)} messages for {contact_id}")
+        except Exception as e:
+            logger.error(f"[WORKING] Error saving for {contact_id}: {e}")
+
+    def add_message(self, contact_id: int, role: str, content: str):
+        """Add message and persist."""
+        messages = self.load(contact_id)
+        messages.append({"role": role, "content": content})
+        self.save(contact_id, messages)
+
+    def get_messages(self, contact_id: int) -> List[Dict[str, str]]:
+        """Get all messages for contact."""
+        return self.load(contact_id).copy()
+
+    def clear(self, contact_id: int):
+        """Clear messages for contact."""
+        path = self._get_path(contact_id)
+        if path.exists():
+            path.unlink()
+        if contact_id in self._cache:
+            del self._cache[contact_id]
+        logger.debug(f"[WORKING] Cleared messages for {contact_id}")
 
 
 # =============================================================================
@@ -88,6 +184,7 @@ class ConversationMemory:
         weaviate_port: int = 8080,
         short_term_limit: int = 12,
         use_weaviate: bool = True,
+        working_memory_dir: str = "data/working_memory",
     ):
         """
         Initialize memory system.
@@ -100,15 +197,17 @@ class ConversationMemory:
             weaviate_port: Weaviate port
             short_term_limit: Max messages in working memory
             use_weaviate: Whether to use Weaviate (optional)
+            working_memory_dir: Directory for persistent working memory
         """
         self.llm = llm_client
         self.short_term_limit = short_term_limit
         self.procedural_path = procedural_path
         self.persona_path = persona_path
 
-        # Working Memory - current context per contact
-        self.working_memory: Dict[int, deque] = defaultdict(
-            lambda: deque(maxlen=short_term_limit)
+        # Working Memory - persistent storage per contact
+        self.working_memory_storage = WorkingMemoryStorage(
+            storage_dir=working_memory_dir,
+            max_messages=short_term_limit
         )
 
         # Episodic state (in-memory fallback)
@@ -196,24 +295,21 @@ class ConversationMemory:
             f.write(content)
 
     # =========================================================================
-    # WORKING MEMORY
+    # WORKING MEMORY (Persistent)
     # =========================================================================
 
     def add_message(self, contact_id: int, role: str, content: str):
-        """Add message to working memory."""
-        self.working_memory[contact_id].append({
-            "role": role,
-            "content": content
-        })
+        """Add message to working memory (persisted to disk)."""
+        self.working_memory_storage.add_message(contact_id, role, content)
         logger.debug(f"[WORKING] Added {role} message for contact {contact_id}")
 
     def get_working_memory(self, contact_id: int) -> List[Dict[str, str]]:
-        """Get current conversation context."""
-        return list(self.working_memory[contact_id])
+        """Get current conversation context (loaded from disk if needed)."""
+        return self.working_memory_storage.get_messages(contact_id)
 
     def clear_working_memory(self, contact_id: int):
-        """Clear working memory for contact."""
-        self.working_memory[contact_id].clear()
+        """Clear working memory for contact (removes from disk)."""
+        self.working_memory_storage.clear(contact_id)
 
     def format_conversation(self, messages: List[Dict[str, str]]) -> str:
         """Format messages as string."""
