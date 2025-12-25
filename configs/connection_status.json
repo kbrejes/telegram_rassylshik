@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-12-25T17:06:03.375947",
+  "last_updated": "2025-12-25T17:35:46.596799",
   "bot": {
     "connected": true,
     "authorized": true,
@@ -25,36 +25,6 @@
         "last_name": "Perez",
         "username": "reymond_perez",
         "phone": "14424492604"
-      }
-    },
-    "agent_1067": {
-      "session_name": "agent_1067",
-      "status": "connected",
-      "phone": "",
-      "error_message": null,
-      "flood_wait_until": null,
-      "last_health_check": "2025-12-25T16:58:20.395575",
-      "user_info": {
-        "id": 7949893804,
-        "first_name": "Robert",
-        "last_name": "Jackson",
-        "username": "bro_jackson_yo",
-        "phone": "12705731067"
-      }
-    },
-    "agent_3004": {
-      "session_name": "agent_3004",
-      "status": "connected",
-      "phone": "",
-      "error_message": null,
-      "flood_wait_until": null,
-      "last_health_check": "2025-12-25T17:05:11.536369",
-      "user_info": {
-        "id": 7793475881,
-        "first_name": "Kimberly",
-        "last_name": "Rivera",
-        "username": "kimberly_rivera_314",
-        "phone": "14424493004"
       }
     }
   },

@@ -198,6 +198,82 @@
             from { transform: translateX(0); opacity: 1; }
             to { transform: translateX(100%); opacity: 0; }
         }
+
+        /* Agents grid */
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 10px;
+        }
+
+        .agent-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .agent-card.linked {
+            border-color: #4caf50;
+            background: rgba(76, 175, 80, 0.05);
+        }
+
+        .agent-card .agent-name {
+            font-weight: bold;
+            font-size: 0.95rem;
+        }
+
+        .agent-card .agent-meta {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .agent-card .agent-status {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            display: inline-block;
+            width: fit-content;
+        }
+
+        .agent-card .agent-status.connected {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+
+        .agent-card .agent-status.disconnected {
+            background: #ffecb3;
+            color: #f57c00;
+        }
+
+        .agent-card .btn-link, .agent-card .btn-unlink {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+
+        .agent-card .btn-link {
+            background: #667eea;
+            color: white;
+        }
+
+        .agent-card .btn-link:hover {
+            background: #5a6fd6;
+        }
+
+        .agent-card .btn-unlink {
+            background: #ff5252;
+            color: white;
+        }
+
+        .agent-card .btn-unlink:hover {
+            background: #ff1744;
+        }
     </style>
 </head>
 <body>
@@ -285,15 +361,25 @@
                     <span>CRM Settings</span>
                 </div>
 
-                <!-- Agents - link to status page -->
+                <!-- Channel Agents -->
                 <div class="form-group">
-                    <label>Агенты для автоответов</label>
-                    <a href="/status" class="status-link-card">
-                        <div class="info">
-                            <span class="title">Manage Agents</span>
-                            <span class="subtitle">Connect, disconnect, and monitor agent status</span>
-                        </div>
-                        <span style="font-size: 1.5rem;">→</span>
+                    <label>Agents linked to this channel</label>
+                    <div id="channel-agents-grid" class="agents-grid" style="margin-bottom: 15px;">
+                        <!-- Linked agents will be loaded here -->
+                    </div>
+                    <div id="no-agents-warning" class="help-text" style="color: #856404; background: #fff3cd; padding: 10px; border-radius: 5px; display: none;">
+                        ⚠️ No agents linked. Link at least one agent for CRM to work.
+                    </div>
+                </div>
+
+                <!-- Available Agents to Link -->
+                <div class="form-group">
+                    <label>Available agents to link</label>
+                    <div id="available-agents-grid" class="agents-grid">
+                        <!-- Available agents will be loaded here -->
+                    </div>
+                    <a href="/agents" class="btn-helper" style="display: inline-block; margin-top: 10px; text-decoration: none;">
+                        ➕ Add new agent
                     </a>
                 </div>
 
@@ -431,6 +517,9 @@
         // Initialize on load
         document.addEventListener('DOMContentLoaded', async () => {
             await loadSavedTemplates();
+            if (!isNew) {
+                await loadAgents();
+            }
 
             // Setup auto-resize for all textareas with textarea-auto class
             document.querySelectorAll('.textarea-auto').forEach(textarea => {
@@ -563,6 +652,153 @@
                 call_pending: document.getElementById('prompt_call_pending').value,
                 call_declined: document.getElementById('prompt_call_declined').value
             };
+        }
+
+        // ==================== Agent Management ====================
+        let allAgents = [];
+        let linkedAgentNames = [];
+
+        async function loadAgents() {
+            try {
+                // Load all available agents
+                const agentsResponse = await fetch('/api/agents');
+                const agentsData = await agentsResponse.json();
+                if (agentsData.success) {
+                    allAgents = agentsData.agents || [];
+                }
+
+                // Load agents linked to this channel
+                const linkedResponse = await fetch(`/api/channels/${channelId}/agents`);
+                const linkedData = await linkedResponse.json();
+                if (linkedData.success) {
+                    linkedAgentNames = (linkedData.agents || []).map(a => a.session_name);
+                }
+
+                renderAgents();
+            } catch (e) {
+                console.error('Error loading agents:', e);
+            }
+        }
+
+        function renderAgents() {
+            const channelGrid = document.getElementById('channel-agents-grid');
+            const availableGrid = document.getElementById('available-agents-grid');
+            const warning = document.getElementById('no-agents-warning');
+
+            // Linked agents
+            const linkedAgents = allAgents.filter(a => linkedAgentNames.includes(a.session_name));
+            const availableAgents = allAgents.filter(a => !linkedAgentNames.includes(a.session_name));
+
+            // Render linked agents
+            if (linkedAgents.length === 0) {
+                channelGrid.innerHTML = '<div style="color: #666; font-style: italic;">No agents linked yet</div>';
+                warning.style.display = 'block';
+            } else {
+                warning.style.display = 'none';
+                channelGrid.innerHTML = linkedAgents.map(agent => {
+                    const meta = agent.username ? `@${agent.username}` : (agent.phone || agent.session_name);
+                    const statusClass = agent.status === 'connected' ? 'connected' : 'disconnected';
+                    const statusText = agent.status === 'connected' ? 'Connected' : 'Disconnected';
+                    return `
+                        <div class="agent-card linked">
+                            <div class="agent-name">${agent.name || agent.session_name}</div>
+                            <div class="agent-meta">${meta}</div>
+                            <span class="agent-status ${statusClass}">${statusText}</span>
+                            <button class="btn-unlink" onclick="unlinkAgent('${agent.session_name}')">Unlink</button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Render available agents
+            if (availableAgents.length === 0) {
+                availableGrid.innerHTML = '<div style="color: #666; font-style: italic;">All agents are already linked</div>';
+            } else {
+                availableGrid.innerHTML = availableAgents.map(agent => {
+                    const meta = agent.username ? `@${agent.username}` : (agent.phone || agent.session_name);
+                    const statusClass = agent.status === 'connected' ? 'connected' : 'disconnected';
+                    const statusText = agent.status === 'connected' ? 'Connected' : 'Disconnected';
+                    return `
+                        <div class="agent-card">
+                            <div class="agent-name">${agent.name || agent.session_name}</div>
+                            <div class="agent-meta">${meta}</div>
+                            <span class="agent-status ${statusClass}">${statusText}</span>
+                            <button class="btn-link" onclick="linkAgent('${agent.session_name}', '${agent.phone || ''}')">Link</button>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        async function linkAgent(sessionName, phone) {
+            try {
+                // Add to linked list
+                linkedAgentNames.push(sessionName);
+                renderAgents();
+
+                // Update on server
+                const agent = allAgents.find(a => a.session_name === sessionName);
+                const currentAgents = allAgents
+                    .filter(a => linkedAgentNames.includes(a.session_name))
+                    .map(a => ({ session_name: a.session_name, phone: a.phone || '' }));
+
+                const response = await fetch(`/api/channels/${channelId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agents: currentAgents })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showNotification(`Agent ${agent?.name || sessionName} linked!`, 'success');
+                } else {
+                    // Revert on failure
+                    linkedAgentNames = linkedAgentNames.filter(n => n !== sessionName);
+                    renderAgents();
+                    showNotification('Failed to link agent', 'error');
+                }
+            } catch (e) {
+                console.error('Error linking agent:', e);
+                linkedAgentNames = linkedAgentNames.filter(n => n !== sessionName);
+                renderAgents();
+                showNotification('Error linking agent', 'error');
+            }
+        }
+
+        async function unlinkAgent(sessionName) {
+            try {
+                const agent = allAgents.find(a => a.session_name === sessionName);
+
+                // Remove from linked list
+                linkedAgentNames = linkedAgentNames.filter(n => n !== sessionName);
+                renderAgents();
+
+                // Update on server
+                const currentAgents = allAgents
+                    .filter(a => linkedAgentNames.includes(a.session_name))
+                    .map(a => ({ session_name: a.session_name, phone: a.phone || '' }));
+
+                const response = await fetch(`/api/channels/${channelId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agents: currentAgents })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showNotification(`Agent ${agent?.name || sessionName} unlinked`, 'success');
+                } else {
+                    // Revert on failure
+                    linkedAgentNames.push(sessionName);
+                    renderAgents();
+                    showNotification('Failed to unlink agent', 'error');
+                }
+            } catch (e) {
+                console.error('Error unlinking agent:', e);
+                linkedAgentNames.push(sessionName);
+                renderAgents();
+                showNotification('Error unlinking agent', 'error');
+            }
         }
 
         function showNotification(message, type = 'info') {
