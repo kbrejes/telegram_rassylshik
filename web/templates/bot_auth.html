@@ -157,6 +157,17 @@
             </nav>
         </div>
 
+        <!-- Bot Connection Status -->
+        <div class="auth-card" style="margin-bottom: 1rem; padding: 1rem;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span class="status-dot disconnected" id="bot-connection-dot"></span>
+                <div>
+                    <strong id="bot-connection-status">Checking...</strong>
+                    <div style="font-size: 0.85rem; color: var(--text-light);" id="bot-connection-info"></div>
+                </div>
+            </div>
+        </div>
+
         <div class="auth-card">
             <!-- Step 0: Check Status -->
             <div id="step-check" class="auth-step active">
@@ -498,8 +509,47 @@
             updateTimer();
         }
 
-        // Initial check
+        // Check bot connection status
+        async function checkBotConnection() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                const dot = document.getElementById('bot-connection-dot');
+                const statusText = document.getElementById('bot-connection-status');
+                const infoText = document.getElementById('bot-connection-info');
+
+                const botStatus = data.status?.bot || {};
+                const isConnected = botStatus.connected === true;
+                const isAuthorized = botStatus.authorized === true;
+
+                if (isConnected) {
+                    dot.className = 'status-dot connected';
+                    statusText.textContent = 'Bot Running';
+                    const userInfo = botStatus.user_info;
+                    if (userInfo) {
+                        infoText.textContent = `${userInfo.first_name || ''} @${userInfo.username || 'N/A'}`;
+                    } else {
+                        infoText.textContent = isAuthorized ? 'Authorized' : '';
+                    }
+                } else {
+                    dot.className = 'status-dot disconnected';
+                    statusText.textContent = 'Bot Not Running';
+                    infoText.textContent = 'Bot process is not active';
+                }
+            } catch (error) {
+                document.getElementById('bot-connection-dot').className = 'status-dot disconnected';
+                document.getElementById('bot-connection-status').textContent = 'Status Unknown';
+                document.getElementById('bot-connection-info').textContent = 'Could not connect to API';
+            }
+        }
+
+        // Initial checks
         checkStatus();
+        checkBotConnection();
+
+        // Refresh connection status every 5 seconds
+        setInterval(checkBotConnection, 5000);
     </script>
 </body>
 </html>
