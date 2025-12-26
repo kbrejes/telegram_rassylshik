@@ -1,19 +1,28 @@
 """
-Supervisor AI Chat - Claude-powered assistant for monitoring and improving the bot.
+Supervisor AI Chat - Multi-provider AI assistant for monitoring and improving the bot.
+Supports: Anthropic (Claude), OpenAI, Ollama
 """
 import json
 import logging
 import aiosqlite
+import httpx
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+# Try importing AI providers
 try:
     import anthropic
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
+
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
 
 from src.config import config
 
@@ -27,13 +36,59 @@ PROMPTS_DIR = BASE_DIR / "prompts"
 CONFIGS_DIR = BASE_DIR / "configs"
 CONVERSATION_STATES_DIR = BASE_DIR / "data" / "conversation_states"
 WORKING_MEMORY_DIR = BASE_DIR / "data" / "working_memory"
+PROVIDER_CONFIG_FILE = CONFIGS_DIR / "supervisor_provider.json"
 
 
 class ChatRequest(BaseModel):
     message: str
+    provider: Optional[str] = None  # Override default provider
 
 
-# Claude Tools Definition
+class ProviderConfig(BaseModel):
+    provider: str
+    model: Optional[str] = None
+
+
+# ==================== Provider Definitions ====================
+
+PROVIDERS = {
+    "anthropic": {
+        "name": "Claude (Anthropic)",
+        "models": [
+            {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
+            {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"},
+            {"id": "claude-3-haiku-20240307", "name": "Claude 3 Haiku (Fast)"},
+        ],
+        "default_model": "claude-sonnet-4-20250514",
+        "requires_key": "ANTHROPIC_API_KEY"
+    },
+    "openai": {
+        "name": "OpenAI",
+        "models": [
+            {"id": "gpt-4o", "name": "GPT-4o"},
+            {"id": "gpt-4o-mini", "name": "GPT-4o Mini (Fast)"},
+            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo"},
+        ],
+        "default_model": "gpt-4o",
+        "requires_key": "OPENAI_API_KEY"
+    },
+    "ollama": {
+        "name": "Ollama (Local)",
+        "models": [
+            {"id": "llama3.1:8b", "name": "Llama 3.1 8B"},
+            {"id": "llama3.1:70b", "name": "Llama 3.1 70B"},
+            {"id": "qwen2.5:7b", "name": "Qwen 2.5 7B"},
+            {"id": "qwen2.5:32b", "name": "Qwen 2.5 32B"},
+            {"id": "mistral:7b", "name": "Mistral 7B"},
+        ],
+        "default_model": "llama3.1:8b",
+        "requires_key": None
+    }
+}
+
+
+# ==================== Tools Definition ====================
+
 SUPERVISOR_TOOLS = [
     {
         "name": "get_active_conversations",
@@ -156,6 +211,19 @@ SUPERVISOR_TOOLS = [
     }
 ]
 
+# Convert to OpenAI format
+OPENAI_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": tool["name"],
+            "description": tool["description"],
+            "parameters": tool["input_schema"]
+        }
+    }
+    for tool in SUPERVISOR_TOOLS
+]
+
 SYSTEM_PROMPT = """You are a supervisor AI for a Telegram job notification bot called "Лови Лидов" (Catch Leads).
 
 Your role is to monitor conversations, analyze performance, and improve prompts to increase success rates.
@@ -187,12 +255,35 @@ Your role is to monitor conversations, analyze performance, and improve prompts 
 Always be concise and actionable in your responses."""
 
 
+# ==================== Provider Config ====================
+
+def load_provider_config() -> Dict[str, str]:
+    """Load saved provider configuration."""
+    if PROVIDER_CONFIG_FILE.exists():
+        try:
+            with open(PROVIDER_CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"provider": "anthropic", "model": None}
+
+
+def save_provider_config(provider: str, model: Optional[str] = None):
+    """Save provider configuration."""
+    CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(PROVIDER_CONFIG_FILE, 'w') as f:
+        json.dump({"provider": provider, "model": model}, f)
+
+
+# ==================== Database ====================
+
 async def get_db():
     """Get async database connection."""
     return await aiosqlite.connect(str(DB_PATH))
 
 
-# Tool implementations
+# ==================== Tool Implementations ====================
+
 async def tool_get_active_conversations() -> str:
     """Get all active conversations with their states."""
     conversations = []
@@ -286,7 +377,6 @@ async def tool_get_ai_stats() -> str:
     conn = await get_db()
 
     try:
-        # Get outcome counts
         cursor = await conn.execute("""
             SELECT outcome, COUNT(*) as count
             FROM conversation_outcomes
@@ -294,11 +384,9 @@ async def tool_get_ai_stats() -> str:
         """)
         outcomes = {row[0]: row[1] for row in await cursor.fetchall()}
 
-        # Get total conversations
         cursor = await conn.execute("SELECT COUNT(*) FROM conversation_outcomes")
         total = (await cursor.fetchone())[0]
 
-        # Get recent outcomes
         cursor = await conn.execute("""
             SELECT contact_id, outcome, total_messages, created_at
             FROM conversation_outcomes
@@ -406,42 +494,263 @@ TOOL_HANDLERS = {
 }
 
 
-async def process_tool_calls(tool_calls: list) -> list:
-    """Process tool calls and return results."""
-    results = []
-    for tool_call in tool_calls:
-        tool_name = tool_call.name
-        tool_input = tool_call.input
+async def execute_tool(name: str, args: dict) -> str:
+    """Execute a tool and return the result."""
+    handler = TOOL_HANDLERS.get(name)
+    if handler:
+        return await handler(args)
+    return f"Unknown tool: {name}"
 
-        handler = TOOL_HANDLERS.get(tool_name)
-        if handler:
-            result = await handler(tool_input)
-            results.append({
+
+# ==================== Provider Implementations ====================
+
+async def chat_with_anthropic(messages: List[Dict], model: str) -> tuple[str, List[Dict]]:
+    """Chat using Anthropic Claude API."""
+    if not ANTHROPIC_AVAILABLE:
+        raise Exception("anthropic package not installed")
+    if not config.ANTHROPIC_API_KEY:
+        raise Exception("ANTHROPIC_API_KEY not configured")
+
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+
+    response = client.messages.create(
+        model=model,
+        max_tokens=4096,
+        system=SYSTEM_PROMPT,
+        tools=SUPERVISOR_TOOLS,
+        messages=messages
+    )
+
+    tool_calls_made = []
+
+    # Process tool calls
+    while response.stop_reason == "tool_use":
+        tool_calls = [block for block in response.content if block.type == "tool_use"]
+        tool_calls_made.extend([{"name": t.name, "input": t.input} for t in tool_calls])
+
+        # Execute tools
+        tool_results = []
+        for tool_call in tool_calls:
+            result = await execute_tool(tool_call.name, tool_call.input)
+            tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tool_call.id,
                 "content": result
             })
-        else:
-            results.append({
-                "type": "tool_result",
-                "tool_use_id": tool_call.id,
-                "content": f"Unknown tool: {tool_name}"
+
+        messages.append({"role": "assistant", "content": response.content})
+        messages.append({"role": "user", "content": tool_results})
+
+        response = client.messages.create(
+            model=model,
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
+            tools=SUPERVISOR_TOOLS,
+            messages=messages
+        )
+
+    # Extract text response
+    text_response = ""
+    for block in response.content:
+        if hasattr(block, 'text'):
+            text_response += block.text
+
+    return text_response, tool_calls_made
+
+
+async def chat_with_openai(messages: List[Dict], model: str) -> tuple[str, List[Dict]]:
+    """Chat using OpenAI API."""
+    if not OPENAI_AVAILABLE:
+        raise Exception("openai package not installed")
+
+    api_key = getattr(config, 'OPENAI_API_KEY', None) or ""
+    if not api_key:
+        raise Exception("OPENAI_API_KEY not configured")
+
+    client = openai.OpenAI(api_key=api_key)
+
+    # Convert messages to OpenAI format
+    oai_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for msg in messages:
+        if msg["role"] == "user":
+            if isinstance(msg["content"], str):
+                oai_messages.append({"role": "user", "content": msg["content"]})
+            elif isinstance(msg["content"], list):
+                # Tool results
+                for item in msg["content"]:
+                    if item.get("type") == "tool_result":
+                        oai_messages.append({
+                            "role": "tool",
+                            "tool_call_id": item["tool_use_id"],
+                            "content": item["content"]
+                        })
+        elif msg["role"] == "assistant":
+            if isinstance(msg["content"], str):
+                oai_messages.append({"role": "assistant", "content": msg["content"]})
+            elif isinstance(msg["content"], list):
+                # Assistant message with tool calls
+                tool_calls = []
+                text_content = ""
+                for block in msg["content"]:
+                    if hasattr(block, 'type') and block.type == "tool_use":
+                        tool_calls.append({
+                            "id": block.id,
+                            "type": "function",
+                            "function": {
+                                "name": block.name,
+                                "arguments": json.dumps(block.input)
+                            }
+                        })
+                    elif hasattr(block, 'text'):
+                        text_content += block.text
+
+                oai_msg = {"role": "assistant", "content": text_content or None}
+                if tool_calls:
+                    oai_msg["tool_calls"] = tool_calls
+                oai_messages.append(oai_msg)
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=oai_messages,
+        tools=OPENAI_TOOLS,
+        max_tokens=4096
+    )
+
+    tool_calls_made = []
+
+    # Process tool calls
+    while response.choices[0].message.tool_calls:
+        assistant_msg = response.choices[0].message
+        oai_messages.append(assistant_msg.model_dump())
+
+        for tool_call in assistant_msg.tool_calls:
+            tool_name = tool_call.function.name
+            tool_args = json.loads(tool_call.function.arguments)
+            tool_calls_made.append({"name": tool_name, "input": tool_args})
+
+            result = await execute_tool(tool_name, tool_args)
+            oai_messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": result
             })
 
-    return results
+        response = client.chat.completions.create(
+            model=model,
+            messages=oai_messages,
+            tools=OPENAI_TOOLS,
+            max_tokens=4096
+        )
+
+    text_response = response.choices[0].message.content or ""
+    return text_response, tool_calls_made
+
+
+async def chat_with_ollama(messages: List[Dict], model: str) -> tuple[str, List[Dict]]:
+    """Chat using Ollama API (no tool support, simpler mode)."""
+    ollama_url = config.OLLAMA_URL or "http://localhost:11434"
+
+    # Build simple message list for Ollama
+    ollama_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for msg in messages:
+        if isinstance(msg.get("content"), str):
+            ollama_messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            f"{ollama_url}/api/chat",
+            json={
+                "model": model,
+                "messages": ollama_messages,
+                "stream": False
+            }
+        )
+        response.raise_for_status()
+        data = response.json()
+
+    text_response = data.get("message", {}).get("content", "")
+    return text_response, []  # Ollama doesn't support tools
+
+
+# ==================== API Endpoints ====================
+
+@router.get("/providers")
+async def get_providers():
+    """Get available providers and their status."""
+    result = []
+
+    for provider_id, provider_info in PROVIDERS.items():
+        available = True
+        status = "available"
+
+        if provider_id == "anthropic":
+            if not ANTHROPIC_AVAILABLE:
+                available = False
+                status = "package not installed"
+            elif not config.ANTHROPIC_API_KEY:
+                available = False
+                status = "API key not configured"
+
+        elif provider_id == "openai":
+            if not OPENAI_AVAILABLE:
+                available = False
+                status = "package not installed"
+            elif not getattr(config, 'OPENAI_API_KEY', None):
+                available = False
+                status = "API key not configured"
+
+        elif provider_id == "ollama":
+            # Check if Ollama is running
+            try:
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    resp = await client.get(f"{config.OLLAMA_URL or 'http://localhost:11434'}/api/tags")
+                    if resp.status_code != 200:
+                        available = False
+                        status = "Ollama not responding"
+            except Exception:
+                available = False
+                status = "Ollama not reachable"
+
+        result.append({
+            "id": provider_id,
+            "name": provider_info["name"],
+            "models": provider_info["models"],
+            "default_model": provider_info["default_model"],
+            "available": available,
+            "status": status
+        })
+
+    # Get current selection
+    current = load_provider_config()
+
+    return {
+        "success": True,
+        "providers": result,
+        "current": current
+    }
+
+
+@router.put("/providers")
+async def set_provider(config_data: ProviderConfig):
+    """Set the active provider and model."""
+    if config_data.provider not in PROVIDERS:
+        return {"success": False, "error": f"Unknown provider: {config_data.provider}"}
+
+    save_provider_config(config_data.provider, config_data.model)
+    return {"success": True, "provider": config_data.provider, "model": config_data.model}
 
 
 @router.post("/chat")
 async def chat(request: ChatRequest):
     """Send a message and get AI response."""
-    if not ANTHROPIC_AVAILABLE:
-        return {"success": False, "error": "anthropic package not installed"}
-
-    if not config.ANTHROPIC_API_KEY:
-        return {"success": False, "error": "ANTHROPIC_API_KEY not configured"}
-
     try:
-        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        # Get provider config
+        provider_config = load_provider_config()
+        provider_id = request.provider or provider_config.get("provider", "anthropic")
+        model = provider_config.get("model") or PROVIDERS[provider_id]["default_model"]
 
         # Load chat history
         conn = await get_db()
@@ -462,41 +771,15 @@ async def chat(request: ChatRequest):
         )
         await conn.commit()
 
-        # Call Claude
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            tools=SUPERVISOR_TOOLS,
-            messages=history
-        )
-
-        # Process tool calls if any
-        tool_calls_made = []
-        while response.stop_reason == "tool_use":
-            tool_calls = [block for block in response.content if block.type == "tool_use"]
-            tool_calls_made.extend([{"name": t.name, "input": t.input} for t in tool_calls])
-
-            # Execute tools
-            tool_results = await process_tool_calls(tool_calls)
-
-            # Continue conversation with tool results
-            history.append({"role": "assistant", "content": response.content})
-            history.append({"role": "user", "content": tool_results})
-
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4096,
-                system=SYSTEM_PROMPT,
-                tools=SUPERVISOR_TOOLS,
-                messages=history
-            )
-
-        # Extract text response
-        text_response = ""
-        for block in response.content:
-            if hasattr(block, 'text'):
-                text_response += block.text
+        # Call the appropriate provider
+        if provider_id == "anthropic":
+            text_response, tool_calls_made = await chat_with_anthropic(history, model)
+        elif provider_id == "openai":
+            text_response, tool_calls_made = await chat_with_openai(history, model)
+        elif provider_id == "ollama":
+            text_response, tool_calls_made = await chat_with_ollama(history, model)
+        else:
+            raise Exception(f"Unknown provider: {provider_id}")
 
         # Save assistant response
         await conn.execute(
@@ -509,7 +792,9 @@ async def chat(request: ChatRequest):
         return {
             "success": True,
             "response": text_response,
-            "tool_calls": tool_calls_made
+            "tool_calls": tool_calls_made,
+            "provider": provider_id,
+            "model": model
         }
 
     except Exception as e:

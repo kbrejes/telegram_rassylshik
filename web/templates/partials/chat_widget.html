@@ -12,6 +12,12 @@
         <div class="chat-header">
             <span class="chat-title">AI Supervisor</span>
             <div class="chat-controls">
+                <button onclick="toggleProviderPanel()" title="Change AI provider" id="provider-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
                 <button onclick="clearChatHistory()" title="Clear history">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -24,6 +30,27 @@
                     </svg>
                 </button>
             </div>
+        </div>
+
+        <!-- Provider selector panel -->
+        <div id="provider-panel" class="provider-panel hidden">
+            <div class="provider-panel-header">
+                <span>Select AI Provider</span>
+                <button onclick="toggleProviderPanel()" class="close-panel">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div id="provider-list" class="provider-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- Current provider indicator -->
+        <div id="provider-indicator" class="provider-indicator">
+            <span id="current-provider-name">Loading...</span>
         </div>
 
         <div id="chat-messages">
@@ -135,6 +162,129 @@
 
 .chat-controls button:hover {
     background: rgba(255,255,255,0.3);
+}
+
+/* Provider panel */
+.provider-panel {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 12px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.provider-panel.hidden {
+    display: none;
+}
+
+.provider-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+}
+
+.close-panel {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: #666;
+}
+
+.provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.provider-item {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.provider-item:hover {
+    border-color: #667eea;
+    background: #f5f7ff;
+}
+
+.provider-item.selected {
+    border-color: #667eea;
+    background: #f0f3ff;
+}
+
+.provider-item.unavailable {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.provider-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.provider-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+}
+
+.provider-status {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.provider-status.available {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.provider-status.unavailable {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.model-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    background: white;
+}
+
+.model-select:disabled {
+    background: #f5f5f5;
+}
+
+/* Provider indicator */
+.provider-indicator {
+    background: #f0f3ff;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #667eea;
+    border-bottom: 1px solid #e8ebf5;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.provider-indicator::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: #667eea;
+    border-radius: 50%;
 }
 
 #chat-messages {
@@ -290,17 +440,136 @@
 
 <script>
 let chatOpen = false;
+let providersData = null;
+let currentProvider = null;
+let currentModel = null;
 
 function toggleChat() {
     chatOpen = !chatOpen;
-    const window = document.getElementById('chat-window');
+    const chatWindow = document.getElementById('chat-window');
 
     if (chatOpen) {
-        window.classList.remove('chat-hidden');
+        chatWindow.classList.remove('chat-hidden');
+        loadProviders();
         loadChatHistory();
         document.getElementById('chat-input').focus();
     } else {
-        window.classList.add('chat-hidden');
+        chatWindow.classList.add('chat-hidden');
+        // Hide provider panel when closing
+        document.getElementById('provider-panel').classList.add('hidden');
+    }
+}
+
+function toggleProviderPanel() {
+    const panel = document.getElementById('provider-panel');
+    panel.classList.toggle('hidden');
+}
+
+async function loadProviders() {
+    try {
+        const response = await fetch('/api/supervisor/providers');
+        const data = await response.json();
+
+        if (data.success) {
+            providersData = data.providers;
+            currentProvider = data.current.provider;
+            currentModel = data.current.model;
+            renderProviders();
+            updateProviderIndicator();
+        }
+    } catch (error) {
+        console.error('Error loading providers:', error);
+    }
+}
+
+function renderProviders() {
+    const container = document.getElementById('provider-list');
+    container.innerHTML = '';
+
+    providersData.forEach(provider => {
+        const isSelected = provider.id === currentProvider;
+        const selectedModel = isSelected && currentModel ? currentModel : provider.default_model;
+
+        const div = document.createElement('div');
+        div.className = `provider-item ${isSelected ? 'selected' : ''} ${!provider.available ? 'unavailable' : ''}`;
+        div.onclick = provider.available ? () => selectProvider(provider.id) : null;
+
+        div.innerHTML = `
+            <div class="provider-item-header">
+                <span class="provider-name">${provider.name}</span>
+                <span class="provider-status ${provider.available ? 'available' : 'unavailable'}">
+                    ${provider.available ? 'Ready' : provider.status}
+                </span>
+            </div>
+            <select class="model-select"
+                    ${!provider.available ? 'disabled' : ''}
+                    onchange="selectModel('${provider.id}', this.value); event.stopPropagation();"
+                    onclick="event.stopPropagation();">
+                ${provider.models.map(m => `
+                    <option value="${m.id}" ${m.id === selectedModel ? 'selected' : ''}>
+                        ${m.name}
+                    </option>
+                `).join('')}
+            </select>
+        `;
+
+        container.appendChild(div);
+    });
+}
+
+async function selectProvider(providerId) {
+    const provider = providersData.find(p => p.id === providerId);
+    if (!provider || !provider.available) return;
+
+    currentProvider = providerId;
+    currentModel = provider.default_model;
+
+    try {
+        await fetch('/api/supervisor/providers', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: providerId, model: currentModel })
+        });
+
+        renderProviders();
+        updateProviderIndicator();
+        toggleProviderPanel();
+    } catch (error) {
+        console.error('Error setting provider:', error);
+    }
+}
+
+async function selectModel(providerId, modelId) {
+    if (providerId !== currentProvider) {
+        currentProvider = providerId;
+    }
+    currentModel = modelId;
+
+    try {
+        await fetch('/api/supervisor/providers', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: providerId, model: modelId })
+        });
+
+        renderProviders();
+        updateProviderIndicator();
+    } catch (error) {
+        console.error('Error setting model:', error);
+    }
+}
+
+function updateProviderIndicator() {
+    const indicator = document.getElementById('current-provider-name');
+    const provider = providersData?.find(p => p.id === currentProvider);
+    const model = provider?.models.find(m => m.id === currentModel);
+
+    if (provider && model) {
+        indicator.textContent = `${provider.name} - ${model.name}`;
+    } else if (provider) {
+        indicator.textContent = provider.name;
+    } else {
+        indicator.textContent = 'Select a provider';
     }
 }
 

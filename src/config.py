@@ -28,6 +28,9 @@ class Config:
 
     # Anthropic (Claude) API
     ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
+
+    # OpenAI API
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
     
     # Настройки бота
     MAX_MESSAGE_AGE_HOURS = int(os.getenv('MAX_MESSAGE_AGE_HOURS', '24'))
