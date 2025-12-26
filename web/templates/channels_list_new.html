@@ -20,7 +20,7 @@
                             accent: 'hsl(240 3.7% 15.9%)',
                             border: 'hsl(240 3.7% 15.9%)',
                         },
-                        accent: '#06b6d4',
+                        accent: '#8b5cf6',
                         dark: {
                             950: '#09090b',
                             900: '#0c0c0f',
@@ -31,7 +31,7 @@
                         }
                     },
                     boxShadow: {
-                        'glow': '0 0 15px rgba(6, 182, 212, 0.15)',
+                        'glow': '0 0 15px rgba(139, 92, 246, 0.15)',
                     }
                 }
             }
@@ -55,7 +55,7 @@
                 @apply transition-all duration-300;
             }
             .dark .card-glow:hover {
-                box-shadow: 0 0 20px rgba(6, 182, 212, 0.1);
+                box-shadow: 0 0 20px rgba(139, 92, 246, 0.1);
             }
         }
     </style>
@@ -183,7 +183,7 @@
                         <h1 class="text-2xl font-bold text-gray-900 dark:text-white hidden lg:block">Channels</h1>
                         <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your monitoring channels and agents</p>
                     </div>
-                    <a href="/channel/new" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-violet-600 dark:bg-accent rounded-lg hover:bg-violet-700 dark:hover:bg-cyan-600 transition-all shadow-sm hover:shadow-md">
+                    <a href="/channel/new" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-violet-600 dark:bg-accent rounded-lg hover:bg-violet-700 dark:hover:bg-violet-500 transition-all shadow-sm hover:shadow-md">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                         </svg>
@@ -256,7 +256,7 @@
                                         <button class="px-2.5 py-1 text-xs font-medium bg-violet-50 dark:bg-dark-700 text-violet-700 dark:text-white border-r border-gray-200 dark:border-dark-600 sort-btn active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
                                         <button class="px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-dark-700 sort-btn" onclick="sortVacancies('messages')" id="sort-messages">Has msgs</button>
                                     </div>
-                                    <a href="/vacancy-log" class="text-xs text-violet-600 dark:text-accent hover:text-violet-800 dark:hover:text-cyan-400 font-medium">View all →</a>
+                                    <a href="/vacancy-log" class="text-xs text-violet-600 dark:text-accent hover:text-violet-800 dark:hover:text-violet-400 font-medium">View all →</a>
                                 </div>
                             </div>
 
@@ -285,7 +285,7 @@
                     </div>
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">No channels yet</h3>
                     <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Create your first channel to start monitoring</p>
-                    <a href="/channel/new" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 dark:bg-accent rounded-lg hover:bg-violet-700 dark:hover:bg-cyan-600 transition-all">
+                    <a href="/channel/new" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 dark:bg-accent rounded-lg hover:bg-violet-700 dark:hover:bg-violet-500 transition-all">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                         </svg>
