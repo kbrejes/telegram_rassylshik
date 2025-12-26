@@ -257,10 +257,10 @@
 
         .msg-led {
             display: inline-block;
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            margin-right: 6px;
+            margin-left: 5px;
             vertical-align: middle;
         }
 
@@ -789,7 +789,7 @@
                                 html += `
                                     <tr onclick="showVacancyDetails(${idx})">
                                         <td title="${source}">${source}</td>
-                                        <td><span class="msg-led ${ledClass}"></span><span class="status-badge ${status}">${statusLabel}</span></td>
+                                        <td><span class="status-badge ${status}">${statusLabel}</span><span class="msg-led ${ledClass}"></span></td>
                                         <td>${time}</td>
                                     </tr>
                                 `;
