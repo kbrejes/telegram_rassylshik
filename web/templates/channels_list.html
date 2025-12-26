@@ -271,7 +271,7 @@
         }
 
         .msg-led.no-messages {
-            display: none;
+            background: #ccc;
         }
 
         .vacancy-mini-table td:nth-child(2) {
@@ -308,6 +308,32 @@
             font-size: 0.8rem;
             text-align: center;
             padding: 10px;
+        }
+
+        .vacancy-sort-controls {
+            display: flex;
+            gap: 6px;
+            margin-left: auto;
+        }
+
+        .sort-btn {
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .sort-btn:hover {
+            background: #f5f5f5;
+        }
+
+        .sort-btn.active {
+            background: #e3f2fd;
+            border-color: #2196f3;
+            color: #1976d2;
         }
 
         .vacancy-peek-content {
@@ -586,6 +612,10 @@
                         <div class="vacancy-peek" id="vacancy-peek-{{ channel.id }}">
                             <div class="vacancy-peek-header">
                                 <h4>Recent Vacancies</h4>
+                                <div class="vacancy-sort-controls">
+                                    <button class="sort-btn active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
+                                    <button class="sort-btn" onclick="sortVacancies('messages')" id="sort-messages">Has msgs</button>
+                                </div>
                                 <a href="/vacancy-log">View all →</a>
                             </div>
                             <div class="vacancy-peek-stats" id="vacancy-stats-{{ channel.id }}">
@@ -627,6 +657,7 @@
 
     <script>
         let peekVacancies = [];  // Store vacancies for modal
+        let currentSort = 'latest';  // Current sort order
 
         // Load status and update UI
         async function loadStatus() {
@@ -759,68 +790,103 @@
         }
 
         // Load vacancy peek data
+        let allVacancies = [];  // Original unsorted vacancies
+        let vacancyStats = null;
+
         async function loadVacancyPeek() {
             try {
                 const response = await fetch('/api/vacancies/log?limit=50');
                 const data = await response.json();
 
                 if (data.success) {
-                    peekVacancies = data.vacancies;  // Store for modal
-
-                    // Update all channel cards with the same global data
-                    document.querySelectorAll('.vacancy-peek').forEach(peek => {
-                        const channelId = peek.id.replace('vacancy-peek-', '');
-                        const statsContainer = document.getElementById(`vacancy-stats-${channelId}`);
-                        const contentContainer = document.getElementById(`vacancy-content-${channelId}`);
-
-                        // Update stats
-                        const stats = data.stats;
-                        statsContainer.innerHTML = `
-                            <span class="vacancy-peek-stat">Total: <span class="num">${stats.total}</span></span>
-                            <span class="vacancy-peek-stat passed">Passed: <span class="num">${stats.passed}</span></span>
-                            <span class="vacancy-peek-stat filtered">Filtered: <span class="num">${stats.filtered}</span></span>
-                        `;
-
-                        // Update table
-                        if (data.vacancies.length === 0) {
-                            contentContainer.innerHTML = '<div class="vacancy-peek-empty">No vacancies yet</div>';
-                        } else {
-                            let html = `
-                                <table class="vacancy-mini-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Source</th>
-                                            <th>Status</th>
-                                            <th>Time</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                            `;
-
-                            data.vacancies.forEach((v, idx) => {
-                                const status = v.is_relevant ? 'passed' : 'filtered';
-                                const statusLabel = v.is_relevant ? 'Passed' : 'Filtered';
-                                const time = formatTime(v.processed_at);
-                                const source = v.chat_title || 'Unknown';
-                                const ledClass = v.has_messages ? 'has-messages' : 'no-messages';
-
-                                html += `
-                                    <tr onclick="showVacancyDetails(${idx})">
-                                        <td title="${source}">${source}</td>
-                                        <td><span class="status-badge ${status}">${statusLabel}</span><span class="msg-led ${ledClass}"></span></td>
-                                        <td>${time}</td>
-                                    </tr>
-                                `;
-                            });
-
-                            html += '</tbody></table>';
-                            contentContainer.innerHTML = html;
-                        }
-                    });
+                    allVacancies = data.vacancies;
+                    vacancyStats = data.stats;
+                    renderVacancies();
                 }
             } catch (error) {
                 console.error('Error loading vacancy peek:', error);
             }
+        }
+
+        function sortVacancies(sortBy) {
+            currentSort = sortBy;
+
+            // Update button states
+            document.querySelectorAll('.sort-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`sort-${sortBy}`).classList.add('active');
+
+            renderVacancies();
+        }
+
+        function renderVacancies() {
+            // Sort vacancies based on current sort
+            let sorted = [...allVacancies];
+            if (currentSort === 'messages') {
+                // Sort by has_messages (true first), then by date
+                sorted.sort((a, b) => {
+                    if (a.has_messages === b.has_messages) {
+                        return new Date(b.processed_at) - new Date(a.processed_at);
+                    }
+                    return b.has_messages - a.has_messages;
+                });
+            } else {
+                // Sort by latest (default - already sorted by API)
+                sorted.sort((a, b) => new Date(b.processed_at) - new Date(a.processed_at));
+            }
+
+            peekVacancies = sorted;  // Store for modal
+
+            // Update all channel cards with the same global data
+            document.querySelectorAll('.vacancy-peek').forEach(peek => {
+                const channelId = peek.id.replace('vacancy-peek-', '');
+                const statsContainer = document.getElementById(`vacancy-stats-${channelId}`);
+                const contentContainer = document.getElementById(`vacancy-content-${channelId}`);
+
+                // Update stats
+                if (vacancyStats) {
+                    statsContainer.innerHTML = `
+                        <span class="vacancy-peek-stat">Total: <span class="num">${vacancyStats.total}</span></span>
+                        <span class="vacancy-peek-stat passed">Passed: <span class="num">${vacancyStats.passed}</span></span>
+                        <span class="vacancy-peek-stat filtered">Filtered: <span class="num">${vacancyStats.filtered}</span></span>
+                    `;
+                }
+
+                // Update table
+                if (sorted.length === 0) {
+                    contentContainer.innerHTML = '<div class="vacancy-peek-empty">No vacancies yet</div>';
+                } else {
+                    let html = `
+                        <table class="vacancy-mini-table">
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>Status</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    sorted.forEach((v, idx) => {
+                        const status = v.is_relevant ? 'passed' : 'filtered';
+                        const statusLabel = v.is_relevant ? 'Passed' : 'Filtered';
+                        const time = formatTime(v.processed_at);
+                        const source = v.chat_title || 'Unknown';
+                        const ledClass = v.has_messages ? 'has-messages' : 'no-messages';
+
+                        html += `
+                            <tr onclick="showVacancyDetails(${idx})">
+                                <td title="${source}">${source}</td>
+                                <td><span class="status-badge ${status}">${statusLabel}</span><span class="msg-led ${ledClass}"></span></td>
+                                <td>${time}</td>
+                            </tr>
+                        `;
+                    });
+
+                    html += '</tbody></table>';
+                    contentContainer.innerHTML = html;
+                }
+            });
         }
 
         async function showVacancyDetails(idx) {
