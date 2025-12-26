@@ -129,6 +129,11 @@ class JobAnalyzer:
 
         return self._get_default_system_prompt()
 
+    def _is_using_custom_prompt(self) -> bool:
+        """Check if a custom prompt is configured."""
+        from web.utils import load_filter_prompt
+        return load_filter_prompt() is not None
+
     def _get_default_system_prompt(self) -> str:
         """Get the hardcoded default system prompt."""
         return f"""You are a job posting analyzer. Analyze Russian/English job ads.
@@ -192,9 +197,9 @@ Respond in JSON format:
             is_real_job = data.get("is_real_job", True) and not data.get("is_paid_ad", False)
             salary_monthly = data.get("salary_monthly_rub")
 
-            # Validate salary
+            # Validate salary (skip if using custom prompt - user controls filtering)
             is_salary_ok = True
-            if salary_monthly is not None:
+            if not self._is_using_custom_prompt() and salary_monthly is not None:
                 is_salary_ok = salary_monthly >= self.min_salary_rub
 
             # Build rejection reason
@@ -257,9 +262,12 @@ Respond in JSON format:
         ]
         is_paid_ad = any(re.search(p, text_lower) for p in ad_patterns)
 
-        # Salary extraction
+        # Salary extraction (skip validation if using custom prompt)
         salary = self._extract_salary_regex(text)
-        is_salary_ok = salary is None or salary >= self.min_salary_rub
+        if self._is_using_custom_prompt():
+            is_salary_ok = True
+        else:
+            is_salary_ok = salary is None or salary >= self.min_salary_rub
 
         # Contact extraction with bot detection
         contact, contact_type, bot_username = self.detect_contact_type(text)
