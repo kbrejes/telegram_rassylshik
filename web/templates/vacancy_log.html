@@ -280,6 +280,68 @@
             overflow-y: auto;
         }
 
+        .prompt-textarea {
+            width: 100%;
+            min-height: 300px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        .prompt-textarea:focus {
+            outline: none;
+            border-color: #1976d2;
+        }
+
+        .prompt-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            align-items: center;
+        }
+
+        .btn-save {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .btn-save:hover {
+            background: #43a047;
+        }
+
+        .btn-reset {
+            background: #f5f5f5;
+            color: #666;
+            border: 1px solid #ddd;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .btn-reset:hover {
+            background: #eee;
+        }
+
+        .prompt-status {
+            margin-left: auto;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .prompt-status.custom {
+            color: #1976d2;
+        }
+
         .refresh-btn {
             background: #1976d2;
             color: white;
@@ -360,7 +422,15 @@
                 <span class="arrow">&#9660;</span>
             </div>
             <div class="collapsible-content">
-                <div id="filter-prompt" class="prompt-box">Loading...</div>
+                <p style="margin-top: 0; color: #666; font-size: 0.85rem;">
+                    Use <code>{min_salary}</code> placeholder for dynamic minimum salary value.
+                </p>
+                <textarea id="filter-prompt" class="prompt-textarea" placeholder="Loading..."></textarea>
+                <div class="prompt-actions">
+                    <button class="btn-save" onclick="saveFilterPrompt()">Save</button>
+                    <button class="btn-reset" onclick="resetFilterPrompt()">Reset to Default</button>
+                    <span id="prompt-status" class="prompt-status">Loading...</span>
+                </div>
             </div>
         </div>
 
@@ -483,18 +553,111 @@
             }
         }
 
+        let defaultPrompt = '';
+        let isCustomPrompt = false;
+
         async function loadFilterPrompt() {
             try {
                 const response = await fetch('/api/vacancies/filter-prompt');
                 const data = await response.json();
                 if (data.success) {
-                    document.getElementById('filter-prompt').textContent = data.prompt;
+                    document.getElementById('filter-prompt').value = data.prompt;
+                    defaultPrompt = data.default_prompt;
+                    isCustomPrompt = data.is_custom;
+                    updatePromptStatus();
                 } else {
-                    document.getElementById('filter-prompt').textContent = 'Error loading prompt';
+                    document.getElementById('filter-prompt').value = 'Error loading prompt';
                 }
             } catch (e) {
-                document.getElementById('filter-prompt').textContent = 'Error loading prompt';
+                document.getElementById('filter-prompt').value = 'Error loading prompt';
             }
+        }
+
+        function updatePromptStatus() {
+            const status = document.getElementById('prompt-status');
+            if (isCustomPrompt) {
+                status.textContent = 'Custom prompt';
+                status.className = 'prompt-status custom';
+            } else {
+                status.textContent = 'Default prompt';
+                status.className = 'prompt-status';
+            }
+        }
+
+        async function saveFilterPrompt() {
+            const prompt = document.getElementById('filter-prompt').value.trim();
+            if (!prompt) {
+                showNotification('Prompt cannot be empty', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    isCustomPrompt = true;
+                    updatePromptStatus();
+                    showNotification('Prompt saved', 'success');
+                } else {
+                    showNotification('Error saving prompt: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (e) {
+                showNotification('Error saving prompt', 'error');
+            }
+        }
+
+        async function resetFilterPrompt() {
+            if (!confirm('Reset to default prompt?')) return;
+
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt', {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('filter-prompt').value = defaultPrompt;
+                    isCustomPrompt = false;
+                    updatePromptStatus();
+                    showNotification('Prompt reset to default', 'success');
+                } else {
+                    showNotification('Error resetting prompt: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (e) {
+                showNotification('Error resetting prompt', 'error');
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 20px;
+                border-radius: 8px;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            `;
+
+            if (type === 'success') {
+                notification.style.background = '#4caf50';
+                notification.style.color = 'white';
+            } else if (type === 'error') {
+                notification.style.background = '#f44336';
+                notification.style.color = 'white';
+            } else {
+                notification.style.background = '#1976d2';
+                notification.style.color = 'white';
+            }
+
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => notification.remove(), 3000);
         }
 
         function renderVacancies() {

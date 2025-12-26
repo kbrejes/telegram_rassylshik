@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
 TEMPLATES_FILE = BASE_DIR.parent / "configs" / "templates.json"
 SOURCE_LISTS_FILE = BASE_DIR.parent / "configs" / "source_lists.json"
+FILTER_PROMPT_FILE = BASE_DIR.parent / "configs" / "filter_prompt.json"
 
 
 # ============== Telegram Client ==============
@@ -181,6 +182,31 @@ def save_source_lists(lists: List[Dict[str, Any]]) -> None:
     SOURCE_LISTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(SOURCE_LISTS_FILE, 'w', encoding='utf-8') as f:
         json.dump(lists, f, ensure_ascii=False, indent=2)
+
+
+def load_filter_prompt() -> Optional[str]:
+    """Load custom filter prompt, returns None if not set (use default)"""
+    if FILTER_PROMPT_FILE.exists():
+        try:
+            with open(FILTER_PROMPT_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get("custom_prompt")
+        except Exception:
+            pass
+    return None
+
+
+def save_filter_prompt(prompt: str) -> None:
+    """Save custom filter prompt"""
+    FILTER_PROMPT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(FILTER_PROMPT_FILE, 'w', encoding='utf-8') as f:
+        json.dump({"custom_prompt": prompt}, f, ensure_ascii=False, indent=2)
+
+
+def reset_filter_prompt() -> None:
+    """Delete custom prompt file to reset to default"""
+    if FILTER_PROMPT_FILE.exists():
+        FILTER_PROMPT_FILE.unlink()
 
 
 def get_available_agents() -> List[Dict[str, str]]:

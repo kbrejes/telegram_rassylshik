@@ -5,10 +5,17 @@ import logging
 import aiosqlite
 from pathlib import Path
 from fastapi import APIRouter
+from pydantic import BaseModel
 from typing import Optional
+
+from web.utils import load_filter_prompt, save_filter_prompt, reset_filter_prompt
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/vacancies", tags=["vacancies"])
+
+
+class FilterPromptRequest(BaseModel):
+    prompt: str
 
 # Database path
 DB_PATH = Path(__file__).parent.parent.parent / "jobs.db"
@@ -120,14 +127,45 @@ async def get_filter_prompt():
     try:
         from src.job_analyzer import JobAnalyzer
 
-        # Create a temporary analyzer to get the prompt
+        # Check for custom prompt
+        custom_prompt = load_filter_prompt()
+        is_custom = custom_prompt is not None
+
+        # Get the effective prompt (custom or default from analyzer)
         analyzer = JobAnalyzer(providers_config={}, min_salary_rub=70000)
         prompt = analyzer._get_system_prompt()
 
+        # Also get the default for reset functionality
+        default_prompt = analyzer._get_default_system_prompt()
+
         return {
             "success": True,
-            "prompt": prompt
+            "prompt": prompt,
+            "is_custom": is_custom,
+            "default_prompt": default_prompt
         }
     except Exception as e:
         logger.error(f"Error getting filter prompt: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.put("/filter-prompt")
+async def update_filter_prompt(request: FilterPromptRequest):
+    """Save custom AI filter prompt."""
+    try:
+        save_filter_prompt(request.prompt)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error saving filter prompt: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.delete("/filter-prompt")
+async def delete_filter_prompt():
+    """Reset AI filter prompt to default."""
+    try:
+        reset_filter_prompt()
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error resetting filter prompt: {e}")
         return {"success": False, "error": str(e)}

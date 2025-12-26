@@ -117,11 +117,23 @@ class JobAnalyzer:
         return self._parse_llm_response(response, text)
 
     def _get_system_prompt(self) -> str:
+        """Get system prompt - custom if set, otherwise default."""
+        from web.utils import load_filter_prompt
+
+        custom_prompt = load_filter_prompt()
+        if custom_prompt:
+            # Replace placeholder with actual min salary value
+            return custom_prompt.replace("{min_salary}", str(self.min_salary_rub))
+
+        return self._get_default_system_prompt()
+
+    def _get_default_system_prompt(self) -> str:
+        """Get the hardcoded default system prompt."""
         return f"""You are a job posting analyzer. Analyze Russian/English job ads.
 
 Your task:
 1. Determine if this is a REAL job vacancy or a PAID ADVERTISEMENT
-2. Extract salary and convert to monthly RUB (minimum acceptable: {self.min_salary_rub} RUB)
+2. Extract salary and convert to monthly RUB (minimum acceptable: {{min_salary}} RUB)
 3. Find the Telegram contact username for applying
 
 Signs of PAID ADVERTISEMENT (reject these):
@@ -140,7 +152,7 @@ CONTACT EXTRACTION RULES:
 - If no clear personal contact found, return null - DO NOT return channel usernames
 - If multiple usernames found, pick the one that looks like a person's name
 
-Respond ONLY with valid JSON, no other text."""
+Respond ONLY with valid JSON, no other text.""".replace("{min_salary}", str(self.min_salary_rub))
 
     def _build_prompt(self, text: str) -> str:
         return f'''Analyze this job posting:
