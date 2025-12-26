@@ -130,11 +130,15 @@
         }
 
         .channel-card.disabled {
-            opacity: 0.6;
+            border-left: 4px solid #ccc;
         }
 
         .channel-card.disabled h3 {
             color: #999;
+        }
+
+        .channel-card:not(.disabled) {
+            border-left: 4px solid #4caf50;
         }
 
         .bot-status-bar {
