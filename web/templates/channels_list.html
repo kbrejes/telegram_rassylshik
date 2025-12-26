@@ -852,13 +852,13 @@
                     <div class="modal-field-label">Processed</div>
                     <div class="modal-field-value">${v.processed_at || '-'}</div>
                 </div>
-                <div class="modal-field">
-                    <div class="modal-field-label">Full Text</div>
-                    <div class="modal-full-text">${escapeHtml(v.text_full || v.text_preview || '')}</div>
-                </div>
                 <div class="message-log" id="message-log">
                     <div class="message-log-header">Message Log</div>
                     <div class="no-messages">Loading...</div>
+                </div>
+                <div class="modal-field">
+                    <div class="modal-field-label">Full Text</div>
+                    <div class="modal-full-text">${escapeHtml(v.text_full || v.text_preview || '')}</div>
                 </div>
             `;
 
