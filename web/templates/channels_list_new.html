@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }" x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))" :class="{ 'dark': darkMode }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Notification Bot</title>
+    <!-- Alpine.js for reactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -37,8 +39,14 @@
             }
         }
     </style>
+    <script>
+        // Apply theme immediately to prevent flash
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
 </head>
-<body class="h-full bg-gray-50">
+<body class="h-full bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
     <div class="flex h-full">
         <!-- Sidebar -->
         <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-sidebar transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-auto -translate-x-full">
@@ -96,8 +104,25 @@
                     </a>
                 </nav>
 
-                <!-- Bot Status in Sidebar -->
-                <div class="px-3 py-4 border-t border-sidebar-border">
+                <!-- Theme Toggle & Bot Status -->
+                <div class="px-3 py-4 border-t border-sidebar-border space-y-3">
+                    <!-- Theme Toggle -->
+                    <button @click="darkMode = !darkMode" class="flex items-center justify-between w-full px-3 py-2 rounded-lg hover:bg-sidebar-accent transition-colors group">
+                        <span class="text-sm text-gray-400 group-hover:text-sidebar-foreground">Theme</span>
+                        <div class="flex items-center gap-2">
+                            <!-- Sun icon -->
+                            <svg x-show="darkMode" class="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/>
+                            </svg>
+                            <!-- Moon icon -->
+                            <svg x-show="!darkMode" class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+                            </svg>
+                            <span class="text-xs text-gray-500" x-text="darkMode ? 'Light' : 'Dark'"></span>
+                        </div>
+                    </button>
+
+                    <!-- Bot Status -->
                     <div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-sidebar-accent">
                         <span id="sidebar-bot-dot" class="w-2.5 h-2.5 rounded-full bg-gray-500"></span>
                         <div class="flex-1 min-w-0">
@@ -121,13 +146,13 @@
         <!-- Main Content -->
         <main class="flex-1 flex flex-col min-h-screen lg:ml-0">
             <!-- Top Header (Mobile) -->
-            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white border-b border-gray-200 lg:hidden">
-                <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100">
-                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 lg:hidden">
+                <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                     </svg>
                 </button>
-                <h1 class="text-lg font-semibold text-gray-900">Channels</h1>
+                <h1 class="text-lg font-semibold text-gray-900 dark:text-white">Channels</h1>
             </header>
 
             <!-- Page Content -->
@@ -135,8 +160,8 @@
                 <!-- Page Header -->
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                     <div>
-                        <h1 class="text-2xl font-bold text-gray-900 hidden lg:block">Channels</h1>
-                        <p class="text-sm text-gray-500 mt-1">Manage your monitoring channels and agents</p>
+                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white hidden lg:block">Channels</h1>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your monitoring channels and agents</p>
                     </div>
                     <a href="/channel/new" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-violet-600 to-purple-600 rounded-lg hover:from-violet-700 hover:to-purple-700 transition-all shadow-sm hover:shadow-md">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -150,34 +175,34 @@
                 {% if channels %}
                 <div class="space-y-4">
                     {% for channel in channels %}
-                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden {% if not channel.enabled %}opacity-60{% endif %}" data-channel-id="{{ channel.id }}">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow overflow-hidden {% if not channel.enabled %}opacity-60{% endif %}" data-channel-id="{{ channel.id }}">
                         <!-- Channel Header -->
-                        <div class="flex items-center justify-between p-4 border-b border-gray-100">
+                        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
                             <div class="flex items-center gap-3">
-                                <div class="flex items-center justify-center w-10 h-10 rounded-lg {% if channel.enabled %}bg-green-100 text-green-600{% else %}bg-gray-100 text-gray-400{% endif %}">
+                                <div class="flex items-center justify-center w-10 h-10 rounded-lg {% if channel.enabled %}bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400{% else %}bg-gray-100 dark:bg-gray-700 text-gray-400{% endif %}">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                                     </svg>
                                 </div>
                                 <div>
-                                    <h3 class="font-semibold text-gray-900">{{ channel.name }}</h3>
-                                    <p class="text-xs text-gray-500">ID: {{ channel.id }}</p>
+                                    <h3 class="font-semibold text-gray-900 dark:text-white">{{ channel.name }}</h3>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">ID: {{ channel.id }}</p>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">
                                 <!-- Toggle Switch -->
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" class="sr-only peer" {% if channel.enabled %}checked{% endif %} onchange="toggleChannel('{{ channel.id }}', this.checked)">
-                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-violet-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
+                                    <div class="w-11 h-6 bg-gray-200 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-violet-300 dark:peer-focus:ring-violet-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
                                 </label>
                                 <!-- Edit Button -->
-                                <a href="/channel/{{ channel.id }}" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                                <a href="/channel/{{ channel.id }}" class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                                     </svg>
                                 </a>
                                 <!-- Delete Button -->
-                                <button onclick="deleteChannel('{{ channel.id }}')" class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                <button onclick="deleteChannel('{{ channel.id }}')" class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                     </svg>
@@ -186,14 +211,14 @@
                         </div>
 
                         <!-- Agents Row -->
-                        <div class="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                        <div class="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
                             <div class="flex items-center gap-2 flex-wrap" id="agents-{{ channel.id }}">
-                                <span class="text-xs font-medium text-gray-500 mr-1">Agents:</span>
+                                <span class="text-xs font-medium text-gray-500 dark:text-gray-400 mr-1">Agents:</span>
                                 {% if channel.agents %}
                                     {% for agent in channel.agents %}
-                                    <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white rounded-full border border-gray-200 text-xs" data-session="{{ agent.session_name }}">
+                                    <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-gray-700 rounded-full border border-gray-200 dark:border-gray-600 text-xs" data-session="{{ agent.session_name }}">
                                         <span class="w-2 h-2 rounded-full bg-gray-400 dot"></span>
-                                        <span class="name text-gray-700">{{ agent.session_name }}</span>
+                                        <span class="name text-gray-700 dark:text-gray-300">{{ agent.session_name }}</span>
                                     </div>
                                     {% endfor %}
                                 {% else %}
@@ -205,25 +230,25 @@
                         <!-- Vacancy Peek Section -->
                         <div class="p-4" id="vacancy-peek-{{ channel.id }}">
                             <div class="flex items-center justify-between mb-3">
-                                <h4 class="text-sm font-medium text-gray-700">Recent Vacancies</h4>
+                                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Recent Vacancies</h4>
                                 <div class="flex items-center gap-2">
-                                    <div class="flex rounded-lg border border-gray-200 overflow-hidden">
-                                        <button class="px-2.5 py-1 text-xs font-medium bg-violet-50 text-violet-700 border-r border-gray-200 sort-btn active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
-                                        <button class="px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 sort-btn" onclick="sortVacancies('messages')" id="sort-messages">Has msgs</button>
+                                    <div class="flex rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden">
+                                        <button class="px-2.5 py-1 text-xs font-medium bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border-r border-gray-200 dark:border-gray-600 sort-btn active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
+                                        <button class="px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 sort-btn" onclick="sortVacancies('messages')" id="sort-messages">Has msgs</button>
                                     </div>
-                                    <a href="/vacancy-log" class="text-xs text-violet-600 hover:text-violet-800 font-medium">View all →</a>
+                                    <a href="/vacancy-log" class="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300 font-medium">View all →</a>
                                 </div>
                             </div>
 
                             <!-- Stats Row -->
                             <div class="flex gap-4 mb-3" id="vacancy-stats-{{ channel.id }}">
-                                <div class="text-xs text-gray-500">Total: <span class="font-semibold text-gray-900">-</span></div>
-                                <div class="text-xs text-gray-500">Passed: <span class="font-semibold text-green-600">-</span></div>
-                                <div class="text-xs text-gray-500">Filtered: <span class="font-semibold text-red-600">-</span></div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">Total: <span class="font-semibold text-gray-900 dark:text-white">-</span></div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">Passed: <span class="font-semibold text-green-600 dark:text-green-400">-</span></div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">Filtered: <span class="font-semibold text-red-600 dark:text-red-400">-</span></div>
                             </div>
 
                             <!-- Vacancy Table -->
-                            <div class="vacancy-peek-content max-h-40 overflow-y-auto rounded-lg border border-gray-200" id="vacancy-content-{{ channel.id }}">
+                            <div class="vacancy-peek-content max-h-40 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600" id="vacancy-content-{{ channel.id }}">
                                 <div class="flex items-center justify-center py-6 text-sm text-gray-400">Loading...</div>
                             </div>
                         </div>
@@ -233,13 +258,13 @@
                 {% else %}
                 <!-- Empty State -->
                 <div class="flex flex-col items-center justify-center py-16 px-4">
-                    <div class="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
+                    <div class="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
                         <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
                         </svg>
                     </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">No channels yet</h3>
-                    <p class="text-sm text-gray-500 mb-4">Create your first channel to start monitoring</p>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">No channels yet</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Create your first channel to start monitoring</p>
                     <a href="/channel/new" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -256,10 +281,10 @@
     <div id="modal-overlay" class="fixed inset-0 z-50 hidden" onclick="closeModal(event)">
         <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
         <div class="flex items-center justify-center min-h-full p-4">
-            <div class="relative bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden" onclick="event.stopPropagation()">
-                <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-900">Vacancy Details</h3>
-                    <button onclick="closeModal()" class="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden" onclick="event.stopPropagation()">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Vacancy Details</h3>
+                    <button onclick="closeModal()" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
@@ -466,9 +491,9 @@
 
                 if (vacancyStats) {
                     statsContainer.innerHTML = `
-                        <div class="text-xs text-gray-500">Total: <span class="font-semibold text-gray-900">${vacancyStats.total}</span></div>
-                        <div class="text-xs text-gray-500">Passed: <span class="font-semibold text-green-600">${vacancyStats.passed}</span></div>
-                        <div class="text-xs text-gray-500">Filtered: <span class="font-semibold text-red-600">${vacancyStats.filtered}</span></div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Total: <span class="font-semibold text-gray-900 dark:text-white">${vacancyStats.total}</span></div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Passed: <span class="font-semibold text-green-600 dark:text-green-400">${vacancyStats.passed}</span></div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Filtered: <span class="font-semibold text-red-600 dark:text-red-400">${vacancyStats.filtered}</span></div>
                     `;
                 }
 
@@ -476,32 +501,32 @@
                     contentContainer.innerHTML = '<div class="flex items-center justify-center py-6 text-sm text-gray-400">No vacancies yet</div>';
                 } else {
                     let html = `<table class="w-full text-sm">
-                        <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                        <thead class="bg-gray-50 dark:bg-gray-700/50 text-xs text-gray-500 dark:text-gray-400 uppercase">
                             <tr>
                                 <th class="px-3 py-2 text-left font-medium">Source</th>
                                 <th class="px-3 py-2 text-right font-medium">Status</th>
                                 <th class="px-3 py-2 text-right font-medium">Time</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100">`;
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">`;
 
                     sorted.slice(0, 10).forEach((v, idx) => {
-                        const statusClass = v.is_relevant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
+                        const statusClass = v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
                         const statusLabel = v.is_relevant ? 'Passed' : 'Filtered';
                         const time = formatTime(v.processed_at);
                         const source = v.chat_title || 'Unknown';
-                        const ledClass = v.has_messages ? 'bg-blue-500' : 'bg-gray-300';
+                        const ledClass = v.has_messages ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600';
 
                         html += `
-                            <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="showVacancyDetails(${idx})">
-                                <td class="px-3 py-2 text-gray-700 truncate max-w-[150px]" title="${source}">${source}</td>
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors" onclick="showVacancyDetails(${idx})">
+                                <td class="px-3 py-2 text-gray-700 dark:text-gray-300 truncate max-w-[150px]" title="${source}">${source}</td>
                                 <td class="px-3 py-2 text-right">
                                     <div class="flex items-center justify-end gap-1.5">
                                         <span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}">${statusLabel}</span>
                                         <span class="w-1.5 h-1.5 rounded-full ${ledClass}"></span>
                                     </div>
                                 </td>
-                                <td class="px-3 py-2 text-right text-gray-500 text-xs">${time}</td>
+                                <td class="px-3 py-2 text-right text-gray-500 dark:text-gray-400 text-xs">${time}</td>
                             </tr>
                         `;
                     });
@@ -519,34 +544,34 @@
             const modal = document.getElementById('modal-overlay');
             const body = document.getElementById('modal-body');
 
-            const statusClass = v.is_relevant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
+            const statusClass = v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
             const statusLabel = v.is_relevant ? 'Passed' : 'Filtered';
 
             body.innerHTML = `
                 <div class="space-y-4">
                     <div>
-                        <label class="text-xs font-medium text-gray-500 uppercase">Source</label>
-                        <p class="text-sm text-gray-900 mt-1">${escapeHtml(v.chat_title || 'Unknown')}</p>
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Source</label>
+                        <p class="text-sm text-gray-900 dark:text-white mt-1">${escapeHtml(v.chat_title || 'Unknown')}</p>
                     </div>
                     <div>
-                        <label class="text-xs font-medium text-gray-500 uppercase">Status</label>
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</label>
                         <p class="mt-1"><span class="px-2.5 py-1 text-xs font-medium rounded-full ${statusClass}">${statusLabel}</span></p>
                     </div>
                     <div>
-                        <label class="text-xs font-medium text-gray-500 uppercase">AI Reason</label>
-                        <p class="text-sm text-gray-900 mt-1">${escapeHtml(v.ai_reason || 'No reason provided')}</p>
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">AI Reason</label>
+                        <p class="text-sm text-gray-900 dark:text-white mt-1">${escapeHtml(v.ai_reason || 'No reason provided')}</p>
                     </div>
                     <div>
-                        <label class="text-xs font-medium text-gray-500 uppercase">Processed</label>
-                        <p class="text-sm text-gray-900 mt-1">${v.processed_at || '-'}</p>
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Processed</label>
+                        <p class="text-sm text-gray-900 dark:text-white mt-1">${v.processed_at || '-'}</p>
                     </div>
-                    <div id="message-log" class="pt-4 border-t border-gray-200">
-                        <label class="text-xs font-medium text-gray-500 uppercase">Message Log</label>
+                    <div id="message-log" class="pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Message Log</label>
                         <div class="mt-2 text-sm text-gray-400">Loading...</div>
                     </div>
-                    <div class="pt-4 border-t border-gray-200">
-                        <label class="text-xs font-medium text-gray-500 uppercase">Full Text</label>
-                        <div class="mt-2 p-3 bg-gray-50 rounded-lg text-sm text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">${escapeHtml(v.text_full || v.text_preview || '')}</div>
+                    <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Full Text</label>
+                        <div class="mt-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-48 overflow-y-auto">${escapeHtml(v.text_full || v.text_preview || '')}</div>
                     </div>
                 </div>
             `;
@@ -560,16 +585,16 @@
                 const logContainer = document.getElementById('message-log');
 
                 if (data.success && data.conversations && data.conversations.length > 0) {
-                    let html = '<label class="text-xs font-medium text-gray-500 uppercase">CRM Conversation</label>';
+                    let html = '<label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">CRM Conversation</label>';
 
                     data.conversations.forEach(conv => {
-                        const phaseClass = conv.call_scheduled ? 'bg-green-100 text-green-700' :
-                                          conv.call_offered ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700';
+                        const phaseClass = conv.call_scheduled ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                                          conv.call_offered ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
 
                         html += `
-                            <div class="mt-2 p-3 bg-gray-50 rounded-lg">
+                            <div class="mt-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                                 <div class="flex items-center justify-between mb-2">
-                                    <span class="text-sm font-medium text-gray-900">${escapeHtml(conv.contact_name || 'Contact')}</span>
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white">${escapeHtml(conv.contact_name || 'Contact')}</span>
                                     <span class="px-2 py-0.5 text-xs font-medium rounded-full ${phaseClass}">${conv.current_phase}</span>
                                 </div>
                         `;
@@ -578,7 +603,7 @@
                             html += '<div class="space-y-2 mt-3">';
                             conv.messages.forEach(msg => {
                                 if (msg.role === 'system') return;
-                                const msgClass = msg.role === 'assistant' ? 'bg-violet-100 text-violet-800 ml-auto' : 'bg-white border border-gray-200 mr-auto';
+                                const msgClass = msg.role === 'assistant' ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-800 dark:text-violet-300 ml-auto' : 'bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 text-gray-800 dark:text-gray-200 mr-auto';
                                 const sender = msg.role === 'assistant' ? 'Bot' : conv.contact_name || 'Contact';
                                 html += `
                                     <div class="max-w-[85%] p-2.5 rounded-lg text-xs ${msgClass}">
@@ -590,7 +615,7 @@
                             html += '</div>';
                         } else {
                             html += `
-                                <div class="text-xs text-gray-500 space-y-1">
+                                <div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
                                     <div>Total messages: ${conv.total_messages}</div>
                                     <div>Call offered: ${conv.call_offered ? 'Yes' : 'No'}</div>
                                     <div>Call scheduled: ${conv.call_scheduled ? 'Yes' : 'No'}</div>
@@ -604,14 +629,14 @@
                     logContainer.innerHTML = html;
                 } else {
                     logContainer.innerHTML = `
-                        <label class="text-xs font-medium text-gray-500 uppercase">CRM Conversation</label>
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">CRM Conversation</label>
                         <div class="mt-2 text-sm text-gray-400">No conversation linked yet</div>
                     `;
                 }
             } catch (error) {
                 console.error('Error loading conversation:', error);
                 document.getElementById('message-log').innerHTML = `
-                    <label class="text-xs font-medium text-gray-500 uppercase">CRM Conversation</label>
+                    <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">CRM Conversation</label>
                     <div class="mt-2 text-sm text-red-500">Failed to load conversation</div>
                 `;
             }
