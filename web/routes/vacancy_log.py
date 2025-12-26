@@ -11,8 +11,9 @@ from typing import Optional
 
 from web.utils import load_filter_prompt, save_filter_prompt, reset_filter_prompt
 
-# Path to conversation states
+# Path to conversation states and working memory
 CONVERSATION_STATES_DIR = Path(__file__).parent.parent.parent / "data" / "conversation_states"
+WORKING_MEMORY_DIR = Path(__file__).parent.parent.parent / "data" / "working_memory"
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/vacancies", tags=["vacancies"])
@@ -225,23 +226,34 @@ async def get_vacancy_messages(vacancy_id: int):
 
             # Load conversation state from file
             conv_file = CONVERSATION_STATES_DIR / f"{contact_id}.json"
+            conv_data = {}
             if conv_file.exists():
                 try:
                     with open(conv_file, 'r') as f:
                         conv_data = json.load(f)
-
-                    result.append({
-                        "contact_id": contact_id,
-                        "contact_name": contact_name,
-                        "current_phase": conv_data.get("current_phase", "unknown"),
-                        "total_messages": conv_data.get("total_messages", 0),
-                        "call_offered": conv_data.get("call_offered", False),
-                        "call_scheduled": conv_data.get("call_scheduled", False),
-                        "last_interaction": conv_data.get("last_interaction"),
-                        "messages": []  # Actual messages are in Telegram, we just have state
-                    })
                 except Exception as e:
                     logger.error(f"Error reading conversation state: {e}")
+
+            # Load message history from working memory
+            messages = []
+            memory_file = WORKING_MEMORY_DIR / f"{contact_id}.json"
+            if memory_file.exists():
+                try:
+                    with open(memory_file, 'r') as f:
+                        messages = json.load(f)
+                except Exception as e:
+                    logger.error(f"Error reading working memory: {e}")
+
+            result.append({
+                "contact_id": contact_id,
+                "contact_name": contact_name,
+                "current_phase": conv_data.get("current_phase", "unknown"),
+                "total_messages": conv_data.get("total_messages", 0),
+                "call_offered": conv_data.get("call_offered", False),
+                "call_scheduled": conv_data.get("call_scheduled", False),
+                "last_interaction": conv_data.get("last_interaction"),
+                "messages": messages
+            })
 
         await conn.close()
 

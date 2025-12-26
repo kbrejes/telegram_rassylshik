@@ -431,7 +431,7 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
-            max-height: 200px;
+            max-height: 350px;
             overflow-y: auto;
         }
 
@@ -464,6 +464,18 @@
 
         .message-item.outgoing .time {
             text-align: right;
+        }
+
+        .message-sender {
+            font-weight: 600;
+            font-size: 0.75rem;
+            margin-bottom: 3px;
+            opacity: 0.7;
+        }
+
+        .message-text {
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         .no-messages {
@@ -870,15 +882,37 @@
                                 <span class="bot-name">${escapeHtml(conv.contact_name || 'Contact')}</span>
                                 <span class="status ${phaseClass}">${conv.current_phase}</span>
                             </div>
-                            <div class="message-list">
-                                <div class="message-item incoming">
-                                    <div><strong>Total messages:</strong> ${conv.total_messages}</div>
-                                    <div><strong>Call offered:</strong> ${conv.call_offered ? 'Yes' : 'No'}</div>
-                                    <div><strong>Call scheduled:</strong> ${conv.call_scheduled ? 'Yes' : 'No'}</div>
-                                    ${conv.last_interaction ? `<div class="time">Last: ${new Date(conv.last_interaction).toLocaleString()}</div>` : ''}
-                                </div>
-                            </div>
                         `;
+
+                        // Display actual messages if available
+                        if (conv.messages && conv.messages.length > 0) {
+                            html += '<div class="message-list">';
+                            conv.messages.forEach(msg => {
+                                // Skip system messages (original vacancy text)
+                                if (msg.role === 'system') return;
+
+                                const msgClass = msg.role === 'assistant' ? 'outgoing' : 'incoming';
+                                const sender = msg.role === 'assistant' ? 'Bot' : conv.contact_name || 'Contact';
+                                html += `
+                                    <div class="message-item ${msgClass}">
+                                        <div class="message-sender">${escapeHtml(sender)}</div>
+                                        <div class="message-text">${escapeHtml(msg.content || '')}</div>
+                                    </div>
+                                `;
+                            });
+                            html += '</div>';
+                        } else {
+                            html += `
+                                <div class="message-list">
+                                    <div class="message-item incoming">
+                                        <div><strong>Total messages:</strong> ${conv.total_messages}</div>
+                                        <div><strong>Call offered:</strong> ${conv.call_offered ? 'Yes' : 'No'}</div>
+                                        <div><strong>Call scheduled:</strong> ${conv.call_scheduled ? 'Yes' : 'No'}</div>
+                                        ${conv.last_interaction ? `<div class="time">Last: ${new Date(conv.last_interaction).toLocaleString()}</div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        }
                     });
 
                     logContainer.innerHTML = html;
