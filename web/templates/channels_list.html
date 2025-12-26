@@ -388,6 +388,103 @@
             font-size: 0.85rem;
             line-height: 1.5;
         }
+
+        /* Message log */
+        .message-log {
+            margin-top: 15px;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+
+        .message-log-header {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 0.85rem;
+        }
+
+        .message-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .message-item {
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            max-width: 85%;
+        }
+
+        .message-item.outgoing {
+            background: #e3f2fd;
+            color: #1565c0;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message-item.incoming {
+            background: #f5f5f5;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-item .time {
+            font-size: 0.7rem;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .message-item.outgoing .time {
+            text-align: right;
+        }
+
+        .no-messages {
+            color: #999;
+            font-size: 0.85rem;
+            text-align: center;
+            padding: 15px;
+        }
+
+        .bot-interaction-header {
+            background: #f8f9fa;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .bot-interaction-header .bot-name {
+            font-weight: 600;
+            color: #1976d2;
+        }
+
+        .bot-interaction-header .status {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+        }
+
+        .bot-interaction-header .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .bot-interaction-header .status.failed {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .bot-interaction-header .status.in_progress {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
     </style>
 </head>
 <body>
@@ -689,7 +786,7 @@
             }
         }
 
-        function showVacancyDetails(idx) {
+        async function showVacancyDetails(idx) {
             const v = peekVacancies[idx];
             if (!v) return;
 
@@ -722,9 +819,67 @@
                     <div class="modal-field-label">Full Text</div>
                     <div class="modal-full-text">${escapeHtml(v.text_full || v.text_preview || '')}</div>
                 </div>
+                <div class="message-log" id="message-log">
+                    <div class="message-log-header">Message Log</div>
+                    <div class="no-messages">Loading...</div>
+                </div>
             `;
 
             modal.classList.add('active');
+
+            // Load messages
+            try {
+                const response = await fetch(`/api/vacancies/messages/${v.id}`);
+                const data = await response.json();
+                const logContainer = document.getElementById('message-log');
+
+                if (data.success && data.interactions && data.interactions.length > 0) {
+                    let html = '<div class="message-log-header">Message Log</div>';
+
+                    data.interactions.forEach(interaction => {
+                        const statusClass = interaction.status === 'success' ? 'success' :
+                                           interaction.status === 'failed' ? 'failed' : 'in_progress';
+
+                        html += `
+                            <div class="bot-interaction-header">
+                                <span class="bot-name">${escapeHtml(interaction.bot_username)}</span>
+                                <span class="status ${statusClass}">${interaction.status}</span>
+                            </div>
+                            <div class="message-list">
+                        `;
+
+                        if (interaction.messages && interaction.messages.length > 0) {
+                            interaction.messages.forEach(msg => {
+                                const msgClass = msg.direction === 'outgoing' ? 'outgoing' : 'incoming';
+                                const msgTime = msg.time ? new Date(msg.time).toLocaleTimeString() : '';
+                                html += `
+                                    <div class="message-item ${msgClass}">
+                                        <div>${escapeHtml(msg.text || (msg.button_clicked ? '🔘 ' + msg.button_clicked : '[no text]'))}</div>
+                                        ${msgTime ? `<div class="time">${msgTime}</div>` : ''}
+                                    </div>
+                                `;
+                            });
+                        } else {
+                            html += '<div class="no-messages">No messages recorded</div>';
+                        }
+
+                        html += '</div>';
+                    });
+
+                    logContainer.innerHTML = html;
+                } else {
+                    logContainer.innerHTML = `
+                        <div class="message-log-header">Message Log</div>
+                        <div class="no-messages">No bot interactions for this vacancy</div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading messages:', error);
+                document.getElementById('message-log').innerHTML = `
+                    <div class="message-log-header">Message Log</div>
+                    <div class="no-messages">Failed to load messages</div>
+                `;
+            }
         }
 
         function closeModal(event) {

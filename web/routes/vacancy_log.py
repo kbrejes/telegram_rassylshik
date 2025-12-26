@@ -169,3 +169,63 @@ async def delete_filter_prompt():
     except Exception as e:
         logger.error(f"Error resetting filter prompt: {e}")
         return {"success": False, "error": str(e)}
+
+
+@router.get("/messages/{vacancy_id}")
+async def get_vacancy_messages(vacancy_id: int):
+    """Get bot interaction messages for a vacancy."""
+    try:
+        conn = await get_db_connection()
+
+        # Get bot interactions for this vacancy
+        cursor = await conn.execute("""
+            SELECT id, bot_username, status, started_at, completed_at,
+                   messages_sent, messages_received, error_reason, success_message
+            FROM bot_interactions
+            WHERE vacancy_id = ?
+            ORDER BY started_at DESC
+        """, (vacancy_id,))
+        interactions = await cursor.fetchall()
+
+        result = []
+        for interaction in interactions:
+            interaction_id = interaction[0]
+
+            # Get messages for this interaction
+            msg_cursor = await conn.execute("""
+                SELECT direction, message_text, has_buttons, button_clicked, created_at
+                FROM bot_messages
+                WHERE interaction_id = ?
+                ORDER BY created_at ASC
+            """, (interaction_id,))
+            messages = await msg_cursor.fetchall()
+
+            result.append({
+                "interaction_id": interaction_id,
+                "bot_username": interaction[1],
+                "status": interaction[2],
+                "started_at": interaction[3],
+                "completed_at": interaction[4],
+                "messages_sent": interaction[5],
+                "messages_received": interaction[6],
+                "error_reason": interaction[7],
+                "success_message": interaction[8],
+                "messages": [
+                    {
+                        "direction": m[0],
+                        "text": m[1],
+                        "has_buttons": bool(m[2]),
+                        "button_clicked": m[3],
+                        "time": m[4]
+                    }
+                    for m in messages
+                ]
+            })
+
+        await conn.close()
+
+        return {"success": True, "interactions": result}
+
+    except Exception as e:
+        logger.error(f"Error getting vacancy messages: {e}")
+        return {"success": False, "error": str(e)}
