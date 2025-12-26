@@ -69,7 +69,7 @@
                     </button>
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Edit Channel</h2>
                 </div>
-                <a href="/preview" class="text-sm text-gray-600 dark:text-gray-400 hover:text-accent">
+                <a href="/" class="text-sm text-gray-600 dark:text-gray-400 hover:text-accent">
                     &larr; Back to channels
                 </a>
             </header>
@@ -128,7 +128,7 @@
                             <div class="mt-4 space-y-4">
                                 <p class="text-sm text-gray-500 dark:text-gray-400">
                                     This prompt filters incoming vacancies. Use <code class="px-1 py-0.5 rounded bg-gray-100 dark:bg-dark-700">{min_salary}</code> for dynamic salary.
-                                    <a href="/preview/vacancy-log" class="text-accent hover:underline ml-1">View filtered messages</a>
+                                    <a href="/vacancy-log" class="text-accent hover:underline ml-1">View filtered messages</a>
                                 </p>
                                 <textarea id="ai-filter-prompt" rows="10" placeholder="Loading..."
                                     class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm"></textarea>
@@ -173,7 +173,7 @@
                             <!-- Available agents loaded dynamically -->
                         </div>
 
-                        <a href="/preview/agents" class="inline-flex items-center gap-2 mt-4 text-sm text-accent hover:underline">
+                        <a href="/agents" class="inline-flex items-center gap-2 mt-4 text-sm text-accent hover:underline">
                             <span>+</span> Add new agent
                         </a>
                     </div>
@@ -251,7 +251,7 @@
                         <button type="submit" class="px-6 py-3 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white font-medium hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl">
                             Save Changes
                         </button>
-                        <a href="/preview" class="px-6 py-3 rounded-lg border border-gray-300 dark:border-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">
+                        <a href="/" class="px-6 py-3 rounded-lg border border-gray-300 dark:border-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">
                             Cancel
                         </a>
                     </div>
@@ -726,7 +726,7 @@
 
                 if (data.success) {
                     showNotification('Changes saved!', 'success');
-                    setTimeout(() => { window.location.href = '/preview'; }, 1000);
+                    setTimeout(() => { window.location.href = '/'; }, 1000);
                 } else {
                     showNotification('Error: ' + (data.message || 'Unknown'), 'error');
                     loading.classList.add('hidden');

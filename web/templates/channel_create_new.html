@@ -69,7 +69,7 @@
                     </button>
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Create Channel</h2>
                 </div>
-                <a href="/preview" class="text-sm text-gray-600 dark:text-gray-400 hover:text-accent">
+                <a href="/" class="text-sm text-gray-600 dark:text-gray-400 hover:text-accent">
                     &larr; Back to channels
                 </a>
             </header>
@@ -240,7 +240,7 @@
                 </div>
 
                 <div class="text-center mt-6">
-                    <a href="/preview" class="text-sm text-gray-500 dark:text-gray-400 hover:text-accent">
+                    <a href="/" class="text-sm text-gray-500 dark:text-gray-400 hover:text-accent">
                         &larr; Back to channel list
                     </a>
                 </div>
@@ -680,7 +680,7 @@
                 const data = await response.json();
                 if (data.success) {
                     status.innerHTML = '<span class="text-green-500">Channel created! Redirecting...</span>';
-                    setTimeout(() => { window.location.href = '/preview'; }, 1500);
+                    setTimeout(() => { window.location.href = '/'; }, 1500);
                 } else {
                     status.innerHTML = '<span class="text-red-500">' + (data.message || 'Error creating channel') + '</span>';
                     btn.disabled = false;
