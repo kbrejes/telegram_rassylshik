@@ -668,7 +668,8 @@ class MultiChannelJobMonitorBot:
                         skills=[],
                         is_relevant=False,
                         ai_reason=analysis.rejection_reason or "Filtered by AI",
-                        status='filtered_by_ai'
+                        status='filtered_by_ai',
+                        contact_username=analysis.contact_username
                     )
                     logger.info(f"Filtered by AI: {analysis.rejection_reason}")
                     return
@@ -711,7 +712,8 @@ class MultiChannelJobMonitorBot:
                 skills=keywords,
                 is_relevant=False,
                 ai_reason="No matching output channels",
-                status='not_relevant'
+                status='not_relevant',
+                contact_username=contacts.get('telegram')
             )
             return
         
@@ -725,7 +727,8 @@ class MultiChannelJobMonitorBot:
             skills=keywords,
             is_relevant=True,
             ai_reason=f"Matches {len(matching_outputs)} output channels",
-            status='relevant'
+            status='relevant',
+            contact_username=contacts.get('telegram')
         )
         
         # Отправляем уведомления во все matching output каналы

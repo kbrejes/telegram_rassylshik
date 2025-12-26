@@ -1,6 +1,7 @@
 """
 API endpoints for vacancy/job log with AI analysis.
 """
+import json
 import logging
 import aiosqlite
 from pathlib import Path
@@ -9,6 +10,9 @@ from pydantic import BaseModel
 from typing import Optional
 
 from web.utils import load_filter_prompt, save_filter_prompt, reset_filter_prompt
+
+# Path to conversation states
+CONVERSATION_STATES_DIR = Path(__file__).parent.parent.parent / "data" / "conversation_states"
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/vacancies", tags=["vacancies"])
@@ -49,7 +53,7 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
             where_clause = "WHERE is_relevant = 0 OR status = 'filtered_by_ai'"
             where_clause_pj = "WHERE pj.is_relevant = 0 OR pj.status = 'filtered_by_ai'"
 
-        # Get vacancies with AI analysis and check for bot interactions
+        # Get vacancies with AI analysis
         cursor = await conn.execute(f"""
             SELECT
                 pj.id,
@@ -61,7 +65,7 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
                 pj.ai_reason,
                 pj.status,
                 datetime(pj.processed_at) as processed_at,
-                (SELECT COUNT(*) FROM bot_interactions bi WHERE bi.vacancy_id = pj.id) as interaction_count
+                pj.contact_username
             FROM processed_jobs pj
             {where_clause_pj}
             ORDER BY pj.processed_at DESC
@@ -69,11 +73,36 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
         """)
         rows = await cursor.fetchall()
 
+        # Get all contact IDs that have conversation states (with messages > 0)
+        contacts_with_convos = {}  # contact_id -> conversation data
+        if CONVERSATION_STATES_DIR.exists():
+            for f in CONVERSATION_STATES_DIR.glob("*.json"):
+                try:
+                    with open(f, 'r') as fp:
+                        data = json.load(fp)
+                        if data.get('total_messages', 0) > 0:
+                            contacts_with_convos[f.stem] = data
+                except Exception:
+                    pass
+
+        # Get crm_topic_contacts with contact names for matching
+        cursor = await conn.execute("SELECT contact_id, contact_name FROM crm_topic_contacts")
+        crm_contacts = {str(r[0]): r[1] for r in await cursor.fetchall()}
+
+        # Check which contacts have active conversations
+        contacts_with_active_convos = set(contacts_with_convos.keys()) & set(crm_contacts.keys())
+
         vacancies = []
         for r in rows:
             # Truncate message text for display
             text = r[4] or ""
             text_preview = text[:300] + "..." if len(text) > 300 else text
+            contact_username = r[9]
+            is_relevant = bool(r[5])
+
+            # Show blue LED for passed vacancies if there are any active conversations
+            # (We can't perfectly match vacancy->contact yet, so this is approximate)
+            has_messages = is_relevant and len(contacts_with_active_convos) > 0
 
             vacancies.append({
                 "id": r[0],
@@ -86,7 +115,8 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
                 "ai_reason": r[6],
                 "status": r[7],
                 "processed_at": r[8],
-                "has_messages": r[9] > 0
+                "contact_username": contact_username,
+                "has_messages": has_messages
             })
 
         # Get total count

@@ -31,6 +31,14 @@ class Database:
     
     async def _create_tables(self):
         """Создание таблиц в базе данных"""
+        # Migration: add contact_username column if not exists
+        try:
+            await self._connection.execute("ALTER TABLE processed_jobs ADD COLUMN contact_username TEXT")
+            await self._connection.commit()
+            logger.info("Added contact_username column to processed_jobs")
+        except Exception:
+            pass  # Column already exists
+
         await self._connection.execute("""
             CREATE TABLE IF NOT EXISTS processed_jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +52,7 @@ class Database:
                 ai_reason TEXT,
                 processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status TEXT DEFAULT 'processed',
+                contact_username TEXT,
                 UNIQUE(message_id, chat_id)
             )
         """)
@@ -229,22 +238,23 @@ class Database:
         skills: Optional[List[str]] = None,
         is_relevant: bool = False,
         ai_reason: Optional[str] = None,
-        status: str = 'processed'
+        status: str = 'processed',
+        contact_username: Optional[str] = None
     ) -> int:
         """
         Сохраняет информацию об обработанной вакансии
-        
+
         Returns:
             ID созданной записи
         """
         skills_str = ','.join(skills) if skills else None
-        
+
         cursor = await self._connection.execute("""
-            INSERT INTO processed_jobs 
-            (message_id, chat_id, chat_title, message_text, position, skills, is_relevant, ai_reason, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (message_id, chat_id, chat_title, message_text, position, skills_str, is_relevant, ai_reason, status))
-        
+            INSERT INTO processed_jobs
+            (message_id, chat_id, chat_title, message_text, position, skills, is_relevant, ai_reason, status, contact_username)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (message_id, chat_id, chat_title, message_text, position, skills_str, is_relevant, ai_reason, status, contact_username))
+
         await self._connection.commit()
         job_id = cursor.lastrowid
         logger.info(f"Сохранена вакансия ID={job_id} из чата {chat_title}")
