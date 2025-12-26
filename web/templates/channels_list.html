@@ -257,20 +257,26 @@
 
         .msg-led {
             display: inline-block;
-            width: 6px;
-            height: 6px;
+            width: 5px;
+            height: 5px;
             border-radius: 50%;
-            margin-left: 5px;
+            margin-left: 4px;
             vertical-align: middle;
+            flex-shrink: 0;
         }
 
         .msg-led.has-messages {
             background: #2196f3;
-            box-shadow: 0 0 6px rgba(33, 150, 243, 0.6);
+            box-shadow: 0 0 4px rgba(33, 150, 243, 0.6);
         }
 
         .msg-led.no-messages {
             background: #bdbdbd;
+        }
+
+        .vacancy-mini-table td:nth-child(2) {
+            text-align: right;
+            white-space: nowrap;
         }
 
         .vacancy-peek-stats {
