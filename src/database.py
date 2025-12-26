@@ -167,6 +167,41 @@ class Database:
             )
         """)
 
+        # === Bot Interaction Tables ===
+
+        # Bot interactions tracking
+        await self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS bot_interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bot_username TEXT NOT NULL,
+                vacancy_id INTEGER,
+                channel_id TEXT,
+                status TEXT DEFAULT 'pending',
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                messages_sent INTEGER DEFAULT 0,
+                messages_received INTEGER DEFAULT 0,
+                error_reason TEXT,
+                success_message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Individual messages in bot conversations
+        await self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS bot_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                interaction_id INTEGER NOT NULL,
+                direction TEXT NOT NULL,
+                message_text TEXT,
+                has_buttons INTEGER DEFAULT 0,
+                button_clicked TEXT,
+                file_sent TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (interaction_id) REFERENCES bot_interactions(id)
+            )
+        """)
+
         await self._connection.commit()
         logger.info("Таблицы созданы/проверены")
     
@@ -729,6 +764,133 @@ class Database:
         """
         await self._connection.execute(query, params)
         await self._connection.commit()
+
+    # === Bot Interaction Methods ===
+
+    async def create_bot_interaction(
+        self,
+        bot_username: str,
+        vacancy_id: Optional[int] = None,
+        channel_id: Optional[str] = None
+    ) -> int:
+        """Create a new bot interaction record."""
+        cursor = await self._connection.execute("""
+            INSERT INTO bot_interactions (bot_username, vacancy_id, channel_id, status, started_at)
+            VALUES (?, ?, ?, 'in_progress', CURRENT_TIMESTAMP)
+        """, (bot_username, vacancy_id, channel_id))
+        await self._connection.commit()
+        return cursor.lastrowid
+
+    async def update_bot_interaction(
+        self,
+        interaction_id: int,
+        status: str,
+        error_reason: Optional[str] = None,
+        success_message: Optional[str] = None,
+        messages_sent: Optional[int] = None,
+        messages_received: Optional[int] = None
+    ):
+        """Update bot interaction status."""
+        updates = ["status = ?", "completed_at = CURRENT_TIMESTAMP"]
+        params = [status]
+
+        if error_reason is not None:
+            updates.append("error_reason = ?")
+            params.append(error_reason)
+        if success_message is not None:
+            updates.append("success_message = ?")
+            params.append(success_message)
+        if messages_sent is not None:
+            updates.append("messages_sent = ?")
+            params.append(messages_sent)
+        if messages_received is not None:
+            updates.append("messages_received = ?")
+            params.append(messages_received)
+
+        params.append(interaction_id)
+        await self._connection.execute(
+            f"UPDATE bot_interactions SET {', '.join(updates)} WHERE id = ?",
+            tuple(params)
+        )
+        await self._connection.commit()
+
+    async def save_bot_message(
+        self,
+        interaction_id: int,
+        direction: str,
+        message_text: Optional[str] = None,
+        has_buttons: bool = False,
+        button_clicked: Optional[str] = None,
+        file_sent: Optional[str] = None
+    ) -> int:
+        """Save a message in bot conversation."""
+        cursor = await self._connection.execute("""
+            INSERT INTO bot_messages
+            (interaction_id, direction, message_text, has_buttons, button_clicked, file_sent)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (interaction_id, direction, message_text, 1 if has_buttons else 0, button_clicked, file_sent))
+        await self._connection.commit()
+        return cursor.lastrowid
+
+    async def get_bot_interaction(self, interaction_id: int) -> Optional[Dict]:
+        """Get bot interaction by ID."""
+        cursor = await self._connection.execute("""
+            SELECT id, bot_username, vacancy_id, channel_id, status,
+                   started_at, completed_at, messages_sent, messages_received,
+                   error_reason, success_message
+            FROM bot_interactions WHERE id = ?
+        """, (interaction_id,))
+        row = await cursor.fetchone()
+        if row:
+            return {
+                "id": row[0], "bot_username": row[1], "vacancy_id": row[2],
+                "channel_id": row[3], "status": row[4], "started_at": row[5],
+                "completed_at": row[6], "messages_sent": row[7],
+                "messages_received": row[8], "error_reason": row[9],
+                "success_message": row[10]
+            }
+        return None
+
+    async def get_bot_interactions(
+        self,
+        status: Optional[str] = None,
+        limit: int = 50
+    ) -> List[Dict]:
+        """Get bot interactions with optional status filter."""
+        if status:
+            cursor = await self._connection.execute("""
+                SELECT id, bot_username, vacancy_id, status, started_at, completed_at,
+                       messages_sent, error_reason, success_message
+                FROM bot_interactions WHERE status = ?
+                ORDER BY created_at DESC LIMIT ?
+            """, (status, limit))
+        else:
+            cursor = await self._connection.execute("""
+                SELECT id, bot_username, vacancy_id, status, started_at, completed_at,
+                       messages_sent, error_reason, success_message
+                FROM bot_interactions
+                ORDER BY created_at DESC LIMIT ?
+            """, (limit,))
+
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": r[0], "bot_username": r[1], "vacancy_id": r[2],
+                "status": r[3], "started_at": r[4], "completed_at": r[5],
+                "messages_sent": r[6], "error_reason": r[7], "success_message": r[8]
+            }
+            for r in rows
+        ]
+
+    async def check_bot_already_contacted(self, bot_username: str) -> bool:
+        """Check if we already contacted this bot recently (last 24h)."""
+        cursor = await self._connection.execute("""
+            SELECT id FROM bot_interactions
+            WHERE bot_username = ?
+            AND created_at >= datetime('now', '-24 hours')
+        """, (bot_username,))
+        row = await cursor.fetchone()
+        return row is not None
 
 
 # Глобальный экземпляр базы данных

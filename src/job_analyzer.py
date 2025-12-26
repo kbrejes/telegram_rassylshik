@@ -27,6 +27,8 @@ class JobAnalysisResult:
 
     # Extracted data
     contact_username: Optional[str] = None  # @username or None
+    contact_type: str = "user"  # "user", "bot", or "none"
+    bot_username: Optional[str] = None  # Bot username if contact is a bot
     salary_monthly_rub: Optional[int] = None  # Normalized monthly salary in RUB
 
     # Reasoning
@@ -207,11 +209,20 @@ Respond in JSON format:
             if contact and not contact.startswith("@"):
                 contact = f"@{contact}"
 
+            # Detect contact type (user vs bot)
+            _, contact_type, bot_username = self.detect_contact_type(original_text)
+
+            # If LLM found a contact but we detected a bot, use bot
+            if contact_type == "bot" and bot_username:
+                contact = None  # Don't use LLM contact if it's a bot scenario
+
             return JobAnalysisResult(
                 is_real_job=is_real_job,
                 is_salary_ok=is_salary_ok,
                 is_relevant=is_real_job and is_salary_ok,
                 contact_username=contact,
+                contact_type=contact_type,
+                bot_username=bot_username,
                 salary_monthly_rub=salary_monthly,
                 rejection_reason=rejection_reason,
                 analysis_summary=data.get("summary", ""),
@@ -223,7 +234,7 @@ Respond in JSON format:
             # Partial parse - try to at least get contact
             contact = self._extract_contact_from_response(response)
             result = self._analyze_with_regex(original_text)
-            if contact:
+            if contact and result.contact_type == "user":
                 result.contact_username = contact
             return result
 
@@ -250,8 +261,8 @@ Respond in JSON format:
         salary = self._extract_salary_regex(text)
         is_salary_ok = salary is None or salary >= self.min_salary_rub
 
-        # Contact extraction
-        contact = self._extract_contact_regex(text)
+        # Contact extraction with bot detection
+        contact, contact_type, bot_username = self.detect_contact_type(text)
 
         rejection_reason = None
         if is_paid_ad:
@@ -264,6 +275,8 @@ Respond in JSON format:
             is_salary_ok=is_salary_ok,
             is_relevant=not is_paid_ad and is_salary_ok,
             contact_username=contact,
+            contact_type=contact_type,
+            bot_username=bot_username,
             salary_monthly_rub=salary,
             rejection_reason=rejection_reason,
             analysis_summary="Analyzed with regex fallback",
@@ -344,3 +357,47 @@ Respond in JSON format:
 
         # If all filtered out, don't return channel usernames
         return None
+
+    def _extract_bot_username(self, text: str) -> Optional[str]:
+        """Extract bot username from text (t.me/bot_name or @bot_name_bot)."""
+        # Pattern for t.me links to bots
+        tme_patterns = [
+            r't\.me/([a-zA-Z][a-zA-Z0-9_]{4,}[Bb][Oo][Tt])',  # ends with bot
+            r't\.me/([a-zA-Z][a-zA-Z0-9_]*_[Bb][Oo][Tt])',  # has _bot suffix
+        ]
+        for pattern in tme_patterns:
+            match = re.search(pattern, text)
+            if match:
+                return f"@{match.group(1)}"
+
+        # Pattern for @username that is clearly a bot
+        bot_patterns = [
+            r'@([a-zA-Z][a-zA-Z0-9_]*[Bb][Oo][Tt])\b',  # ends with bot
+            r'@([a-zA-Z][a-zA-Z0-9_]*_[Bb][Oo][Tt])\b',  # has _bot suffix
+        ]
+        for pattern in bot_patterns:
+            match = re.search(pattern, text)
+            if match:
+                return f"@{match.group(1)}"
+
+        return None
+
+    def detect_contact_type(self, text: str) -> tuple[Optional[str], str, Optional[str]]:
+        """
+        Detect contact type and extract relevant username.
+
+        Returns:
+            Tuple of (contact_username, contact_type, bot_username)
+            - contact_type: "user", "bot", or "none"
+        """
+        # First check for bot
+        bot_username = self._extract_bot_username(text)
+        if bot_username:
+            return (None, "bot", bot_username)
+
+        # Then check for user contact
+        contact = self._extract_contact_regex(text)
+        if contact:
+            return (contact, "user", None)
+
+        return (None, "none", None)

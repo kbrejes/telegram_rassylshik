@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidate Profile - Job Notification Bot</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .profile-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .profile-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .profile-section h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+        }
+
+        .status-badge.complete {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+
+        .status-badge.incomplete {
+            background: #ffecb3;
+            color: #f57c00;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd6;
+        }
+
+        .file-upload {
+            border: 2px dashed #ddd;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stat-card .number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-card .label {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .stat-card.success .number { color: #4caf50; }
+        .stat-card.failed .number { color: #f44336; }
+
+        .interactions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .interactions-table th,
+        .interactions-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .interactions-table th {
+            background: #f5f5f5;
+            font-weight: 500;
+        }
+
+        .status-pill {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+
+        .status-pill.success { background: #c8e6c9; color: #2e7d32; }
+        .status-pill.failed { background: #ffcdd2; color: #c62828; }
+        .status-pill.in_progress { background: #bbdefb; color: #1565c0; }
+        .status-pill.timeout { background: #ffecb3; color: #f57c00; }
+
+        .collapsible-section {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .collapsible-header {
+            padding: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .collapsible-header:hover {
+            background: #f0f0f0;
+        }
+
+        .collapsible-content {
+            padding: 15px;
+            display: none;
+        }
+
+        .collapsible-section.open .collapsible-content {
+            display: block;
+        }
+
+        .collapsible-section.open .collapsible-header {
+            border-radius: 8px 8px 0 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Candidate Profile</h1>
+            <nav class="nav-menu">
+                <a href="/">Channels</a>
+                <a href="/agents">Agents</a>
+                <a href="/vacancy-log">Vacancy Log</a>
+                <a href="/candidate" class="active">Candidate</a>
+                <a href="/ai-stats">AI Stats</a>
+                <a href="/auth">Bot Auth</a>
+            </nav>
+        </div>
+
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;">Your Application Profile</h2>
+                <span id="profile-status" class="status-badge incomplete">Loading...</span>
+            </div>
+
+            <p style="color: #666; margin-bottom: 20px;">
+                This profile is used when applying to jobs via Telegram bots. Fill in your information to enable automatic bot interactions.
+            </p>
+
+            <form id="profile-form">
+                <div class="profile-grid">
+                    <!-- Basic Info -->
+                    <div class="profile-section">
+                        <h3>Basic Info</h3>
+                        <div class="form-group">
+                            <label for="name">Full Name *</label>
+                            <input type="text" id="name" name="name" required placeholder="John Doe">
+                        </div>
+                        <div class="form-group">
+                            <label for="phone">Phone</label>
+                            <input type="tel" id="phone" name="phone" placeholder="+7 999 123 4567">
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" name="email" placeholder="john@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="location">Location</label>
+                            <input type="text" id="location" name="location" placeholder="Moscow, Russia">
+                        </div>
+                    </div>
+
+                    <!-- Professional Info -->
+                    <div class="profile-section">
+                        <h3>Professional Info</h3>
+                        <div class="form-group">
+                            <label for="position">Desired Position</label>
+                            <input type="text" id="position" name="position" placeholder="Marketing Manager">
+                        </div>
+                        <div class="form-group">
+                            <label for="experience_years">Experience (years)</label>
+                            <input type="number" id="experience_years" name="experience_years" min="0" max="50" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="skills">Skills (comma-separated)</label>
+                            <input type="text" id="skills" name="skills" placeholder="Python, Marketing, SQL">
+                        </div>
+                        <div class="form-group">
+                            <label for="salary_expectation">Salary Expectation</label>
+                            <input type="text" id="salary_expectation" name="salary_expectation" placeholder="150000-200000 RUB">
+                        </div>
+                        <div class="form-group">
+                            <label for="work_format">Work Format</label>
+                            <select id="work_format" name="work_format">
+                                <option value="">Not specified</option>
+                                <option value="remote">Remote</option>
+                                <option value="office">Office</option>
+                                <option value="hybrid">Hybrid</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Links -->
+                    <div class="profile-section">
+                        <h3>Links</h3>
+                        <div class="form-group">
+                            <label for="portfolio_url">Portfolio URL</label>
+                            <input type="url" id="portfolio_url" name="portfolio_url" placeholder="https://portfolio.example.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="linkedin_url">LinkedIn URL</label>
+                            <input type="url" id="linkedin_url" name="linkedin_url" placeholder="https://linkedin.com/in/johndoe">
+                        </div>
+                        <div class="form-group">
+                            <label for="github_url">GitHub URL</label>
+                            <input type="url" id="github_url" name="github_url" placeholder="https://github.com/johndoe">
+                        </div>
+                    </div>
+
+                    <!-- About -->
+                    <div class="profile-section">
+                        <h3>About</h3>
+                        <div class="form-group">
+                            <label for="about">Short Bio</label>
+                            <textarea id="about" name="about" placeholder="Brief introduction about yourself..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="resume_text">Resume (text version)</label>
+                            <textarea id="resume_text" name="resume_text" style="min-height: 150px;" placeholder="Paste your resume text here for bots that don't accept files..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button type="submit" class="btn-primary">Save Profile</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Bot Interactions Stats -->
+        <div class="card" style="margin-top: 20px;">
+            <div class="collapsible-section open">
+                <div class="collapsible-header" onclick="toggleSection(this)">
+                    <h2 style="margin: 0;">Bot Interactions</h2>
+                    <span class="arrow">&#9660;</span>
+                </div>
+                <div class="collapsible-content">
+                    <div id="stats-container" class="stats-grid">
+                        <div class="stat-card">
+                            <div class="number" id="stat-total">-</div>
+                            <div class="label">Total</div>
+                        </div>
+                        <div class="stat-card success">
+                            <div class="number" id="stat-success">-</div>
+                            <div class="label">Success</div>
+                        </div>
+                        <div class="stat-card failed">
+                            <div class="number" id="stat-failed">-</div>
+                            <div class="label">Failed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="number" id="stat-progress">-</div>
+                            <div class="label">In Progress</div>
+                        </div>
+                    </div>
+
+                    <table class="interactions-table" id="interactions-table">
+                        <thead>
+                            <tr>
+                                <th>Bot</th>
+                                <th>Status</th>
+                                <th>Messages</th>
+                                <th>Started</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody id="interactions-body">
+                            <tr><td colspan="5" style="text-align: center; color: #666;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load profile on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadProfile();
+            await loadStats();
+            await loadInteractions();
+        });
+
+        async function loadProfile() {
+            try {
+                const response = await fetch('/api/candidate/profile');
+                const data = await response.json();
+                if (data.success) {
+                    const p = data.profile;
+                    document.getElementById('name').value = p.name || '';
+                    document.getElementById('phone').value = p.phone || '';
+                    document.getElementById('email').value = p.email || '';
+                    document.getElementById('location').value = p.location || '';
+                    document.getElementById('position').value = p.position || '';
+                    document.getElementById('experience_years').value = p.experience_years || 0;
+                    document.getElementById('skills').value = p.skills || '';
+                    document.getElementById('salary_expectation').value = p.salary_expectation || '';
+                    document.getElementById('work_format').value = p.work_format || '';
+                    document.getElementById('portfolio_url').value = p.portfolio_url || '';
+                    document.getElementById('linkedin_url').value = p.linkedin_url || '';
+                    document.getElementById('github_url').value = p.github_url || '';
+                    document.getElementById('about').value = p.about || '';
+                    document.getElementById('resume_text').value = p.resume_text || '';
+
+                    updateProfileStatus(data.is_complete);
+                }
+            } catch (e) {
+                console.error('Error loading profile:', e);
+            }
+        }
+
+        function updateProfileStatus(isComplete) {
+            const badge = document.getElementById('profile-status');
+            if (isComplete) {
+                badge.className = 'status-badge complete';
+                badge.textContent = 'Profile Complete';
+            } else {
+                badge.className = 'status-badge incomplete';
+                badge.textContent = 'Profile Incomplete';
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/candidate/bot-interactions/stats');
+                const data = await response.json();
+                if (data.success) {
+                    const s = data.stats;
+                    document.getElementById('stat-total').textContent = s.total || 0;
+                    document.getElementById('stat-success').textContent = s.success || 0;
+                    document.getElementById('stat-failed').textContent = s.failed || 0;
+                    document.getElementById('stat-progress').textContent = s.in_progress || 0;
+                }
+            } catch (e) {
+                console.error('Error loading stats:', e);
+            }
+        }
+
+        async function loadInteractions() {
+            try {
+                const response = await fetch('/api/candidate/bot-interactions');
+                const data = await response.json();
+                const tbody = document.getElementById('interactions-body');
+
+                if (data.success && data.interactions.length > 0) {
+                    tbody.innerHTML = data.interactions.map(i => `
+                        <tr>
+                            <td>@${i.bot_username}</td>
+                            <td><span class="status-pill ${i.status}">${i.status}</span></td>
+                            <td>${i.messages_sent || 0}</td>
+                            <td>${i.started_at ? new Date(i.started_at).toLocaleString() : '-'}</td>
+                            <td>${i.success_message ? i.success_message.substring(0, 50) + '...' : (i.error_reason || '-')}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #666;">No bot interactions yet</td></tr>';
+                }
+            } catch (e) {
+                console.error('Error loading interactions:', e);
+            }
+        }
+
+        // Form submission
+        document.getElementById('profile-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = {
+                name: document.getElementById('name').value,
+                phone: document.getElementById('phone').value,
+                email: document.getElementById('email').value,
+                location: document.getElementById('location').value,
+                position: document.getElementById('position').value,
+                experience_years: parseInt(document.getElementById('experience_years').value) || 0,
+                skills: document.getElementById('skills').value,
+                salary_expectation: document.getElementById('salary_expectation').value,
+                work_format: document.getElementById('work_format').value,
+                portfolio_url: document.getElementById('portfolio_url').value,
+                linkedin_url: document.getElementById('linkedin_url').value,
+                github_url: document.getElementById('github_url').value,
+                about: document.getElementById('about').value,
+                resume_text: document.getElementById('resume_text').value,
+            };
+
+            try {
+                const response = await fetch('/api/candidate/profile', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    updateProfileStatus(data.is_complete);
+                    showNotification('Profile saved!', 'success');
+                } else {
+                    showNotification('Error: ' + data.error, 'error');
+                }
+            } catch (e) {
+                showNotification('Error saving profile', 'error');
+            }
+        });
+
+        function toggleSection(header) {
+            const section = header.parentElement;
+            section.classList.toggle('open');
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 20px;
+                border-radius: 8px;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            `;
+
+            if (type === 'success') {
+                notification.style.background = '#4caf50';
+                notification.style.color = 'white';
+            } else if (type === 'error') {
+                notification.style.background = '#f44336';
+                notification.style.color = 'white';
+            } else {
+                notification.style.background = '#1976d2';
+                notification.style.color = 'white';
+            }
+
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => notification.remove(), 3000);
+        }
+    </script>
+</body>
+</html>

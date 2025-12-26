@@ -94,3 +94,12 @@ async def vacancy_log_page(request: Request):
         "vacancy_log.html",
         {"request": request}
     )
+
+
+@router.get("/candidate")
+async def candidate_page(request: Request):
+    """Candidate profile management"""
+    return templates.TemplateResponse(
+        "candidate_profile.html",
+        {"request": request}
+    )
