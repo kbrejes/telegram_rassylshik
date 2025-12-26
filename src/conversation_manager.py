@@ -73,18 +73,20 @@ class ConversationManager:
         self,
         title: str,
         contact_id: int,
+        vacancy_id: int = None,
         retry_count: int = 0,
         max_retries: int = 3
     ) -> Optional[int]:
         """
         Создание нового топика в форум-группе
-        
+
         Args:
             title: Название топика (обычно имя контакта)
             contact_id: ID контакта в Telegram
+            vacancy_id: ID вакансии из processed_jobs (для связи с вакансией)
             retry_count: Текущая попытка (внутреннее использование)
             max_retries: Максимум попыток
-            
+
         Returns:
             ID топика или None если не удалось создать
         """
@@ -122,7 +124,8 @@ class ConversationManager:
                     group_id=self.group_id,
                     topic_id=topic_id,
                     contact_id=contact_id,
-                    contact_name=title
+                    contact_name=title,
+                    vacancy_id=vacancy_id
                 )
             except Exception as e:
                 logger.error(f"Ошибка сохранения в БД: {e}")
@@ -134,7 +137,7 @@ class ConversationManager:
                 wait_time = min(e.seconds, 30)  # Макс 30 сек
                 logger.warning(f"FloodWait: ждем {wait_time} сек, попытка {retry_count + 1}/{max_retries}")
                 await asyncio.sleep(wait_time)
-                return await self.create_topic(title, contact_id, retry_count + 1, max_retries)
+                return await self.create_topic(title, contact_id, vacancy_id, retry_count + 1, max_retries)
             else:
                 logger.error(f"Не удалось создать топик после {max_retries} попыток")
                 return None

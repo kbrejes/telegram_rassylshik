@@ -74,23 +74,20 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
         rows = await cursor.fetchall()
 
         # Get all contact IDs that have conversation states (with messages > 0)
-        contacts_with_convos = {}  # contact_id -> conversation data
+        contacts_with_convos = set()
         if CONVERSATION_STATES_DIR.exists():
             for f in CONVERSATION_STATES_DIR.glob("*.json"):
                 try:
                     with open(f, 'r') as fp:
                         data = json.load(fp)
                         if data.get('total_messages', 0) > 0:
-                            contacts_with_convos[f.stem] = data
+                            contacts_with_convos.add(f.stem)
                 except Exception:
                     pass
 
-        # Get crm_topic_contacts with contact names for matching
-        cursor = await conn.execute("SELECT contact_id, contact_name FROM crm_topic_contacts")
-        crm_contacts = {str(r[0]): r[1] for r in await cursor.fetchall()}
-
-        # Check which contacts have active conversations
-        contacts_with_active_convos = set(contacts_with_convos.keys()) & set(crm_contacts.keys())
+        # Get crm_topic_contacts with vacancy_id mapping
+        cursor = await conn.execute("SELECT vacancy_id, contact_id FROM crm_topic_contacts WHERE vacancy_id IS NOT NULL")
+        vacancy_to_contact = {r[0]: str(r[1]) for r in await cursor.fetchall()}
 
         vacancies = []
         for r in rows:
@@ -98,11 +95,11 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
             text = r[4] or ""
             text_preview = text[:300] + "..." if len(text) > 300 else text
             contact_username = r[9]
-            is_relevant = bool(r[5])
+            vacancy_id = r[0]
 
-            # Show blue LED for passed vacancies if there are any active conversations
-            # (We can't perfectly match vacancy->contact yet, so this is approximate)
-            has_messages = is_relevant and len(contacts_with_active_convos) > 0
+            # Check if this vacancy has a linked CRM contact with active conversation
+            contact_id = vacancy_to_contact.get(vacancy_id)
+            has_messages = contact_id is not None and contact_id in contacts_with_convos
 
             vacancies.append({
                 "id": r[0],
@@ -208,58 +205,47 @@ async def delete_filter_prompt():
 
 @router.get("/messages/{vacancy_id}")
 async def get_vacancy_messages(vacancy_id: int):
-    """Get bot interaction messages for a vacancy."""
+    """Get CRM conversation for a vacancy."""
     try:
         conn = await get_db_connection()
 
-        # Get bot interactions for this vacancy
+        # Find CRM topic contact linked to this vacancy
         cursor = await conn.execute("""
-            SELECT id, bot_username, status, started_at, completed_at,
-                   messages_sent, messages_received, error_reason, success_message
-            FROM bot_interactions
+            SELECT contact_id, contact_name
+            FROM crm_topic_contacts
             WHERE vacancy_id = ?
-            ORDER BY started_at DESC
         """, (vacancy_id,))
-        interactions = await cursor.fetchall()
+        crm_contact = await cursor.fetchone()
 
         result = []
-        for interaction in interactions:
-            interaction_id = interaction[0]
 
-            # Get messages for this interaction
-            msg_cursor = await conn.execute("""
-                SELECT direction, message_text, has_buttons, button_clicked, created_at
-                FROM bot_messages
-                WHERE interaction_id = ?
-                ORDER BY created_at ASC
-            """, (interaction_id,))
-            messages = await msg_cursor.fetchall()
+        if crm_contact:
+            contact_id = str(crm_contact[0])
+            contact_name = crm_contact[1]
 
-            result.append({
-                "interaction_id": interaction_id,
-                "bot_username": interaction[1],
-                "status": interaction[2],
-                "started_at": interaction[3],
-                "completed_at": interaction[4],
-                "messages_sent": interaction[5],
-                "messages_received": interaction[6],
-                "error_reason": interaction[7],
-                "success_message": interaction[8],
-                "messages": [
-                    {
-                        "direction": m[0],
-                        "text": m[1],
-                        "has_buttons": bool(m[2]),
-                        "button_clicked": m[3],
-                        "time": m[4]
-                    }
-                    for m in messages
-                ]
-            })
+            # Load conversation state from file
+            conv_file = CONVERSATION_STATES_DIR / f"{contact_id}.json"
+            if conv_file.exists():
+                try:
+                    with open(conv_file, 'r') as f:
+                        conv_data = json.load(f)
+
+                    result.append({
+                        "contact_id": contact_id,
+                        "contact_name": contact_name,
+                        "current_phase": conv_data.get("current_phase", "unknown"),
+                        "total_messages": conv_data.get("total_messages", 0),
+                        "call_offered": conv_data.get("call_offered", False),
+                        "call_scheduled": conv_data.get("call_scheduled", False),
+                        "last_interaction": conv_data.get("last_interaction"),
+                        "messages": []  # Actual messages are in Telegram, we just have state
+                    })
+                except Exception as e:
+                    logger.error(f"Error reading conversation state: {e}")
 
         await conn.close()
 
-        return {"success": True, "interactions": result}
+        return {"success": True, "conversations": result}
 
     except Exception as e:
         logger.error(f"Error getting vacancy messages: {e}")

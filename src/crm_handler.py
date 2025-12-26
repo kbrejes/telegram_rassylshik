@@ -532,9 +532,13 @@ class CRMHandler:
                     full_name += f" {contact_user.last_name}"
                 full_name = full_name.strip() or f"User {contact_user.id}"
 
+                # Look up vacancy_id for linking
+                vacancy_id = await db.get_vacancy_id(message.id, chat.id)
+
                 topic_id = await conv_manager.create_topic(
                     title=full_name[:128],
-                    contact_id=contact_user.id
+                    contact_id=contact_user.id,
+                    vacancy_id=vacancy_id
                 )
 
                 if topic_id:

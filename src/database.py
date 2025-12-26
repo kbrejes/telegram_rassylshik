@@ -39,6 +39,14 @@ class Database:
         except Exception:
             pass  # Column already exists
 
+        # Migration: add vacancy_id column to crm_topic_contacts if not exists
+        try:
+            await self._connection.execute("ALTER TABLE crm_topic_contacts ADD COLUMN vacancy_id INTEGER")
+            await self._connection.commit()
+            logger.info("Added vacancy_id column to crm_topic_contacts")
+        except Exception:
+            pass  # Column already exists
+
         await self._connection.execute("""
             CREATE TABLE IF NOT EXISTS processed_jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,6 +84,7 @@ class Database:
                 contact_id INTEGER NOT NULL,
                 contact_name TEXT,
                 agent_session TEXT,
+                vacancy_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(group_id, topic_id)
             )
@@ -311,6 +320,15 @@ class Database:
             'unique_chats': row[2]
         }
 
+    async def get_vacancy_id(self, message_id: int, chat_id: int) -> Optional[int]:
+        """Get vacancy ID by message_id and chat_id"""
+        cursor = await self._connection.execute(
+            "SELECT id FROM processed_jobs WHERE message_id = ? AND chat_id = ?",
+            (message_id, chat_id)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else None
+
     # === CRM Topic-Contact методы ===
 
     async def save_topic_contact(
@@ -319,16 +337,17 @@ class Database:
         topic_id: int,
         contact_id: int,
         contact_name: str = None,
-        agent_session: str = None
+        agent_session: str = None,
+        vacancy_id: int = None
     ):
-        """Сохраняет маппинг topic_id -> contact_id"""
+        """Сохраняет маппинг topic_id -> contact_id с опциональной привязкой к вакансии"""
         await self._connection.execute("""
             INSERT OR REPLACE INTO crm_topic_contacts
-            (group_id, topic_id, contact_id, contact_name, agent_session)
-            VALUES (?, ?, ?, ?, ?)
-        """, (group_id, topic_id, contact_id, contact_name, agent_session))
+            (group_id, topic_id, contact_id, contact_name, agent_session, vacancy_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (group_id, topic_id, contact_id, contact_name, agent_session, vacancy_id))
         await self._connection.commit()
-        logger.debug(f"Сохранен маппинг: topic {topic_id} -> contact {contact_id}")
+        logger.debug(f"Сохранен маппинг: topic {topic_id} -> contact {contact_id}, vacancy {vacancy_id}")
 
     async def get_contact_by_topic(self, group_id: int, topic_id: int) -> Optional[Dict]:
         """Находит contact_id по topic_id"""
