@@ -257,12 +257,19 @@
 
         .msg-led {
             display: inline-block;
-            width: 6px;
-            height: 6px;
+            width: 6px !important;
+            height: 6px !important;
+            min-width: 6px;
+            max-width: 6px;
+            min-height: 6px;
+            max-height: 6px;
             border-radius: 50%;
-            margin-left: 6px;
+            margin-left: 4px;
             vertical-align: middle;
             flex-shrink: 0;
+            font-size: 0;
+            line-height: 0;
+            padding: 0;
         }
 
         .msg-led.has-messages {
