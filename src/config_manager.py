@@ -2,6 +2,8 @@
 Менеджер конфигурации для управления несколькими каналами уведомлений
 """
 import json
+import os
+import tempfile
 from typing import List, Optional, Dict
 from pathlib import Path
 import logging
@@ -137,8 +139,16 @@ class ConfigManager:
             for ch in self.channels:
                 logger.debug(f"  Saving channel '{ch.name}': enabled={ch.enabled}")
 
-            with open(self.config_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            # Write atomically: write to temp file, then rename
+            temp_fd, temp_path = tempfile.mkstemp(dir=self.config_path.parent, suffix='.tmp')
+            try:
+                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                os.replace(temp_path, self.config_path)
+            except Exception:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise
 
             logger.info(f"Конфигурация сохранена: {len(self.channels)} каналов")
             return True

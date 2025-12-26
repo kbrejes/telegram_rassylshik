@@ -358,7 +358,10 @@ class MultiChannelJobMonitorBot:
                 # Если файл изменился
                 if self.last_config_mtime and current_mtime != self.last_config_mtime:
                     logger.info("Обнаружены изменения в конфигурации! Перезагрузка...")
-                    
+
+                    # Small delay to ensure file write is complete (atomic replace should be instant, but just in case)
+                    await asyncio.sleep(0.5)
+
                     # Перезагружаем конфигурацию
                     await self.reload_configuration()
                     
