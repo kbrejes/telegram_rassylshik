@@ -113,3 +113,12 @@ async def preview_new_design(request: Request):
         "channels_list_new.html",
         {"request": request, "channels": channels}
     )
+
+
+@router.get("/preview/agents")
+async def preview_agents_design(request: Request):
+    """Preview the new Tailwind agents page"""
+    return templates.TemplateResponse(
+        "status_new.html",
+        {"request": request}
+    )
