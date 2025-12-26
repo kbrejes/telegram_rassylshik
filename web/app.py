@@ -124,6 +124,7 @@ from web.routes.status import router as status_router
 from web.routes.ai_stats import router as ai_stats_router
 from web.routes.vacancy_log import router as vacancy_log_router
 from web.routes.candidate import router as candidate_router
+from web.routes.supervisor import router as supervisor_router
 
 # Register all routers
 app.include_router(pages_router)
@@ -138,6 +139,7 @@ app.include_router(status_router)
 app.include_router(ai_stats_router)
 app.include_router(vacancy_log_router)
 app.include_router(candidate_router)
+app.include_router(supervisor_router)
 
 
 # ==================== Stats Endpoint ====================

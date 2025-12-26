@@ -220,6 +220,17 @@ class Database:
             )
         """)
 
+        # === Supervisor AI Chat ===
+        await self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS supervisor_chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                tool_calls TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         await self._connection.commit()
         logger.info("Таблицы созданы/проверены")
     
@@ -920,6 +931,41 @@ class Database:
         """, (bot_username,))
         row = await cursor.fetchone()
         return row is not None
+
+    # === Supervisor Chat History Methods ===
+
+    async def get_supervisor_chat_history(self, limit: int = 50) -> List[Dict]:
+        """Get supervisor chat history."""
+        cursor = await self._connection.execute("""
+            SELECT id, role, content, tool_calls, created_at
+            FROM supervisor_chat_history
+            ORDER BY created_at ASC
+            LIMIT ?
+        """, (limit,))
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": r[0],
+                "role": r[1],
+                "content": r[2],
+                "tool_calls": r[3],
+                "created_at": r[4]
+            }
+            for r in rows
+        ]
+
+    async def add_supervisor_message(self, role: str, content: str, tool_calls: str = None):
+        """Add a message to supervisor chat history."""
+        await self._connection.execute("""
+            INSERT INTO supervisor_chat_history (role, content, tool_calls)
+            VALUES (?, ?, ?)
+        """, (role, content, tool_calls))
+        await self._connection.commit()
+
+    async def clear_supervisor_chat_history(self):
+        """Clear all supervisor chat history."""
+        await self._connection.execute("DELETE FROM supervisor_chat_history")
+        await self._connection.commit()
 
 
 # Глобальный экземпляр базы данных
