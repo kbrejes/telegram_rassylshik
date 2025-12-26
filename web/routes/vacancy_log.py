@@ -41,26 +41,30 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
 
         # Build query based on filter
         where_clause = ""
+        where_clause_pj = ""  # With table alias for join query
         if filter_status == "passed":
             where_clause = "WHERE is_relevant = 1"
+            where_clause_pj = "WHERE pj.is_relevant = 1"
         elif filter_status == "filtered":
             where_clause = "WHERE is_relevant = 0 OR status = 'filtered_by_ai'"
+            where_clause_pj = "WHERE pj.is_relevant = 0 OR pj.status = 'filtered_by_ai'"
 
-        # Get vacancies with AI analysis
+        # Get vacancies with AI analysis and check for bot interactions
         cursor = await conn.execute(f"""
             SELECT
-                id,
-                message_id,
-                chat_id,
-                chat_title,
-                message_text,
-                is_relevant,
-                ai_reason,
-                status,
-                datetime(processed_at) as processed_at
-            FROM processed_jobs
-            {where_clause}
-            ORDER BY processed_at DESC
+                pj.id,
+                pj.message_id,
+                pj.chat_id,
+                pj.chat_title,
+                pj.message_text,
+                pj.is_relevant,
+                pj.ai_reason,
+                pj.status,
+                datetime(pj.processed_at) as processed_at,
+                (SELECT COUNT(*) FROM bot_interactions bi WHERE bi.vacancy_id = pj.id) as interaction_count
+            FROM processed_jobs pj
+            {where_clause_pj}
+            ORDER BY pj.processed_at DESC
             LIMIT {limit} OFFSET {offset}
         """)
         rows = await cursor.fetchall()
@@ -81,7 +85,8 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
                 "is_relevant": bool(r[5]),
                 "ai_reason": r[6],
                 "status": r[7],
-                "processed_at": r[8]
+                "processed_at": r[8],
+                "has_messages": r[9] > 0
             })
 
         # Get total count

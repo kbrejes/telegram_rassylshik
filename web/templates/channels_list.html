@@ -255,6 +255,24 @@
             color: #c62828;
         }
 
+        .msg-led {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .msg-led.has-messages {
+            background: #2196f3;
+            box-shadow: 0 0 6px rgba(33, 150, 243, 0.6);
+        }
+
+        .msg-led.no-messages {
+            background: #bdbdbd;
+        }
+
         .vacancy-peek-stats {
             display: flex;
             gap: 15px;
@@ -766,11 +784,12 @@
                                 const statusLabel = v.is_relevant ? 'Passed' : 'Filtered';
                                 const time = formatTime(v.processed_at);
                                 const source = v.chat_title || 'Unknown';
+                                const ledClass = v.has_messages ? 'has-messages' : 'no-messages';
 
                                 html += `
                                     <tr onclick="showVacancyDetails(${idx})">
                                         <td title="${source}">${source}</td>
-                                        <td><span class="status-badge ${status}">${statusLabel}</span></td>
+                                        <td><span class="msg-led ${ledClass}"></span><span class="status-badge ${status}">${statusLabel}</span></td>
                                         <td>${time}</td>
                                     </tr>
                                 `;
