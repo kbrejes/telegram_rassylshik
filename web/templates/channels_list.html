@@ -177,6 +177,114 @@
         .bot-status-bar .info small {
             color: #666;
         }
+
+        /* Mini vacancy dashboard */
+        .vacancy-peek {
+            margin-top: 15px;
+            border-top: 1px solid #eee;
+            padding-top: 12px;
+        }
+
+        .vacancy-peek-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .vacancy-peek-header h4 {
+            margin: 0;
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .vacancy-peek-header a {
+            font-size: 0.75rem;
+            color: #1976d2;
+            text-decoration: none;
+        }
+
+        .vacancy-peek-header a:hover {
+            text-decoration: underline;
+        }
+
+        .vacancy-mini-table {
+            width: 100%;
+            font-size: 0.8rem;
+            border-collapse: collapse;
+        }
+
+        .vacancy-mini-table th {
+            text-align: left;
+            padding: 4px 8px;
+            background: #f8f9fa;
+            color: #666;
+            font-weight: 500;
+            border-bottom: 1px solid #eee;
+        }
+
+        .vacancy-mini-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #f0f0f0;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .vacancy-mini-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .vacancy-mini-table .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+
+        .vacancy-mini-table .status-badge.passed {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .vacancy-mini-table .status-badge.filtered {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .vacancy-peek-stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 8px;
+        }
+
+        .vacancy-peek-stat {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .vacancy-peek-stat .num {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .vacancy-peek-stat.passed .num {
+            color: #4caf50;
+        }
+
+        .vacancy-peek-stat.filtered .num {
+            color: #f44336;
+        }
+
+        .vacancy-peek-empty {
+            color: #999;
+            font-size: 0.8rem;
+            text-align: center;
+            padding: 10px;
+        }
     </style>
 </head>
 <body>
@@ -236,6 +344,22 @@
                             {% else %}
                                 <span class="no-agents">No agents configured</span>
                             {% endif %}
+                        </div>
+
+                        <!-- Mini Vacancy Dashboard -->
+                        <div class="vacancy-peek" id="vacancy-peek-{{ channel.id }}">
+                            <div class="vacancy-peek-header">
+                                <h4>Recent Vacancies</h4>
+                                <a href="/vacancy-log">View all →</a>
+                            </div>
+                            <div class="vacancy-peek-stats" id="vacancy-stats-{{ channel.id }}">
+                                <span class="vacancy-peek-stat">Total: <span class="num">-</span></span>
+                                <span class="vacancy-peek-stat passed">Passed: <span class="num">-</span></span>
+                                <span class="vacancy-peek-stat filtered">Filtered: <span class="num">-</span></span>
+                            </div>
+                            <div class="vacancy-peek-content" id="vacancy-content-{{ channel.id }}">
+                                <div class="vacancy-peek-empty">Loading...</div>
+                            </div>
                         </div>
                     </div>
                     {% endfor %}
@@ -384,9 +508,89 @@
             }
         }
 
+        // Load vacancy peek data
+        async function loadVacancyPeek() {
+            try {
+                const response = await fetch('/api/vacancies/log?limit=5');
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update all channel cards with the same global data
+                    document.querySelectorAll('.vacancy-peek').forEach(peek => {
+                        const channelId = peek.id.replace('vacancy-peek-', '');
+                        const statsContainer = document.getElementById(`vacancy-stats-${channelId}`);
+                        const contentContainer = document.getElementById(`vacancy-content-${channelId}`);
+
+                        // Update stats
+                        const stats = data.stats;
+                        statsContainer.innerHTML = `
+                            <span class="vacancy-peek-stat">Total: <span class="num">${stats.total}</span></span>
+                            <span class="vacancy-peek-stat passed">Passed: <span class="num">${stats.passed}</span></span>
+                            <span class="vacancy-peek-stat filtered">Filtered: <span class="num">${stats.filtered}</span></span>
+                        `;
+
+                        // Update table
+                        if (data.vacancies.length === 0) {
+                            contentContainer.innerHTML = '<div class="vacancy-peek-empty">No vacancies yet</div>';
+                        } else {
+                            let html = `
+                                <table class="vacancy-mini-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Source</th>
+                                            <th>Status</th>
+                                            <th>Time</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                            `;
+
+                            data.vacancies.forEach(v => {
+                                const status = v.is_relevant ? 'passed' : 'filtered';
+                                const statusLabel = v.is_relevant ? 'Passed' : 'Filtered';
+                                const time = formatTime(v.processed_at);
+                                const source = v.chat_title || 'Unknown';
+
+                                html += `
+                                    <tr>
+                                        <td title="${source}">${source}</td>
+                                        <td><span class="status-badge ${status}">${statusLabel}</span></td>
+                                        <td>${time}</td>
+                                    </tr>
+                                `;
+                            });
+
+                            html += '</tbody></table>';
+                            contentContainer.innerHTML = html;
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading vacancy peek:', error);
+            }
+        }
+
+        function formatTime(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr + 'Z');
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 1) return 'just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+            return date.toLocaleDateString();
+        }
+
         // Load on page load and refresh every 5 seconds
         loadStatus();
+        loadVacancyPeek();
         setInterval(loadStatus, 5000);
+        setInterval(loadVacancyPeek, 30000);  // Refresh vacancies every 30s
     </script>
 </body>
 </html>
