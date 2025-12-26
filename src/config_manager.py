@@ -94,10 +94,15 @@ class ConfigManager:
                 try:
                     channel = ChannelConfig.from_dict(channel_data)
                     self.channels.append(channel)
+                    # Debug: log enabled status
+                    logger.debug(f"  Channel '{channel.name}': enabled={channel.enabled} (from file: {channel_data.get('enabled')})")
                 except Exception as e:
                     logger.error(f"Ошибка загрузки канала {channel_data.get('id')}: {e}")
 
             logger.info(f"Загружено {len(self.channels)} каналов из конфигурации")
+            # Debug: summary of enabled channels
+            enabled_count = sum(1 for ch in self.channels if ch.enabled)
+            logger.info(f"  Из них активных (enabled=True): {enabled_count}")
             return self.channels
         
         except json.JSONDecodeError as e:
@@ -127,6 +132,10 @@ class ConfigManager:
                 'output_channels': [channel.to_dict() for channel in self.channels],
                 'llm_providers': self.llm_providers,
             }
+
+            # Debug: log what we're saving
+            for ch in self.channels:
+                logger.debug(f"  Saving channel '{ch.name}': enabled={ch.enabled}")
 
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)

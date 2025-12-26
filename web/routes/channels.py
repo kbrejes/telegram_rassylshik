@@ -187,10 +187,16 @@ async def create_channel(data: ChannelCreateRequest):
 async def update_channel(channel_id: str, data: ChannelUpdateRequest):
     """Обновить существующий канал"""
     try:
+        # Debug: log what we received
+        logger.info(f"Updating channel {channel_id}: enabled={data.enabled}")
+
         config_manager.load()  # Reload config before getting channel
         channel = config_manager.get_channel(channel_id)
         if not channel:
             raise HTTPException(404, "Канал не найден")
+
+        # Debug: log current state
+        logger.info(f"  Before update: channel.enabled={channel.enabled}")
 
         # Обновляем поля
         if data.name is not None:
@@ -201,6 +207,7 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
             channel.input_sources = data.input_sources
         if data.enabled is not None:
             channel.enabled = data.enabled
+            logger.info(f"  Updated enabled to: {data.enabled}")
         if data.include_keywords is not None:
             channel.filters.include_keywords = data.include_keywords
         if data.exclude_keywords is not None:
@@ -231,6 +238,9 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
                 call_pending=data.prompts.call_pending,
                 call_declined=data.prompts.call_declined,
             )
+
+        # Debug: log final state before save
+        logger.info(f"  After update: channel.enabled={channel.enabled}")
 
         if config_manager.update_channel(channel_id, channel):
             agents_added = []
