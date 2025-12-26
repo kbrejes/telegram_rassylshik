@@ -103,3 +103,13 @@ async def candidate_page(request: Request):
         "candidate_profile.html",
         {"request": request}
     )
+
+
+@router.get("/preview")
+async def preview_new_design(request: Request):
+    """Preview the new Tailwind design"""
+    channels = config_manager.load()
+    return templates.TemplateResponse(
+        "channels_list_new.html",
+        {"request": request, "channels": channels}
+    )
