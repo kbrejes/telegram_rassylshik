@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }" x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Channel - Job Notification Bot</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: {
+                            DEFAULT: 'hsl(240 5.9% 10%)',
+                            foreground: 'hsl(240 4.8% 95.9%)',
+                            accent: 'hsl(240 3.7% 15.9%)',
+                            border: 'hsl(240 3.7% 15.9%)',
+                        },
+                        accent: '#8b5cf6',
+                        dark: {
+                            950: '#09090b',
+                            900: '#0c0c0f',
+                            850: '#111114',
+                            800: '#18181b',
+                            700: '#27272a',
+                            600: '#3f3f46',
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 15px rgba(139, 92, 246, 0.15)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+            .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+            .scrollbar-thin::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        }
+        @layer components {
+            .card-glow { @apply transition-all duration-300; }
+            .dark .card-glow:hover { box-shadow: 0 0 20px rgba(139, 92, 246, 0.1); }
+        }
+    </style>
+    <script>
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+</head>
+<body class="h-full bg-gray-50 dark:bg-dark-950 transition-colors duration-200">
+    <div class="flex h-full">
+        {% set active_page = 'channels' %}
+        {% include 'partials/sidebar_new.html' %}
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-auto">
+            <!-- Top Bar -->
+            <header class="sticky top-0 z-10 flex items-center justify-between h-16 px-4 bg-white/80 dark:bg-dark-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-dark-700 lg:px-8">
+                <div class="flex items-center gap-4">
+                    <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 lg:hidden">
+                        <svg class="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Edit Channel</h2>
+                </div>
+                <a href="/preview" class="text-sm text-gray-600 dark:text-gray-400 hover:text-accent">
+                    &larr; Back to channels
+                </a>
+            </header>
+
+            <!-- Content -->
+            <div class="p-4 lg:p-8 max-w-4xl mx-auto">
+                <form id="channel-form" class="space-y-6">
+                    <!-- Basic Info -->
+                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Basic Information</h3>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Channel Name *</label>
+                                <input type="text" id="name" placeholder="e.g. Python Jobs" value="{% if channel %}{{ channel.name }}{% endif %}"
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition">
+                                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Convenient name for identification</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sources -->
+                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Monitoring Sources *</h3>
+
+                        <div id="source_list" class="space-y-2 mb-4">
+                            <!-- Source lists loaded dynamically -->
+                        </div>
+
+                        <details class="border border-gray-200 dark:border-dark-600 rounded-lg">
+                            <summary class="px-4 py-3 cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-700 rounded-lg select-none">
+                                Custom sources
+                            </summary>
+                            <div class="p-4 border-t border-gray-200 dark:border-dark-600">
+                                <textarea id="input_sources" rows="4" placeholder="@channel1&#10;@channel2&#10;@channel3"
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-none">{% if channel %}{{ channel.input_sources|join('\n') }}{% endif %}</textarea>
+                                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">One channel per line (@username or ID)</p>
+                                <div class="flex gap-2 mt-3">
+                                    <input type="text" id="new_source_list_name" placeholder="List name"
+                                        class="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none">
+                                    <button type="button" onclick="saveSourceList()" class="px-4 py-2 rounded-lg bg-accent text-white hover:bg-violet-600 transition">
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- AI Filter Prompt -->
+                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
+                        <details>
+                            <summary class="cursor-pointer">
+                                <h3 class="inline text-lg font-semibold text-gray-900 dark:text-white">AI Filter Prompt</h3>
+                                <span class="ml-2 text-sm text-gray-500">(vacancy filtering)</span>
+                            </summary>
+                            <div class="mt-4 space-y-4">
+                                <p class="text-sm text-gray-500 dark:text-gray-400">
+                                    This prompt filters incoming vacancies. Use <code class="px-1 py-0.5 rounded bg-gray-100 dark:bg-dark-700">{min_salary}</code> for dynamic salary.
+                                    <a href="/preview/vacancy-log" class="text-accent hover:underline ml-1">View filtered messages</a>
+                                </p>
+                                <textarea id="ai-filter-prompt" rows="10" placeholder="Loading..."
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm"></textarea>
+                                <div class="flex items-center gap-3">
+                                    <button type="button" onclick="saveFilterPrompt()" class="px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition">
+                                        Save Prompt
+                                    </button>
+                                    <button type="button" onclick="resetFilterPrompt()" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">
+                                        Reset to Default
+                                    </button>
+                                    <span id="filter-prompt-status" class="ml-auto text-sm text-gray-500">Loading...</span>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="flex items-center gap-4">
+                        <div class="flex-1 h-px bg-gray-200 dark:bg-dark-700"></div>
+                        <span class="text-sm text-gray-500 dark:text-gray-400">CRM Settings</span>
+                        <div class="flex-1 h-px bg-gray-200 dark:bg-dark-700"></div>
+                    </div>
+
+                    <!-- Linked Agents -->
+                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Linked Agents</h3>
+
+                        <div id="channel-agents-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                            <!-- Linked agents loaded dynamically -->
+                        </div>
+
+                        <div id="no-agents-warning" class="hidden p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm">
+                            No agents linked. Link at least one agent for CRM to work.
+                        </div>
+                    </div>
+
+                    <!-- Available Agents -->
+                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Available Agents</h3>
+
+                        <div id="available-agents-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <!-- Available agents loaded dynamically -->
+                        </div>
+
+                        <a href="/preview/agents" class="inline-flex items-center gap-2 mt-4 text-sm text-accent hover:underline">
+                            <span>+</span> Add new agent
+                        </a>
+                    </div>
+
+                    <!-- Auto Response Template -->
+                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Auto-response Template</h3>
+
+                        <div id="template_list" class="space-y-2 mb-4">
+                            <!-- Templates loaded dynamically -->
+                        </div>
+
+                        <details class="border border-gray-200 dark:border-dark-600 rounded-lg">
+                            <summary class="px-4 py-3 cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-700 rounded-lg select-none">
+                                Custom template
+                            </summary>
+                            <div class="p-4 border-t border-gray-200 dark:border-dark-600">
+                                <textarea id="auto_response_template" rows="3" placeholder="Hello! I'm interested in your vacancy..."
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-none">{% if channel %}{{ channel.auto_response_template }}{% endif %}</textarea>
+                                <div class="flex gap-2 mt-3">
+                                    <input type="text" id="new_template_name" placeholder="Template name"
+                                        class="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none">
+                                    <button type="button" onclick="saveTemplate()" class="px-4 py-2 rounded-lg bg-accent text-white hover:bg-violet-600 transition">
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="flex items-center gap-4">
+                        <div class="flex-1 h-px bg-gray-200 dark:bg-dark-700"></div>
+                        <span class="text-sm text-gray-500 dark:text-gray-400">AI Prompts</span>
+                        <div class="flex-1 h-px bg-gray-200 dark:bg-dark-700"></div>
+                    </div>
+
+                    <!-- AI Prompts -->
+                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Conversation AI Prompts</h3>
+                            <button type="button" onclick="loadDefaultPrompts()" class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">
+                                Load Defaults
+                            </button>
+                        </div>
+
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Configure AI behavior when communicating with contacts.</p>
+
+                        <div class="space-y-3">
+                            {% set prompt_sections = [
+                                ('base_context', 'Base Context'),
+                                ('discovery', 'Discovery'),
+                                ('engagement', 'Engagement'),
+                                ('call_ready', 'Call Ready'),
+                                ('call_pending', 'Call Pending'),
+                                ('call_declined', 'Call Declined')
+                            ] %}
+
+                            {% for key, label in prompt_sections %}
+                            <details class="border border-gray-200 dark:border-dark-600 rounded-lg">
+                                <summary class="px-4 py-3 cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-700 rounded-lg select-none">
+                                    {{ label }}
+                                </summary>
+                                <div class="p-4 border-t border-gray-200 dark:border-dark-600">
+                                    <textarea id="prompt_{{ key }}" rows="4" placeholder="Prompt for {{ label }}..."
+                                        class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts[key] }}{% endif %}</textarea>
+                                </div>
+                            </details>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Submit -->
+                    <div class="flex items-center gap-4">
+                        <button type="submit" class="px-6 py-3 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white font-medium hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl">
+                            Save Changes
+                        </button>
+                        <a href="/preview" class="px-6 py-3 rounded-lg border border-gray-300 dark:border-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+        <div class="bg-white dark:bg-dark-800 rounded-xl p-8 flex flex-col items-center">
+            <div class="animate-spin w-8 h-8 border-4 border-accent border-t-transparent rounded-full"></div>
+            <p class="mt-4 text-gray-700 dark:text-gray-300">Saving...</p>
+        </div>
+    </div>
+
+    <script>
+        const channelId = {% if channel %}'{{ channel.id }}'{% else %}null{% endif %};
+        const originalTelegramId = {% if channel %}{{ channel.telegram_id }}{% else %}0{% endif %};
+        const originalCrmGroupId = {% if channel and channel.crm_group_id %}{{ channel.crm_group_id }}{% else %}0{% endif %};
+        const currentTemplate = {% if channel %}"{{ channel.auto_response_template | replace('"', '\\"') | replace('\n', '\\n') }}"{% else %}""{% endif %};
+
+        // State
+        let savedTemplates = [];
+        let selectedTemplateId = null;
+        let savedSourceLists = [];
+        let selectedSourceListId = null;
+        let allAgents = [];
+        let linkedAgentNames = [];
+        let defaultFilterPrompt = '';
+        let isCustomFilterPrompt = false;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadSavedTemplates();
+            await loadSourceLists();
+            await loadFilterPrompt();
+            await loadAgents();
+        });
+
+        // Sidebar toggle
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('-translate-x-full');
+            overlay.classList.toggle('hidden');
+        }
+
+        // Filter prompt
+        async function loadFilterPrompt() {
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt');
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('ai-filter-prompt').value = data.prompt;
+                    defaultFilterPrompt = data.default_prompt;
+                    isCustomFilterPrompt = data.is_custom;
+                    updateFilterPromptStatus();
+                }
+            } catch (e) {
+                console.error('Error loading filter prompt:', e);
+            }
+        }
+
+        function updateFilterPromptStatus() {
+            const status = document.getElementById('filter-prompt-status');
+            status.textContent = isCustomFilterPrompt ? 'Custom prompt' : 'Default prompt';
+            status.classList.toggle('text-accent', isCustomFilterPrompt);
+        }
+
+        async function saveFilterPrompt() {
+            const prompt = document.getElementById('ai-filter-prompt').value.trim();
+            if (!prompt) {
+                showNotification('Prompt cannot be empty', 'error');
+                return;
+            }
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    isCustomFilterPrompt = true;
+                    updateFilterPromptStatus();
+                    showNotification('Filter prompt saved', 'success');
+                } else {
+                    showNotification('Error: ' + (data.error || 'Unknown'), 'error');
+                }
+            } catch (e) {
+                showNotification('Error saving prompt', 'error');
+            }
+        }
+
+        async function resetFilterPrompt() {
+            if (!confirm('Reset to default prompt?')) return;
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt', { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('ai-filter-prompt').value = defaultFilterPrompt;
+                    isCustomFilterPrompt = false;
+                    updateFilterPromptStatus();
+                    showNotification('Prompt reset to default', 'success');
+                }
+            } catch (e) {
+                showNotification('Error resetting prompt', 'error');
+            }
+        }
+
+        // Templates
+        async function loadSavedTemplates() {
+            try {
+                const response = await fetch('/api/templates');
+                const data = await response.json();
+                if (data.success) {
+                    savedTemplates = data.templates || [];
+                    renderTemplates();
+                }
+            } catch (e) {
+                console.error('Error loading templates:', e);
+            }
+        }
+
+        function renderTemplates() {
+            const list = document.getElementById('template_list');
+            const currentText = document.getElementById('auto_response_template').value.trim();
+
+            let html = '';
+            savedTemplates.forEach(t => {
+                const isSelected = selectedTemplateId === t.id || (selectedTemplateId === null && currentText === t.text);
+                if (isSelected && selectedTemplateId === null) selectedTemplateId = t.id;
+
+                html += `
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1 p-3 rounded-lg border cursor-pointer transition-all ${isSelected
+                            ? 'border-accent bg-violet-50 dark:bg-violet-900/20'
+                            : 'border-gray-200 dark:border-dark-600 hover:border-accent'}"
+                             onclick="selectTemplate('${t.id}')">
+                            <div class="font-medium text-gray-900 dark:text-white text-sm">${isSelected ? '&check; ' : ''}${t.name}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 truncate">${t.text.substring(0, 60)}${t.text.length > 60 ? '...' : ''}</div>
+                        </div>
+                        <button type="button" onclick="deleteTemplate('${t.id}')" class="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Delete">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                `;
+            });
+            list.innerHTML = html;
+        }
+
+        function selectTemplate(id) {
+            selectedTemplateId = id;
+            const template = savedTemplates.find(t => t.id === id);
+            if (template) {
+                document.getElementById('auto_response_template').value = template.text;
+            }
+            renderTemplates();
+        }
+
+        async function saveTemplate() {
+            const name = document.getElementById('new_template_name').value.trim();
+            const text = document.getElementById('auto_response_template').value.trim();
+            if (!name || !text) {
+                alert('Enter template name and text');
+                return;
+            }
+            try {
+                const response = await fetch('/api/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, text })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    await loadSavedTemplates();
+                    document.getElementById('new_template_name').value = '';
+                    showNotification('Template saved!', 'success');
+                }
+            } catch (e) {
+                showNotification('Error saving template', 'error');
+            }
+        }
+
+        async function deleteTemplate(id) {
+            if (!confirm('Delete this template?')) return;
+            try {
+                const response = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    savedTemplates = savedTemplates.filter(t => t.id !== id);
+                    if (selectedTemplateId === id) selectedTemplateId = null;
+                    renderTemplates();
+                    showNotification('Template deleted', 'success');
+                }
+            } catch (e) {
+                showNotification('Error deleting template', 'error');
+            }
+        }
+
+        // Source lists
+        async function loadSourceLists() {
+            try {
+                const response = await fetch('/api/source-lists');
+                const data = await response.json();
+                if (data.success) {
+                    savedSourceLists = data.lists || [];
+                    renderSourceLists();
+                }
+            } catch (e) {
+                console.error('Error loading source lists:', e);
+            }
+        }
+
+        function renderSourceLists() {
+            const list = document.getElementById('source_list');
+            const currentSources = document.getElementById('input_sources').value.trim().split('\n').filter(s => s.trim()).sort().join('\n');
+
+            let html = '';
+            savedSourceLists.forEach(l => {
+                const listSources = (l.sources || []).sort().join('\n');
+                const isSelected = selectedSourceListId === l.id || (selectedSourceListId === null && currentSources === listSources);
+                if (isSelected && selectedSourceListId === null) selectedSourceListId = l.id;
+
+                html += `
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1 p-3 rounded-lg border cursor-pointer transition-all ${isSelected
+                            ? 'border-accent bg-violet-50 dark:bg-violet-900/20'
+                            : 'border-gray-200 dark:border-dark-600 hover:border-accent'}"
+                             onclick="selectSourceList('${l.id}')">
+                            <div class="font-medium text-gray-900 dark:text-white text-sm">${isSelected ? '&check; ' : ''}${l.name}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">${(l.sources || []).length} sources: ${(l.sources || []).slice(0, 3).join(', ')}${(l.sources || []).length > 3 ? '...' : ''}</div>
+                        </div>
+                        <button type="button" onclick="deleteSourceList('${l.id}')" class="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Delete">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                `;
+            });
+            list.innerHTML = html;
+        }
+
+        function selectSourceList(id) {
+            selectedSourceListId = id;
+            const sourceList = savedSourceLists.find(l => l.id === id);
+            if (sourceList) {
+                document.getElementById('input_sources').value = (sourceList.sources || []).join('\n');
+            }
+            renderSourceLists();
+        }
+
+        async function saveSourceList() {
+            const name = document.getElementById('new_source_list_name').value.trim();
+            const sources = document.getElementById('input_sources').value.trim().split('\n').map(s => s.trim()).filter(s => s);
+            if (!name || sources.length === 0) {
+                alert('Enter list name and at least one source');
+                return;
+            }
+            try {
+                const response = await fetch('/api/source-lists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, sources })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    await loadSourceLists();
+                    document.getElementById('new_source_list_name').value = '';
+                    showNotification('Source list saved!', 'success');
+                }
+            } catch (e) {
+                showNotification('Error saving source list', 'error');
+            }
+        }
+
+        async function deleteSourceList(id) {
+            if (!confirm('Delete this source list?')) return;
+            try {
+                const response = await fetch(`/api/source-lists/${id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) {
+                    savedSourceLists = savedSourceLists.filter(l => l.id !== id);
+                    if (selectedSourceListId === id) selectedSourceListId = null;
+                    renderSourceLists();
+                    showNotification('Source list deleted', 'success');
+                }
+            } catch (e) {
+                showNotification('Error deleting source list', 'error');
+            }
+        }
+
+        // Agents
+        async function loadAgents() {
+            try {
+                const [agentsResponse, linkedResponse] = await Promise.all([
+                    fetch('/api/agents'),
+                    fetch(`/api/channels/${channelId}/agents`)
+                ]);
+                const agentsData = await agentsResponse.json();
+                const linkedData = await linkedResponse.json();
+
+                if (agentsData.success) allAgents = agentsData.agents || [];
+                if (linkedData.success) linkedAgentNames = (linkedData.agents || []).map(a => a.session_name);
+
+                renderAgents();
+            } catch (e) {
+                console.error('Error loading agents:', e);
+            }
+        }
+
+        function renderAgents() {
+            const linkedGrid = document.getElementById('channel-agents-grid');
+            const availableGrid = document.getElementById('available-agents-grid');
+            const warning = document.getElementById('no-agents-warning');
+
+            const linkedAgents = allAgents.filter(a => linkedAgentNames.includes(a.session_name));
+            const availableAgents = allAgents.filter(a => !linkedAgentNames.includes(a.session_name));
+
+            // Linked agents
+            if (linkedAgents.length === 0) {
+                linkedGrid.innerHTML = '<div class="col-span-full text-gray-500 dark:text-gray-400 italic">No agents linked yet</div>';
+                warning.classList.remove('hidden');
+            } else {
+                warning.classList.add('hidden');
+                linkedGrid.innerHTML = linkedAgents.map(agent => {
+                    const meta = agent.username ? `@${agent.username}` : (agent.phone || agent.session_name);
+                    const isConnected = agent.status === 'connected';
+                    return `
+                        <div class="p-4 rounded-lg border-2 border-green-500 bg-green-50 dark:bg-green-900/20">
+                            <div class="font-medium text-gray-900 dark:text-white">${agent.name || agent.session_name}</div>
+                            <div class="text-sm text-gray-500 dark:text-gray-400">${meta}</div>
+                            <span class="inline-block mt-2 px-2 py-0.5 text-xs rounded-full ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-200'}">
+                                ${isConnected ? 'Connected' : 'Disconnected'}
+                            </span>
+                            <button type="button" onclick="unlinkAgent('${agent.session_name}')" class="mt-3 w-full px-3 py-2 rounded-lg bg-red-500 text-white text-sm hover:bg-red-600 transition">
+                                Unlink
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Available agents
+            if (availableAgents.length === 0) {
+                availableGrid.innerHTML = '<div class="col-span-full text-gray-500 dark:text-gray-400 italic">All agents are linked</div>';
+            } else {
+                availableGrid.innerHTML = availableAgents.map(agent => {
+                    const meta = agent.username ? `@${agent.username}` : (agent.phone || agent.session_name);
+                    const isConnected = agent.status === 'connected';
+                    return `
+                        <div class="p-4 rounded-lg border border-gray-200 dark:border-dark-600">
+                            <div class="font-medium text-gray-900 dark:text-white">${agent.name || agent.session_name}</div>
+                            <div class="text-sm text-gray-500 dark:text-gray-400">${meta}</div>
+                            <span class="inline-block mt-2 px-2 py-0.5 text-xs rounded-full ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-200'}">
+                                ${isConnected ? 'Connected' : 'Disconnected'}
+                            </span>
+                            <button type="button" onclick="linkAgent('${agent.session_name}', '${agent.phone || ''}')" class="mt-3 w-full px-3 py-2 rounded-lg bg-accent text-white text-sm hover:bg-violet-600 transition">
+                                Link
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        async function linkAgent(sessionName, phone) {
+            linkedAgentNames.push(sessionName);
+            renderAgents();
+            await updateChannelAgents();
+        }
+
+        async function unlinkAgent(sessionName) {
+            linkedAgentNames = linkedAgentNames.filter(n => n !== sessionName);
+            renderAgents();
+            await updateChannelAgents();
+        }
+
+        async function updateChannelAgents() {
+            try {
+                const currentAgents = allAgents
+                    .filter(a => linkedAgentNames.includes(a.session_name))
+                    .map(a => ({ session_name: a.session_name, phone: a.phone || '' }));
+
+                const response = await fetch(`/api/channels/${channelId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agents: currentAgents })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showNotification('Agents updated', 'success');
+                } else {
+                    showNotification('Failed to update agents', 'error');
+                    await loadAgents(); // Revert
+                }
+            } catch (e) {
+                showNotification('Error updating agents', 'error');
+                await loadAgents(); // Revert
+            }
+        }
+
+        // Default prompts
+        async function loadDefaultPrompts() {
+            try {
+                const response = await fetch('/api/channels/prompts/defaults');
+                const data = await response.json();
+                if (data.success && data.prompts) {
+                    document.getElementById('prompt_base_context').value = data.prompts.base_context || '';
+                    document.getElementById('prompt_discovery').value = data.prompts.discovery || '';
+                    document.getElementById('prompt_engagement').value = data.prompts.engagement || '';
+                    document.getElementById('prompt_call_ready').value = data.prompts.call_ready || '';
+                    document.getElementById('prompt_call_pending').value = data.prompts.call_pending || '';
+                    document.getElementById('prompt_call_declined').value = data.prompts.call_declined || '';
+                    showNotification('Default prompts loaded', 'success');
+                }
+            } catch (e) {
+                showNotification('Error loading prompts', 'error');
+            }
+        }
+
+        function collectPrompts() {
+            return {
+                base_context: document.getElementById('prompt_base_context').value,
+                discovery: document.getElementById('prompt_discovery').value,
+                engagement: document.getElementById('prompt_engagement').value,
+                call_ready: document.getElementById('prompt_call_ready').value,
+                call_pending: document.getElementById('prompt_call_pending').value,
+                call_declined: document.getElementById('prompt_call_declined').value
+            };
+        }
+
+        // Form submit
+        document.getElementById('channel-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const loading = document.getElementById('loading');
+            loading.classList.remove('hidden');
+
+            try {
+                const formData = {
+                    name: document.getElementById('name').value.trim(),
+                    telegram_id: originalTelegramId,
+                    input_sources: document.getElementById('input_sources').value.split('\n').map(s => s.trim()).filter(s => s),
+                    include_keywords: [],
+                    exclude_keywords: [],
+                    enabled: true,
+                    crm_enabled: true,
+                    crm_group_id: originalCrmGroupId,
+                    auto_response_enabled: true,
+                    auto_response_template: document.getElementById('auto_response_template').value.trim(),
+                    prompts: collectPrompts()
+                };
+
+                if (!formData.name) {
+                    showNotification('Enter channel name', 'error');
+                    loading.classList.add('hidden');
+                    return;
+                }
+
+                if (formData.input_sources.length === 0) {
+                    showNotification('Add at least one source', 'error');
+                    loading.classList.add('hidden');
+                    return;
+                }
+
+                const response = await fetch(`/api/channels/${channelId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showNotification('Changes saved!', 'success');
+                    setTimeout(() => { window.location.href = '/preview'; }, 1000);
+                } else {
+                    showNotification('Error: ' + (data.message || 'Unknown'), 'error');
+                    loading.classList.add('hidden');
+                }
+            } catch (e) {
+                showNotification('Error saving', 'error');
+                loading.classList.add('hidden');
+            }
+        });
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-all transform ${
+                type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+            } text-white`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

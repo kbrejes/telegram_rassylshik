@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }" x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Stats - Job Notification Bot</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: { DEFAULT: 'hsl(240 5.9% 10%)', foreground: 'hsl(240 4.8% 95.9%)', accent: 'hsl(240 3.7% 15.9%)', border: 'hsl(240 3.7% 15.9%)' },
+                        accent: '#8b5cf6',
+                        dark: { 950: '#09090b', 900: '#0c0c0f', 850: '#111114', 800: '#18181b', 700: '#27272a', 600: '#3f3f46' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+            .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+            .scrollbar-thin::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        }
+    </style>
+    <script>if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark');</script>
+</head>
+<body class="h-full bg-gray-50 dark:bg-dark-950 transition-colors duration-200">
+    <div class="flex h-full">
+        {% set active_page = 'ai-stats' %}
+        {% include 'partials/sidebar_new.html' %}
+
+        <main class="flex-1 flex flex-col min-h-screen lg:ml-0">
+            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 lg:hidden">
+                <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700">
+                    <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+                <h1 class="text-lg font-semibold text-gray-900 dark:text-white">AI Stats</h1>
+            </header>
+
+            <div class="flex-1 p-4 lg:p-8">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white hidden lg:block">AI Self-Correction Stats</h1>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Monitor conversation outcomes and experiments</p>
+                    </div>
+                    <button onclick="loadStats()" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 dark:bg-accent rounded-lg hover:bg-violet-700 dark:hover:bg-violet-500 transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+
+                <div id="loading" class="flex items-center justify-center py-12 text-gray-400">
+                    <svg class="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    Loading stats...
+                </div>
+
+                <div id="content" class="hidden space-y-6">
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4" id="stats-grid"></div>
+
+                    <!-- Outcome Breakdown -->
+                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4">Outcome Breakdown</h3>
+                        <div class="flex flex-wrap gap-2" id="outcome-breakdown"></div>
+                    </div>
+
+                    <!-- Recent Outcomes -->
+                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 overflow-hidden">
+                        <div class="px-5 py-4 border-b border-gray-100 dark:border-dark-700">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Recent Outcomes</h3>
+                        </div>
+                        <div id="recent-outcomes" class="p-5"></div>
+                    </div>
+
+                    <!-- Experiments -->
+                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 overflow-hidden">
+                        <div class="px-5 py-4 border-b border-gray-100 dark:border-dark-700">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">A/B Experiments</h3>
+                        </div>
+                        <div id="experiments" class="p-5"></div>
+                    </div>
+
+                    <!-- Suggestions -->
+                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 overflow-hidden">
+                        <div class="px-5 py-4 border-b border-gray-100 dark:border-dark-700">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Prompt Improvement Suggestions</h3>
+                        </div>
+                        <div id="suggestions" class="p-5"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            document.getElementById('sidebar-overlay').classList.toggle('hidden');
+        }
+
+        async function loadStats() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('content').classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/ai/stats');
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error);
+                renderStats(data);
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('content').classList.remove('hidden');
+            } catch (error) {
+                document.getElementById('loading').innerHTML = `<div class="text-red-500">Error: ${error.message}</div>`;
+            }
+        }
+
+        function renderStats(data) {
+            const stats = data.stats;
+
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white">${stats.total_outcomes}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Total Outcomes</div>
+                </div>
+                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                    <div class="text-2xl font-bold text-green-600 dark:text-green-400">${stats.outcome_breakdown.call_scheduled || 0}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Calls Scheduled</div>
+                </div>
+                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                    <div class="text-2xl font-bold text-red-600 dark:text-red-400">${stats.outcome_breakdown.declined || 0}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Declined</div>
+                </div>
+                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                    <div class="text-2xl font-bold text-amber-600 dark:text-amber-400">${stats.outcome_breakdown.disengaged || 0}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Disengaged</div>
+                </div>
+                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white">${stats.experiments_count}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Experiments</div>
+                </div>
+                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white">${stats.suggestions_count}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Suggestions</div>
+                </div>
+            `;
+
+            const breakdown = stats.outcome_breakdown;
+            if (Object.keys(breakdown).length > 0) {
+                document.getElementById('outcome-breakdown').innerHTML = Object.entries(breakdown).map(([outcome, count]) => {
+                    const colors = {
+                        call_scheduled: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+                        declined: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+                        disengaged: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
+                        ongoing: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    };
+                    return `<span class="px-3 py-1.5 rounded-full text-sm font-medium ${colors[outcome] || 'bg-gray-100 dark:bg-dark-700 text-gray-700 dark:text-gray-300'}">${outcome}: ${count}</span>`;
+                }).join('');
+            } else {
+                document.getElementById('outcome-breakdown').innerHTML = '<p class="text-sm text-gray-400">No outcomes recorded yet</p>';
+            }
+
+            if (data.recent_outcomes.length > 0) {
+                document.getElementById('recent-outcomes').innerHTML = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-dark-800">
+                                <tr><th class="px-4 py-2 text-left">Contact</th><th class="px-4 py-2 text-left">Outcome</th><th class="px-4 py-2 text-left">Messages</th><th class="px-4 py-2 text-left">Channel</th><th class="px-4 py-2 text-left">Date</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+                                ${data.recent_outcomes.map(o => {
+                                    const colors = { call_scheduled: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400', declined: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', disengaged: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400', ongoing: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' };
+                                    return `<tr class="hover:bg-gray-50 dark:hover:bg-dark-800"><td class="px-4 py-3 text-gray-900 dark:text-white">${o.contact_id}</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-xs font-medium rounded-full ${colors[o.outcome] || 'bg-gray-100 dark:bg-dark-700'}">${o.outcome}</span></td><td class="px-4 py-3 text-gray-500 dark:text-gray-400">${o.total_messages || '-'}</td><td class="px-4 py-3 text-gray-500 dark:text-gray-400">${o.channel_id}</td><td class="px-4 py-3 text-gray-500 dark:text-gray-400">${o.created_at || '-'}</td></tr>`;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            } else {
+                document.getElementById('recent-outcomes').innerHTML = '<div class="text-center py-8 text-gray-400"><svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2z"/></svg>No outcomes yet</div>';
+            }
+
+            if (data.experiments.length > 0) {
+                document.getElementById('experiments').innerHTML = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-dark-800">
+                                <tr><th class="px-4 py-2 text-left">Name</th><th class="px-4 py-2 text-left">Type</th><th class="px-4 py-2 text-left">Status</th><th class="px-4 py-2 text-left">Started</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+                                ${data.experiments.map(e => `<tr class="hover:bg-gray-50 dark:hover:bg-dark-800"><td class="px-4 py-3 text-gray-900 dark:text-white">${e.name}</td><td class="px-4 py-3 text-gray-500 dark:text-gray-400">${e.prompt_type}</td><td class="px-4 py-3 text-gray-500 dark:text-gray-400">${e.status}</td><td class="px-4 py-3 text-gray-500 dark:text-gray-400">${e.start_date || '-'}</td></tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            } else {
+                document.getElementById('experiments').innerHTML = '<div class="text-center py-8 text-gray-400"><svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>No experiments yet</div>';
+            }
+
+            if (data.suggestions.length > 0) {
+                document.getElementById('suggestions').innerHTML = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-dark-800">
+                                <tr><th class="px-4 py-2 text-left">Status</th><th class="px-4 py-2 text-left">Reasoning</th><th class="px-4 py-2 text-left">Created</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+                                ${data.suggestions.map(s => `<tr class="hover:bg-gray-50 dark:hover:bg-dark-800"><td class="px-4 py-3 text-gray-900 dark:text-white">${s.status}</td><td class="px-4 py-3 text-gray-500 dark:text-gray-400">${s.reasoning || '-'}</td><td class="px-4 py-3 text-gray-500 dark:text-gray-400">${s.created_at || '-'}</td></tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+            } else {
+                document.getElementById('suggestions').innerHTML = '<div class="text-center py-8 text-gray-400"><svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>No suggestions yet</div>';
+            }
+        }
+
+        loadStats();
+        setInterval(loadStats, 30000);
+    </script>
+
+    {% include 'partials/chat_widget.html' %}
+</body>
+</html>

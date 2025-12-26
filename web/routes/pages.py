@@ -122,3 +122,66 @@ async def preview_agents_design(request: Request):
         "status_new.html",
         {"request": request}
     )
+
+
+@router.get("/preview/vacancy-log")
+async def preview_vacancy_log_design(request: Request):
+    """Preview the new Tailwind vacancy log page"""
+    return templates.TemplateResponse(
+        "vacancy_log_new.html",
+        {"request": request}
+    )
+
+
+@router.get("/preview/ai-stats")
+async def preview_ai_stats_design(request: Request):
+    """Preview the new Tailwind AI stats page"""
+    return templates.TemplateResponse(
+        "ai_stats_new.html",
+        {"request": request}
+    )
+
+
+@router.get("/preview/candidate")
+async def preview_candidate_design(request: Request):
+    """Preview the new Tailwind candidate page"""
+    return templates.TemplateResponse(
+        "candidate_profile_new.html",
+        {"request": request}
+    )
+
+
+@router.get("/preview/auth")
+async def preview_auth_design(request: Request):
+    """Preview the new Tailwind bot auth page"""
+    return templates.TemplateResponse(
+        "bot_auth_new.html",
+        {"request": request}
+    )
+
+
+@router.get("/preview/channel/new")
+async def preview_channel_create_design(request: Request):
+    """Preview the new Tailwind channel create page"""
+    return templates.TemplateResponse(
+        "channel_create_new.html",
+        {"request": request}
+    )
+
+
+@router.get("/preview/channel/{channel_id}")
+async def preview_channel_edit_design(request: Request, channel_id: str):
+    """Preview the new Tailwind channel edit page"""
+    from fastapi import HTTPException
+    config_manager.load()
+    channel = config_manager.get_channel(channel_id)
+    if not channel:
+        raise HTTPException(404, "Channel not found")
+    return templates.TemplateResponse(
+        "channel_edit_new.html",
+        {
+            "request": request,
+            "channel": channel,
+            "is_new": False
+        }
+    )

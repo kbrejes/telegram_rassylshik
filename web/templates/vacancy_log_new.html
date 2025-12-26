@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }" x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vacancy Log - Job Notification Bot</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: { DEFAULT: 'hsl(240 5.9% 10%)', foreground: 'hsl(240 4.8% 95.9%)', accent: 'hsl(240 3.7% 15.9%)', border: 'hsl(240 3.7% 15.9%)' },
+                        accent: '#8b5cf6',
+                        dark: { 950: '#09090b', 900: '#0c0c0f', 850: '#111114', 800: '#18181b', 700: '#27272a', 600: '#3f3f46' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+            .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+            .scrollbar-thin::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        }
+    </style>
+    <script>
+        if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark');
+    </script>
+</head>
+<body class="h-full bg-gray-50 dark:bg-dark-950 transition-colors duration-200">
+    <div class="flex h-full">
+        {% set active_page = 'vacancy-log' %}
+        {% include 'partials/sidebar_new.html' %}
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col min-h-screen lg:ml-0">
+            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 lg:hidden">
+                <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700">
+                    <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+                <h1 class="text-lg font-semibold text-gray-900 dark:text-white">Vacancy Log</h1>
+            </header>
+
+            <div class="flex-1 p-4 lg:p-8">
+                <!-- Page Header -->
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white hidden lg:block">Vacancy Log</h1>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">AI-processed vacancy analysis</p>
+                    </div>
+                    <button onclick="loadVacancies()" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 dark:bg-accent rounded-lg hover:bg-violet-700 dark:hover:bg-violet-500 transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-3 gap-4 mb-6">
+                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                        <div class="text-2xl font-bold text-gray-900 dark:text-white" id="stat-total">-</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Total</div>
+                    </div>
+                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                        <div class="text-2xl font-bold text-green-600 dark:text-green-400" id="stat-passed">-</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Passed</div>
+                    </div>
+                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                        <div class="text-2xl font-bold text-red-600 dark:text-red-400" id="stat-filtered">-</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Filtered</div>
+                    </div>
+                </div>
+
+                <!-- AI Filter Prompt (Collapsible) -->
+                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 mb-6" x-data="{ open: false }">
+                    <button @click="open = !open" class="w-full flex items-center justify-between p-4 text-left">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">AI Filter Prompt</h3>
+                        <svg class="w-5 h-5 text-gray-400 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div x-show="open" x-collapse class="px-4 pb-4">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Use <code class="bg-gray-100 dark:bg-dark-800 px-1 rounded">{min_salary}</code> for dynamic salary.</p>
+                        <textarea id="filter-prompt" class="w-full h-48 px-3 py-2 text-sm font-mono border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white resize-y" placeholder="Loading..."></textarea>
+                        <div class="flex items-center gap-3 mt-3">
+                            <button onclick="saveFilterPrompt()" class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">Save</button>
+                            <button onclick="resetFilterPrompt()" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-700 rounded-lg hover:bg-gray-200 dark:hover:bg-dark-600">Reset</button>
+                            <span id="prompt-status" class="ml-auto text-xs text-gray-500 dark:text-gray-400">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter Buttons -->
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button class="filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-violet-100 dark:bg-accent/20 text-violet-700 dark:text-accent" data-filter="all" onclick="setFilter('all')">All</button>
+                    <button class="filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600" data-filter="passed" onclick="setFilter('passed')">Passed</button>
+                    <button class="filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600" data-filter="filtered" onclick="setFilter('filtered')">Filtered</button>
+                </div>
+
+                <!-- Vacancy Table -->
+                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 overflow-hidden">
+                    <div id="loading" class="flex items-center justify-center py-12 text-gray-400">
+                        <svg class="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        Loading vacancies...
+                    </div>
+                    <div id="vacancies-container" class="hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 dark:bg-dark-800 text-xs text-gray-500 dark:text-gray-400 uppercase">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left font-medium">Time</th>
+                                        <th class="px-4 py-3 text-left font-medium">Source</th>
+                                        <th class="px-4 py-3 text-left font-medium">Text</th>
+                                        <th class="px-4 py-3 text-left font-medium">Status</th>
+                                        <th class="px-4 py-3 text-left font-medium">AI Reason</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="vacancies-tbody" class="divide-y divide-gray-100 dark:divide-dark-700"></tbody>
+                            </table>
+                        </div>
+                        <div id="empty-state" class="hidden flex flex-col items-center justify-center py-12 text-gray-400">
+                            <svg class="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                            </svg>
+                            No vacancies found
+                        </div>
+                    </div>
+                    <!-- Pagination -->
+                    <div id="pagination" class="hidden flex items-center justify-center gap-2 p-4 border-t border-gray-100 dark:border-dark-700">
+                        <button id="prev-btn" onclick="prevPage()" class="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-700 rounded-lg hover:bg-gray-200 dark:hover:bg-dark-600 disabled:opacity-50">Previous</button>
+                        <span id="page-info" class="text-sm text-gray-500 dark:text-gray-400 px-3">Page 1</span>
+                        <button id="next-btn" onclick="nextPage()" class="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-700 rounded-lg hover:bg-gray-200 dark:hover:bg-dark-600 disabled:opacity-50">Next</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="modal-overlay" class="fixed inset-0 z-50 hidden" onclick="closeModal(event)">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        <div class="flex items-center justify-center min-h-full p-4">
+            <div class="relative bg-white dark:bg-dark-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden dark:border dark:border-dark-700" onclick="event.stopPropagation()">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-dark-700">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Vacancy Details</h3>
+                    <button onclick="closeModal()" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div id="modal-body" class="p-5 overflow-y-auto max-h-[calc(80vh-64px)]"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            document.getElementById('sidebar-overlay').classList.toggle('hidden');
+        }
+
+        let currentFilter = 'all';
+        let currentOffset = 0;
+        const limit = 50;
+        let totalCount = 0;
+        let vacancies = [];
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            currentOffset = 0;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if (btn.dataset.filter === filter) {
+                    btn.className = 'filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-violet-100 dark:bg-accent/20 text-violet-700 dark:text-accent';
+                } else {
+                    btn.className = 'filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600';
+                }
+            });
+            loadVacancies();
+        }
+
+        async function loadVacancies() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('vacancies-container').classList.add('hidden');
+            try {
+                const params = new URLSearchParams({ limit, offset: currentOffset, filter_status: currentFilter });
+                const response = await fetch(`/api/vacancies/log?${params}`);
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error);
+                vacancies = data.vacancies;
+                totalCount = data.total;
+                if (data.stats) {
+                    document.getElementById('stat-total').textContent = data.stats.total || 0;
+                    document.getElementById('stat-passed').textContent = data.stats.passed || 0;
+                    document.getElementById('stat-filtered').textContent = data.stats.filtered || 0;
+                }
+                renderVacancies();
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('vacancies-container').classList.remove('hidden');
+            } catch (error) {
+                document.getElementById('loading').innerHTML = `<div class="text-red-500">Error: ${error.message}</div>`;
+            }
+        }
+
+        function renderVacancies() {
+            const tbody = document.getElementById('vacancies-tbody');
+            const emptyState = document.getElementById('empty-state');
+            const pagination = document.getElementById('pagination');
+
+            if (vacancies.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                pagination.classList.add('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            pagination.classList.remove('hidden');
+
+            tbody.innerHTML = vacancies.map((v, idx) => `
+                <tr class="hover:bg-gray-50 dark:hover:bg-dark-800 cursor-pointer" onclick="showDetails(${idx})">
+                    <td class="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">${formatDate(v.processed_at)}</td>
+                    <td class="px-4 py-3 text-gray-900 dark:text-white">${escapeHtml(v.chat_title || 'Unknown')}</td>
+                    <td class="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-xs truncate">${escapeHtml(v.text_preview)}</td>
+                    <td class="px-4 py-3">
+                        <span class="px-2.5 py-1 text-xs font-medium rounded-full ${v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}">
+                            ${v.is_relevant ? 'Passed' : 'Filtered'}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs max-w-[200px] truncate">${escapeHtml(v.ai_reason || '-')}</td>
+                </tr>
+            `).join('');
+
+            const currentPage = Math.floor(currentOffset / limit) + 1;
+            const totalPages = Math.ceil(totalCount / limit);
+            document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('prev-btn').disabled = currentOffset === 0;
+            document.getElementById('next-btn').disabled = currentOffset + limit >= totalCount;
+        }
+
+        function showDetails(idx) {
+            const v = vacancies[idx];
+            document.getElementById('modal-body').innerHTML = `
+                <div class="space-y-4">
+                    <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Source</label><p class="text-sm text-gray-900 dark:text-white mt-1">${escapeHtml(v.chat_title || 'Unknown')}</p></div>
+                    <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</label><p class="mt-1"><span class="px-2.5 py-1 text-xs font-medium rounded-full ${v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}">${v.is_relevant ? 'Passed' : 'Filtered'}</span></p></div>
+                    <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">AI Reason</label><p class="text-sm text-gray-900 dark:text-gray-200 mt-1">${escapeHtml(v.ai_reason || 'No reason provided')}</p></div>
+                    <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Processed</label><p class="text-sm text-gray-900 dark:text-gray-200 mt-1">${v.processed_at || '-'}</p></div>
+                    <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Full Text</label><div class="mt-2 p-3 bg-gray-50 dark:bg-dark-800 rounded-lg text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-64 overflow-y-auto">${escapeHtml(v.text_full || v.text_preview)}</div></div>
+                </div>
+            `;
+            document.getElementById('modal-overlay').classList.remove('hidden');
+        }
+
+        function closeModal(event) {
+            if (event && event.target !== document.getElementById('modal-overlay')) return;
+            document.getElementById('modal-overlay').classList.add('hidden');
+        }
+
+        function prevPage() { if (currentOffset > 0) { currentOffset -= limit; loadVacancies(); } }
+        function nextPage() { if (currentOffset + limit < totalCount) { currentOffset += limit; loadVacancies(); } }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            let utcStr = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr.replace(' ', 'T') + 'Z';
+            return new Date(utcStr).toLocaleString('ru-RU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        let defaultPrompt = '', isCustomPrompt = false;
+        async function loadFilterPrompt() {
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt');
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('filter-prompt').value = data.prompt;
+                    defaultPrompt = data.default_prompt;
+                    isCustomPrompt = data.is_custom;
+                    updatePromptStatus();
+                }
+            } catch (e) { document.getElementById('filter-prompt').value = 'Error loading'; }
+        }
+
+        function updatePromptStatus() {
+            const status = document.getElementById('prompt-status');
+            status.textContent = isCustomPrompt ? 'Custom prompt' : 'Default prompt';
+            status.className = isCustomPrompt ? 'ml-auto text-xs text-violet-600 dark:text-accent' : 'ml-auto text-xs text-gray-500 dark:text-gray-400';
+        }
+
+        async function saveFilterPrompt() {
+            const prompt = document.getElementById('filter-prompt').value.trim();
+            if (!prompt) { showToast('Prompt cannot be empty', 'error'); return; }
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+                const data = await response.json();
+                if (data.success) { isCustomPrompt = true; updatePromptStatus(); showToast('Prompt saved', 'success'); }
+                else showToast('Error: ' + data.error, 'error');
+            } catch (e) { showToast('Error saving prompt', 'error'); }
+        }
+
+        async function resetFilterPrompt() {
+            if (!confirm('Reset to default prompt?')) return;
+            try {
+                const response = await fetch('/api/vacancies/filter-prompt', { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) { document.getElementById('filter-prompt').value = defaultPrompt; isCustomPrompt = false; updatePromptStatus(); showToast('Reset to default', 'success'); }
+            } catch (e) { showToast('Error resetting', 'error'); }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `${type === 'error' ? 'bg-red-500' : type === 'info' ? 'bg-blue-500' : 'bg-green-500'} text-white px-4 py-3 rounded-lg shadow-lg text-sm`;
+            toast.textContent = message;
+            document.getElementById('toast-container').appendChild(toast);
+            setTimeout(() => { toast.remove(); }, 3000);
+        }
+
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+        loadVacancies();
+        loadFilterPrompt();
+        setInterval(loadVacancies, 60000);
+    </script>
+
+    {% include 'partials/chat_widget.html' %}
+</body>
+</html>

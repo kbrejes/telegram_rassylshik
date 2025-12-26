@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }" x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidate Profile - Job Notification Bot</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: { DEFAULT: 'hsl(240 5.9% 10%)', foreground: 'hsl(240 4.8% 95.9%)', accent: 'hsl(240 3.7% 15.9%)', border: 'hsl(240 3.7% 15.9%)' },
+                        accent: '#8b5cf6',
+                        dark: { 950: '#09090b', 900: '#0c0c0f', 850: '#111114', 800: '#18181b', 700: '#27272a', 600: '#3f3f46' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+            .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+            .scrollbar-thin::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        }
+    </style>
+    <script>if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark');</script>
+</head>
+<body class="h-full bg-gray-50 dark:bg-dark-950 transition-colors duration-200">
+    <div class="flex h-full">
+        {% set active_page = 'candidate' %}
+        {% include 'partials/sidebar_new.html' %}
+
+        <main class="flex-1 flex flex-col min-h-screen lg:ml-0">
+            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 lg:hidden">
+                <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700">
+                    <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+                <h1 class="text-lg font-semibold text-gray-900 dark:text-white">Candidate</h1>
+            </header>
+
+            <div class="flex-1 p-4 lg:p-8">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white hidden lg:block">Candidate Profile</h1>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Your application profile for job bots</p>
+                    </div>
+                    <span id="profile-status" class="px-3 py-1.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">Loading...</span>
+                </div>
+
+                <form id="profile-form" class="space-y-6">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Basic Info -->
+                        <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 pb-3 border-b border-gray-100 dark:border-dark-700">Basic Info</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Full Name *</label>
+                                    <input type="text" id="name" name="name" required class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="John Doe">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Phone</label>
+                                    <input type="tel" id="phone" name="phone" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="+7 999 123 4567">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
+                                    <input type="email" id="email" name="email" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="john@example.com">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Location</label>
+                                    <input type="text" id="location" name="location" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="Moscow, Russia">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Professional Info -->
+                        <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 pb-3 border-b border-gray-100 dark:border-dark-700">Professional Info</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Desired Position</label>
+                                    <input type="text" id="position" name="position" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="Marketing Manager">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Experience (years)</label>
+                                    <input type="number" id="experience_years" name="experience_years" min="0" max="50" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" value="0">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Skills</label>
+                                    <input type="text" id="skills" name="skills" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="Python, Marketing, SQL">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Salary Expectation</label>
+                                    <input type="text" id="salary_expectation" name="salary_expectation" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="150000-200000 RUB">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Work Format</label>
+                                    <select id="work_format" name="work_format" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent">
+                                        <option value="">Not specified</option>
+                                        <option value="remote">Remote</option>
+                                        <option value="office">Office</option>
+                                        <option value="hybrid">Hybrid</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Links -->
+                        <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 pb-3 border-b border-gray-100 dark:border-dark-700">Links</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Portfolio URL</label>
+                                    <input type="url" id="portfolio_url" name="portfolio_url" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="https://portfolio.example.com">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">LinkedIn URL</label>
+                                    <input type="url" id="linkedin_url" name="linkedin_url" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="https://linkedin.com/in/johndoe">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">GitHub URL</label>
+                                    <input type="url" id="github_url" name="github_url" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent" placeholder="https://github.com/johndoe">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- About -->
+                        <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 pb-3 border-b border-gray-100 dark:border-dark-700">About</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Short Bio</label>
+                                    <textarea id="about" name="about" rows="3" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent resize-y" placeholder="Brief introduction..."></textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Resume (text)</label>
+                                    <textarea id="resume_text" name="resume_text" rows="5" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 dark:focus:ring-accent resize-y" placeholder="Paste resume text..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="px-6 py-2.5 text-sm font-medium text-white bg-violet-600 dark:bg-accent rounded-lg hover:bg-violet-700 dark:hover:bg-violet-500 transition-all">
+                        Save Profile
+                    </button>
+                </form>
+
+                <!-- Bot Interactions -->
+                <div class="mt-8 bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700" x-data="{ open: true }">
+                    <button @click="open = !open" class="w-full flex items-center justify-between p-5 text-left">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Bot Interactions</h3>
+                        <svg class="w-5 h-5 text-gray-400 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div x-show="open" x-collapse class="px-5 pb-5">
+                        <div class="grid grid-cols-4 gap-4 mb-4">
+                            <div class="text-center p-3 bg-gray-50 dark:bg-dark-800 rounded-lg">
+                                <div class="text-xl font-bold text-gray-900 dark:text-white" id="stat-total">-</div>
+                                <div class="text-xs text-gray-500">Total</div>
+                            </div>
+                            <div class="text-center p-3 bg-gray-50 dark:bg-dark-800 rounded-lg">
+                                <div class="text-xl font-bold text-green-600 dark:text-green-400" id="stat-success">-</div>
+                                <div class="text-xs text-gray-500">Success</div>
+                            </div>
+                            <div class="text-center p-3 bg-gray-50 dark:bg-dark-800 rounded-lg">
+                                <div class="text-xl font-bold text-red-600 dark:text-red-400" id="stat-failed">-</div>
+                                <div class="text-xs text-gray-500">Failed</div>
+                            </div>
+                            <div class="text-center p-3 bg-gray-50 dark:bg-dark-800 rounded-lg">
+                                <div class="text-xl font-bold text-blue-600 dark:text-blue-400" id="stat-progress">-</div>
+                                <div class="text-xs text-gray-500">In Progress</div>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-dark-800">
+                                    <tr><th class="px-4 py-2 text-left">Bot</th><th class="px-4 py-2 text-left">Status</th><th class="px-4 py-2 text-left">Messages</th><th class="px-4 py-2 text-left">Started</th><th class="px-4 py-2 text-left">Result</th></tr>
+                                </thead>
+                                <tbody id="interactions-body" class="divide-y divide-gray-100 dark:divide-dark-700">
+                                    <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            document.getElementById('sidebar-overlay').classList.toggle('hidden');
+        }
+
+        async function loadProfile() {
+            try {
+                const response = await fetch('/api/candidate/profile');
+                const data = await response.json();
+                if (data.success) {
+                    const p = data.profile;
+                    document.getElementById('name').value = p.name || '';
+                    document.getElementById('phone').value = p.phone || '';
+                    document.getElementById('email').value = p.email || '';
+                    document.getElementById('location').value = p.location || '';
+                    document.getElementById('position').value = p.position || '';
+                    document.getElementById('experience_years').value = p.experience_years || 0;
+                    document.getElementById('skills').value = p.skills || '';
+                    document.getElementById('salary_expectation').value = p.salary_expectation || '';
+                    document.getElementById('work_format').value = p.work_format || '';
+                    document.getElementById('portfolio_url').value = p.portfolio_url || '';
+                    document.getElementById('linkedin_url').value = p.linkedin_url || '';
+                    document.getElementById('github_url').value = p.github_url || '';
+                    document.getElementById('about').value = p.about || '';
+                    document.getElementById('resume_text').value = p.resume_text || '';
+                    updateProfileStatus(data.is_complete);
+                }
+            } catch (e) { console.error('Error loading profile:', e); }
+        }
+
+        function updateProfileStatus(isComplete) {
+            const badge = document.getElementById('profile-status');
+            if (isComplete) {
+                badge.className = 'px-3 py-1.5 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+                badge.textContent = 'Profile Complete';
+            } else {
+                badge.className = 'px-3 py-1.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400';
+                badge.textContent = 'Profile Incomplete';
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/candidate/bot-interactions/stats');
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('stat-total').textContent = data.stats.total || 0;
+                    document.getElementById('stat-success').textContent = data.stats.success || 0;
+                    document.getElementById('stat-failed').textContent = data.stats.failed || 0;
+                    document.getElementById('stat-progress').textContent = data.stats.in_progress || 0;
+                }
+            } catch (e) { console.error('Error loading stats:', e); }
+        }
+
+        async function loadInteractions() {
+            try {
+                const response = await fetch('/api/candidate/bot-interactions');
+                const data = await response.json();
+                const tbody = document.getElementById('interactions-body');
+                if (data.success && data.interactions.length > 0) {
+                    tbody.innerHTML = data.interactions.map(i => {
+                        const statusColors = { success: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400', failed: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', in_progress: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400', timeout: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' };
+                        return `<tr class="hover:bg-gray-50 dark:hover:bg-dark-800"><td class="px-4 py-3 text-gray-900 dark:text-white">@${i.bot_username}</td><td class="px-4 py-3"><span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusColors[i.status] || 'bg-gray-100 dark:bg-dark-700'}">${i.status}</span></td><td class="px-4 py-3 text-gray-500">${i.messages_sent || 0}</td><td class="px-4 py-3 text-gray-500">${i.started_at ? new Date(i.started_at).toLocaleString() : '-'}</td><td class="px-4 py-3 text-gray-500 text-xs max-w-[150px] truncate">${i.success_message ? i.success_message.substring(0, 50) + '...' : (i.error_reason || '-')}</td></tr>`;
+                    }).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No bot interactions yet</td></tr>';
+                }
+            } catch (e) { console.error('Error loading interactions:', e); }
+        }
+
+        document.getElementById('profile-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = {
+                name: document.getElementById('name').value,
+                phone: document.getElementById('phone').value,
+                email: document.getElementById('email').value,
+                location: document.getElementById('location').value,
+                position: document.getElementById('position').value,
+                experience_years: parseInt(document.getElementById('experience_years').value) || 0,
+                skills: document.getElementById('skills').value,
+                salary_expectation: document.getElementById('salary_expectation').value,
+                work_format: document.getElementById('work_format').value,
+                portfolio_url: document.getElementById('portfolio_url').value,
+                linkedin_url: document.getElementById('linkedin_url').value,
+                github_url: document.getElementById('github_url').value,
+                about: document.getElementById('about').value,
+                resume_text: document.getElementById('resume_text').value,
+            };
+            try {
+                const response = await fetch('/api/candidate/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
+                const data = await response.json();
+                if (data.success) { updateProfileStatus(data.is_complete); showToast('Profile saved!', 'success'); }
+                else showToast('Error: ' + data.error, 'error');
+            } catch (e) { showToast('Error saving profile', 'error'); }
+        });
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `${type === 'error' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-3 rounded-lg shadow-lg text-sm`;
+            toast.textContent = message;
+            document.getElementById('toast-container').appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        loadProfile();
+        loadStats();
+        loadInteractions();
+    </script>
+
+    {% include 'partials/chat_widget.html' %}
+</body>
+</html>
