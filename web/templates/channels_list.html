@@ -255,29 +255,26 @@
             color: #c62828;
         }
 
+        .status-cell {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+        }
+
         .msg-led {
-            display: inline-block;
-            width: 6px !important;
-            height: 6px !important;
-            min-width: 6px;
-            max-width: 6px;
-            min-height: 6px;
-            max-height: 6px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            margin-left: 4px;
-            vertical-align: middle;
             flex-shrink: 0;
-            font-size: 0;
-            line-height: 0;
-            padding: 0;
         }
 
         .msg-led.has-messages {
-            background: #2196f3;
+            background-color: #2196f3;
         }
 
         .msg-led.no-messages {
-            background: #ccc;
+            background-color: #ccc;
         }
 
         .vacancy-mini-table td:nth-child(2) {
@@ -883,7 +880,7 @@
                         html += `
                             <tr onclick="showVacancyDetails(${idx})">
                                 <td title="${source}">${source}</td>
-                                <td><span class="status-badge ${status}">${statusLabel}</span><span class="msg-led ${ledClass}"></span></td>
+                                <td><div class="status-cell"><span class="status-badge ${status}">${statusLabel}</span><div class="msg-led ${ledClass}"></div></div></td>
                                 <td>${time}</td>
                             </tr>
                         `;
