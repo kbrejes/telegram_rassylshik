@@ -83,6 +83,60 @@
             font-size: 0.9rem;
         }
 
+        /* Toggle switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .3s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #4caf50;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .channel-card.disabled {
+            opacity: 0.6;
+        }
+
+        .channel-card.disabled h3 {
+            color: #999;
+        }
+
         .bot-status-bar {
             display: flex;
             align-items: center;
@@ -154,10 +208,14 @@
             {% if channels %}
                 <div class="channels-list">
                     {% for channel in channels %}
-                    <div class="channel-card" data-channel-id="{{ channel.id }}">
+                    <div class="channel-card{% if not channel.enabled %} disabled{% endif %}" data-channel-id="{{ channel.id }}">
                         <div class="channel-card-header">
                             <h3>{{ channel.name }}</h3>
                             <div class="channel-card-actions">
+                                <label class="toggle-switch" title="{% if channel.enabled %}Enabled{% else %}Disabled{% endif %}">
+                                    <input type="checkbox" {% if channel.enabled %}checked{% endif %} onchange="toggleChannel('{{ channel.id }}', this.checked)">
+                                    <span class="toggle-slider"></span>
+                                </label>
                                 <a href="/channel/{{ channel.id }}" class="button button-secondary button-small">Edit</a>
                                 <button onclick="deleteChannel('{{ channel.id }}')" class="button button-danger button-small">Delete</button>
                             </div>
@@ -244,6 +302,42 @@
                 }
             } catch (error) {
                 console.error('Error loading status:', error);
+            }
+        }
+
+        // Toggle channel enabled/disabled
+        async function toggleChannel(channelId, enabled) {
+            try {
+                const response = await fetch(`/api/channels/${channelId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: enabled })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const card = document.querySelector(`.channel-card[data-channel-id="${channelId}"]`);
+                    const toggle = card.querySelector('.toggle-switch');
+                    if (enabled) {
+                        card.classList.remove('disabled');
+                        toggle.title = 'Enabled';
+                    } else {
+                        card.classList.add('disabled');
+                        toggle.title = 'Disabled';
+                    }
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to update channel'));
+                    // Revert toggle state
+                    const checkbox = document.querySelector(`.channel-card[data-channel-id="${channelId}"] input[type="checkbox"]`);
+                    checkbox.checked = !enabled;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error updating channel');
+                // Revert toggle state
+                const checkbox = document.querySelector(`.channel-card[data-channel-id="${channelId}"] input[type="checkbox"]`);
+                checkbox.checked = !enabled;
             }
         }
 
