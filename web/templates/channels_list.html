@@ -516,7 +516,7 @@
         // Load vacancy peek data
         async function loadVacancyPeek() {
             try {
-                const response = await fetch('/api/vacancies/log?limit=5');
+                const response = await fetch('/api/vacancies/log?limit=50');
                 const data = await response.json();
 
                 if (data.success) {
