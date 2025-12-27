@@ -1,52 +1,52 @@
 <!-- Sidebar -->
-<aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-sidebar transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-auto -translate-x-full">
+<aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-sidebar transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-auto -translate-x-full">
     <div class="flex flex-col h-full">
         <!-- Logo -->
-        <div class="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
+        <div class="flex items-center gap-3 px-6 py-5 border-b border-gray-200 dark:border-sidebar-border">
             <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600">
                 <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                 </svg>
             </div>
             <div>
-                <h1 class="text-sm font-semibold text-sidebar-foreground">Job Notification</h1>
+                <h1 class="text-sm font-semibold text-gray-900 dark:text-sidebar-foreground">Job Notification</h1>
                 <p class="text-xs text-gray-500">Bot Dashboard</p>
             </div>
         </div>
 
         <!-- Navigation -->
         <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
-            <a href="/" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'channels' %}bg-sidebar-accent text-sidebar-foreground{% else %}text-gray-400 hover:bg-sidebar-accent hover:text-sidebar-foreground{% endif %} transition-colors">
+            <a href="/" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'channels' %}bg-gray-100 dark:bg-sidebar-accent text-gray-900 dark:text-sidebar-foreground{% else %}text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-sidebar-accent hover:text-gray-900 dark:hover:text-sidebar-foreground{% endif %} transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                 </svg>
                 Channels
             </a>
-            <a href="/agents" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'agents' %}bg-sidebar-accent text-sidebar-foreground{% else %}text-gray-400 hover:bg-sidebar-accent hover:text-sidebar-foreground{% endif %} transition-colors">
+            <a href="/agents" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'agents' %}bg-gray-100 dark:bg-sidebar-accent text-gray-900 dark:text-sidebar-foreground{% else %}text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-sidebar-accent hover:text-gray-900 dark:hover:text-sidebar-foreground{% endif %} transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                 </svg>
                 Agents
             </a>
-            <a href="/vacancy-log" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'vacancy-log' %}bg-sidebar-accent text-sidebar-foreground{% else %}text-gray-400 hover:bg-sidebar-accent hover:text-sidebar-foreground{% endif %} transition-colors">
+            <a href="/vacancy-log" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'vacancy-log' %}bg-gray-100 dark:bg-sidebar-accent text-gray-900 dark:text-sidebar-foreground{% else %}text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-sidebar-accent hover:text-gray-900 dark:hover:text-sidebar-foreground{% endif %} transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
                 </svg>
                 Vacancy Log
             </a>
-            <a href="/candidate" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'candidate' %}bg-sidebar-accent text-sidebar-foreground{% else %}text-gray-400 hover:bg-sidebar-accent hover:text-sidebar-foreground{% endif %} transition-colors">
+            <a href="/candidate" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'candidate' %}bg-gray-100 dark:bg-sidebar-accent text-gray-900 dark:text-sidebar-foreground{% else %}text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-sidebar-accent hover:text-gray-900 dark:hover:text-sidebar-foreground{% endif %} transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                 </svg>
                 Candidate
             </a>
-            <a href="/ai-stats" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'ai-stats' %}bg-sidebar-accent text-sidebar-foreground{% else %}text-gray-400 hover:bg-sidebar-accent hover:text-sidebar-foreground{% endif %} transition-colors">
+            <a href="/ai-stats" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'ai-stats' %}bg-gray-100 dark:bg-sidebar-accent text-gray-900 dark:text-sidebar-foreground{% else %}text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-sidebar-accent hover:text-gray-900 dark:hover:text-sidebar-foreground{% endif %} transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                 </svg>
                 AI Stats
             </a>
-            <a href="/auth" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'auth' %}bg-sidebar-accent text-sidebar-foreground{% else %}text-gray-400 hover:bg-sidebar-accent hover:text-sidebar-foreground{% endif %} transition-colors">
+            <a href="/auth" class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg {% if active_page == 'auth' %}bg-gray-100 dark:bg-sidebar-accent text-gray-900 dark:text-sidebar-foreground{% else %}text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-sidebar-accent hover:text-gray-900 dark:hover:text-sidebar-foreground{% endif %} transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
                 </svg>
@@ -55,21 +55,21 @@
         </nav>
 
         <!-- Theme Toggle & Bot Status -->
-        <div class="px-3 py-4 border-t border-sidebar-border space-y-3">
-            <button @click="darkMode = !darkMode" class="flex items-center gap-2 w-full px-3 py-2 rounded-lg hover:bg-sidebar-accent transition-colors group">
+        <div class="px-3 py-4 border-t border-gray-200 dark:border-sidebar-border space-y-3">
+            <button @click="darkMode = !darkMode" class="flex items-center gap-2 w-full px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-sidebar-accent transition-colors group">
                 <svg x-show="darkMode" class="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/>
                 </svg>
                 <svg x-show="!darkMode" class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
                 </svg>
-                <span class="text-sm text-gray-400 group-hover:text-sidebar-foreground" x-text="darkMode ? 'Light mode' : 'Dark mode'"></span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-sidebar-foreground" x-text="darkMode ? 'Light mode' : 'Dark mode'"></span>
             </button>
 
-            <div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-sidebar-accent">
+            <div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-100 dark:bg-sidebar-accent">
                 <span id="sidebar-bot-dot" class="w-2.5 h-2.5 rounded-full bg-gray-500"></span>
                 <div class="flex-1 min-w-0">
-                    <p id="sidebar-bot-name" class="text-sm font-medium text-sidebar-foreground truncate">Bot</p>
+                    <p id="sidebar-bot-name" class="text-sm font-medium text-gray-900 dark:text-sidebar-foreground truncate">Bot</p>
                     <p id="sidebar-bot-info" class="text-xs text-gray-500 truncate">Checking...</p>
                 </div>
             </div>
