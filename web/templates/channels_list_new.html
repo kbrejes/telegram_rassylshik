@@ -482,7 +482,7 @@
 
                     sorted.slice(0, 50).forEach((v, idx) => {
                         const statusClass = v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
-                        const statusLabel = v.is_relevant ? 'Passed' : 'Filtered';
+                        const statusLabel = v.is_relevant ? 'Passed' : getFilteredLabel(v.ai_reason);
                         const time = formatTime(v.processed_at);
                         const source = v.chat_title || 'Unknown';
                         const ledClass = v.has_messages ? 'bg-cyan-500' : 'bg-gray-300 dark:bg-dark-600';
