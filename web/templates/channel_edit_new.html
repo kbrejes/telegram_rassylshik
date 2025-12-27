@@ -454,12 +454,21 @@
             }
         }
 
-        // Source lists
+        // Source lists (with caching)
         async function loadSourceLists() {
+            // Show cached data immediately
+            const cached = AppCache.get('source_lists');
+            if (cached && cached.success) {
+                savedSourceLists = cached.lists || [];
+                renderSourceLists();
+            }
+
+            // Fetch fresh data
             try {
                 const response = await fetch('/api/source-lists');
                 const data = await response.json();
                 if (data.success) {
+                    AppCache.set('source_lists', data, 60000); // 1 min cache
                     savedSourceLists = data.lists || [];
                     renderSourceLists();
                 }
@@ -545,8 +554,20 @@
             }
         }
 
-        // Agents
+        // Agents (with caching)
         async function loadAgents() {
+            // Show cached data immediately
+            const cachedAgents = AppCache.get('all_agents');
+            const cachedLinked = AppCache.get(`linked_agents_${channelId}`);
+            if (cachedAgents && cachedAgents.success) {
+                allAgents = cachedAgents.agents || [];
+                if (cachedLinked && cachedLinked.success) {
+                    linkedAgentNames = (cachedLinked.agents || []).map(a => a.session_name);
+                }
+                renderAgents();
+            }
+
+            // Fetch fresh data
             try {
                 const [agentsResponse, linkedResponse] = await Promise.all([
                     fetch('/api/agents'),
@@ -555,8 +576,14 @@
                 const agentsData = await agentsResponse.json();
                 const linkedData = await linkedResponse.json();
 
-                if (agentsData.success) allAgents = agentsData.agents || [];
-                if (linkedData.success) linkedAgentNames = (linkedData.agents || []).map(a => a.session_name);
+                if (agentsData.success) {
+                    AppCache.set('all_agents', agentsData, AppCache.TTL.agents);
+                    allAgents = agentsData.agents || [];
+                }
+                if (linkedData.success) {
+                    AppCache.set(`linked_agents_${channelId}`, linkedData, AppCache.TTL.agents);
+                    linkedAgentNames = (linkedData.agents || []).map(a => a.session_name);
+                }
 
                 renderAgents();
             } catch (e) {
