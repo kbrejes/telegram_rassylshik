@@ -534,10 +534,14 @@
             return 'Filtered';
         }
 
+        let currentVacancyIdx = null;
+        let currentContactId = null;
+
         async function showVacancyDetails(idx) {
             const v = peekVacancies[idx];
             if (!v) return;
 
+            currentVacancyIdx = idx;
             const modal = document.getElementById('modal-overlay');
             const body = document.getElementById('modal-body');
             const statusBadge = document.getElementById('modal-status-badge');
@@ -550,40 +554,71 @@
                 statusBadge.innerHTML = `<span class="px-3 py-1.5 text-sm font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">${label}</span>`;
             }
 
+            // Build contact circles from peek vacancies (only those with messages)
+            const contactCircles = peekVacancies
+                .filter(pv => pv.has_messages || pv.contact_name || pv.contact_username)
+                .slice(0, 10)
+                .map((pv, i) => {
+                    const isActive = peekVacancies.indexOf(pv) === idx;
+                    const initials = pv.contact_name ? pv.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : (pv.contact_username ? pv.contact_username[0].toUpperCase() : '?');
+                    const activeClass = isActive ? 'ring-2 ring-accent ring-offset-2 dark:ring-offset-dark-800' : 'opacity-60 hover:opacity-100';
+                    return `<button onclick="showVacancyDetails(${peekVacancies.indexOf(pv)})" class="w-10 h-10 rounded-full bg-gray-200 dark:bg-dark-600 flex items-center justify-center text-xs font-medium text-gray-700 dark:text-gray-300 transition-all ${activeClass}" title="${escapeHtml(pv.contact_name || pv.contact_username || 'Contact')}">${initials}</button>`;
+                }).join('');
+
             body.innerHTML = `
-                <div class="flex flex-col h-full gap-4">
-                    <!-- AI Reason - inline with icon -->
-                    <div class="flex items-start gap-2 text-sm text-violet-700 dark:text-violet-300">
-                        <svg class="w-4 h-4 flex-shrink-0 mt-0.5 text-violet-500 dark:text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-                        </svg>
-                        <span>${escapeHtml(v.ai_reason || 'No analysis available')}</span>
-                    </div>
+                <div class="flex h-full gap-4">
+                    <!-- Contact circles sidebar -->
+                    ${contactCircles ? `<div class="flex flex-col gap-2 flex-shrink-0">${contactCircles}</div>` : ''}
 
-                    <!-- CRM Conversation -->
-                    <div id="message-log" class="flex-1 min-h-0">
-                        <div class="flex items-center justify-center py-6 text-sm text-gray-400 dark:text-gray-500">
-                            <svg class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <!-- Main content -->
+                    <div class="flex flex-col flex-1 min-w-0 gap-3">
+                        <!-- AI Reason - inline with icon -->
+                        <div class="flex items-start gap-2 text-sm text-violet-700 dark:text-violet-300 flex-shrink-0">
+                            <svg class="w-4 h-4 flex-shrink-0 mt-0.5 text-violet-500 dark:text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
                             </svg>
-                            Loading conversation...
+                            <span>${escapeHtml(v.ai_reason || 'No analysis available')}</span>
                         </div>
-                    </div>
 
-                    <!-- Vacancy Text (Collapsible) - at bottom -->
-                    <details class="group rounded-lg  overflow-hidden flex-shrink-0">
-                        <summary class="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-dark-800 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors">
-                            <div class="flex items-center gap-2">
-                                <svg class="w-3.5 h-3.5 text-gray-400 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        <!-- CRM Conversation - fills space -->
+                        <div id="message-log" class="flex-1 min-h-0 overflow-y-auto">
+                            <div class="flex items-center justify-center py-6 text-sm text-gray-400 dark:text-gray-500">
+                                <svg class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
-                                <span class="text-xs font-medium text-gray-600 dark:text-gray-400">Source text</span>
+                                Loading conversation...
                             </div>
-                            <span class="text-xs text-gray-400 dark:text-gray-500">${escapeHtml(v.chat_title || 'Unknown')}</span>
-                        </summary>
-                        <div class="p-3 bg-white dark:bg-dark-800 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto">${escapeHtml(v.text_full || v.text_preview || 'No text available')}</div>
-                    </details>
+                        </div>
+
+                        <!-- Message input -->
+                        <div id="chat-input-container" class="hidden flex-shrink-0">
+                            <div class="flex gap-2">
+                                <input type="text" id="chat-message-input" placeholder="Type a message..."
+                                    class="flex-1 px-4 py-2 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none text-sm"
+                                    onkeydown="if(event.key === 'Enter') sendChatMessage()">
+                                <button onclick="sendChatMessage()" class="px-4 py-2 rounded-lg bg-accent text-white hover:bg-violet-600 transition flex-shrink-0">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Vacancy Text (Collapsible) - at bottom -->
+                        <details class="group rounded-lg overflow-hidden flex-shrink-0">
+                            <summary class="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-dark-800 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors">
+                                <div class="flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5 text-gray-400 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                    <span class="text-xs font-medium text-gray-600 dark:text-gray-400">Source text</span>
+                                </div>
+                                <span class="text-xs text-gray-400 dark:text-gray-500">${escapeHtml(v.chat_title || 'Unknown')}</span>
+                            </summary>
+                            <div class="p-3 bg-white dark:bg-dark-800 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto">${escapeHtml(v.text_full || v.text_preview || 'No text available')}</div>
+                        </details>
+                    </div>
                 </div>
             `;
 
@@ -595,62 +630,104 @@
             });
         }
 
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-message-input');
+            const message = input?.value?.trim();
+            if (!message || !currentContactId) return;
+
+            input.value = '';
+            input.disabled = true;
+
+            try {
+                const response = await fetch('/api/vacancies/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contact_id: currentContactId,
+                        message: message
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    // Reload conversation
+                    const v = peekVacancies[currentVacancyIdx];
+                    if (v) {
+                        loadCachedVacancyMessages(v.id, renderConversation, true); // force refresh
+                    }
+                } else {
+                    alert('Failed to send message: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error sending message: ' + e.message);
+            } finally {
+                input.disabled = false;
+                input.focus();
+            }
+        }
+
         function renderConversation(data) {
             const logContainer = document.getElementById('message-log');
+            const chatInput = document.getElementById('chat-input-container');
             if (!logContainer) return;
 
             if (data && data.success && data.conversations && data.conversations.length > 0) {
                 let html = '';
+                const conv = data.conversations[0]; // Use first conversation
+                currentContactId = conv.contact_id;
 
-                data.conversations.forEach(conv => {
-                    const phaseClass = conv.call_scheduled ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                                      conv.call_offered ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
+                const phaseClass = conv.call_scheduled ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                                  conv.call_offered ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
 
-                    html += `
-                        <div class="rounded-xl  overflow-hidden">
-                            <div class="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-dark-800">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-dark-600 flex items-center justify-center">
-                                        <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                                        </svg>
-                                    </div>
-                                    <span class="text-sm font-medium text-gray-900 dark:text-white">${escapeHtml(conv.contact_name || 'Contact')}</span>
+                html += `
+                    <div class="flex flex-col h-full">
+                        <div class="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-dark-800 rounded-t-xl flex-shrink-0">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-dark-600 flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                    </svg>
                                 </div>
-                                <span class="px-2.5 py-1 text-xs font-medium rounded-full ${phaseClass}">${conv.current_phase}</span>
+                                <span class="text-sm font-medium text-gray-900 dark:text-white">${escapeHtml(conv.contact_name || 'Contact')}</span>
                             </div>
-                    `;
+                            <span class="px-2.5 py-1 text-xs font-medium rounded-full ${phaseClass}">${conv.current_phase}</span>
+                        </div>
+                `;
 
-                    if (conv.messages && conv.messages.length > 0) {
-                        html += '<div class="p-4 space-y-3 max-h-80 overflow-y-auto">';
-                        conv.messages.forEach(msg => {
-                            if (msg.role === 'system') return;
-                            const isBot = msg.role === 'assistant';
-                            const msgClass = isBot
-                                ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-800 dark:text-violet-300 ml-auto rounded-br-sm'
-                                : 'bg-gray-100 dark:bg-dark-700 text-gray-800 dark:text-gray-200 mr-auto rounded-bl-sm';
-                            html += `
-                                <div class="max-w-[80%] p-3 rounded-2xl text-sm ${msgClass}">
-                                    <div class="whitespace-pre-wrap">${escapeHtml(msg.content || '')}</div>
-                                </div>
-                            `;
-                        });
-                        html += '</div>';
-                    } else {
+                if (conv.messages && conv.messages.length > 0) {
+                    html += '<div class="flex-1 p-4 space-y-3 overflow-y-auto">';
+                    conv.messages.forEach(msg => {
+                        if (msg.role === 'system') return;
+                        const isBot = msg.role === 'assistant';
+                        const msgClass = isBot
+                            ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-800 dark:text-violet-300 ml-auto rounded-br-sm'
+                            : 'bg-gray-100 dark:bg-dark-700 text-gray-800 dark:text-gray-200 mr-auto rounded-bl-sm';
                         html += `
-                            <div class="p-4 text-sm text-gray-500 dark:text-gray-400">
-                                ${conv.total_messages} messages • ${conv.call_scheduled ? '✅ Call scheduled' : conv.call_offered ? '📞 Call offered' : '💬 In progress'}
+                            <div class="max-w-[80%] p-3 rounded-2xl text-sm ${msgClass}">
+                                <div class="whitespace-pre-wrap">${escapeHtml(msg.content || '')}</div>
                             </div>
                         `;
-                    }
-
+                    });
                     html += '</div>';
-                });
+                } else {
+                    html += `
+                        <div class="flex-1 flex items-center justify-center p-4 text-sm text-gray-500 dark:text-gray-400">
+                            ${conv.total_messages} messages • ${conv.call_scheduled ? '✅ Call scheduled' : conv.call_offered ? '📞 Call offered' : '💬 In progress'}
+                        </div>
+                    `;
+                }
 
+                html += '</div>';
                 logContainer.innerHTML = html;
+
+                // Show chat input
+                if (chatInput) {
+                    chatInput.classList.remove('hidden');
+                }
             } else {
+                currentContactId = null;
+                if (chatInput) chatInput.classList.add('hidden');
                 logContainer.innerHTML = `
-                    <div class="flex flex-col items-center justify-center py-8 text-gray-400 dark:text-gray-500">
+                    <div class="flex flex-col items-center justify-center h-full py-8 text-gray-400 dark:text-gray-500">
                         <svg class="w-10 h-10 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                         </svg>

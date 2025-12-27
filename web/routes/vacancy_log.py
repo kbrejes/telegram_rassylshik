@@ -265,3 +265,38 @@ async def get_vacancy_messages(vacancy_id: int):
     except Exception as e:
         logger.error(f"Error getting vacancy messages: {e}")
         return {"success": False, "error": str(e)}
+
+
+class SendMessageRequest(BaseModel):
+    contact_id: str
+    message: str
+
+
+@router.post("/send-message")
+async def send_crm_message(request: SendMessageRequest):
+    """Send a message to a CRM contact via the bot."""
+    try:
+        from src.command_queue import command_queue
+
+        # Add command to queue for bot to process
+        command_id = command_queue.add_command("send_crm_message", {
+            "contact_id": request.contact_id,
+            "message": request.message
+        })
+
+        # Wait briefly for command to be processed
+        import asyncio
+        for _ in range(10):  # Wait up to 5 seconds
+            await asyncio.sleep(0.5)
+            status = command_queue.get_command_status(command_id)
+            if status and status.get("status") in ["completed", "failed"]:
+                if status.get("status") == "completed":
+                    return {"success": True}
+                else:
+                    return {"success": False, "error": status.get("error", "Unknown error")}
+
+        return {"success": False, "error": "Timeout waiting for message to be sent"}
+
+    except Exception as e:
+        logger.error(f"Error sending CRM message: {e}")
+        return {"success": False, "error": str(e)}

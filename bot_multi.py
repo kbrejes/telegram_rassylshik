@@ -423,6 +423,10 @@ class MultiChannelJobMonitorBot:
                             await self._cmd_health_check()
                             command_queue.mark_completed(cmd.id, True, "Health check completed")
 
+                        elif cmd.type == "send_crm_message":
+                            await self._cmd_send_crm_message(cmd.target)
+                            command_queue.mark_completed(cmd.id, True, "Message sent")
+
                         else:
                             command_queue.mark_completed(cmd.id, False, f"Unknown command: {cmd.type}")
 
@@ -545,6 +549,72 @@ class MultiChannelJobMonitorBot:
 
         # Agent statuses are updated by agent_pool callbacks
         logger.info("Health check completed")
+
+    async def _cmd_send_crm_message(self, target: dict):
+        """Send a message to a CRM contact from web interface"""
+        contact_id = int(target.get("contact_id"))
+        message = target.get("message", "")
+
+        if not contact_id or not message:
+            raise ValueError("contact_id and message are required")
+
+        # Find which channel has this contact
+        channel_id = self.crm.contact_to_channel.get(contact_id)
+        if not channel_id:
+            # Try to find in conversation managers
+            for ch_id, conv_manager in self.crm.conversation_managers.items():
+                if contact_id in conv_manager._topic_cache:
+                    channel_id = ch_id
+                    self.crm.contact_to_channel[contact_id] = channel_id
+                    break
+
+        if not channel_id:
+            raise ValueError(f"No channel found for contact {contact_id}")
+
+        conv_manager = self.crm.conversation_managers.get(channel_id)
+        if not conv_manager:
+            raise ValueError(f"No conversation manager for channel {channel_id}")
+
+        topic_id = conv_manager.get_topic_id(contact_id)
+        if not topic_id:
+            raise ValueError(f"No topic found for contact {contact_id}")
+
+        # Get an available agent
+        agent_pool = self.crm.agent_pools.get(channel_id)
+        if not agent_pool:
+            raise ValueError(f"No agent pool for channel {channel_id}")
+
+        agent = self.crm.topic_to_agent.get(topic_id)
+        if not agent:
+            agent = agent_pool.get_available_agent()
+
+        if not agent or not agent.client:
+            raise ValueError("No available agent to send message")
+
+        # Record in AI context
+        ai_handler = self.crm.ai_handlers.get(channel_id)
+        if ai_handler:
+            ai_handler.add_operator_message(contact_id, message)
+
+        # Send message to contact
+        sent_message = await agent.client.send_message(contact_id, message)
+        if sent_message:
+            conv_manager.mark_agent_sent_message(sent_message.id)
+
+        # Mirror to CRM topic
+        try:
+            operator_msg = f"👤 **Operator:**\n\n{message}"
+            topic_sent = await agent.client.send_message(
+                entity=conv_manager.group_id,
+                message=operator_msg,
+                reply_to=topic_id
+            )
+            if topic_sent:
+                conv_manager.save_message_to_topic(topic_sent.id, topic_id)
+        except Exception as e:
+            logger.warning(f"Failed to mirror operator message to CRM topic: {e}")
+
+        logger.info(f"Sent CRM message to contact {contact_id} from web interface")
 
     async def reload_configuration(self):
         """Перезагрузка конфигурации без перезапуска бота"""
