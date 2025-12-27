@@ -50,32 +50,12 @@
 
             <div class="flex-1 p-4 lg:p-8">
                 <!-- Page Header -->
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white hidden lg:block">Vacancy Log</h1>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">AI-processed vacancy analysis</p>
-                    </div>
-                    <button onclick="loadVacancies()" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-violet-600 dark:bg-accent rounded-lg hover:bg-violet-700 dark:hover:bg-violet-500 transition-all">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                        </svg>
-                        Refresh
-                    </button>
-                </div>
-
-                <!-- Stats Grid -->
-                <div class="grid grid-cols-3 gap-4 mb-6">
-                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
-                        <div class="text-2xl font-bold text-gray-900 dark:text-white" id="stat-total">-</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Total</div>
-                    </div>
-                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
-                        <div class="text-2xl font-bold text-green-600 dark:text-green-400" id="stat-passed">-</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Passed</div>
-                    </div>
-                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
-                        <div class="text-2xl font-bold text-red-600 dark:text-red-400" id="stat-filtered">-</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Filtered</div>
+                <div class="flex items-center justify-between gap-4 mb-6">
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-white hidden lg:block">Vacancy Log</h1>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="text-gray-500 dark:text-gray-400"><span id="stat-total" class="font-semibold text-gray-900 dark:text-white">-</span> total</span>
+                        <span class="text-gray-500 dark:text-gray-400"><span id="stat-passed" class="font-semibold text-green-600 dark:text-green-400">-</span> passed</span>
+                        <span class="text-gray-500 dark:text-gray-400"><span id="stat-filtered" class="font-semibold text-red-600 dark:text-red-400">-</span> filtered</span>
                     </div>
                 </div>
 
