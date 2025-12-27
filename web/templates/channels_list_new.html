@@ -66,6 +66,10 @@
                 @apply text-gray-400;
             }
         }
+        .preload * {
+            transition: none !important;
+            animation: none !important;
+        }
     </style>
     <script>
         // Apply theme immediately to prevent flash
@@ -74,7 +78,7 @@
         }
     </script>
 </head>
-<body class="h-full bg-gray-50 dark:bg-dark-950 transition-colors duration-200">
+<body class="h-full bg-gray-50 dark:bg-dark-950 preload">
     <div class="flex h-full">
         <!-- Sidebar -->
         <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-sidebar transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-auto -translate-x-full">
@@ -804,6 +808,11 @@
         loadVacancyPeek();
         setInterval(loadStatus, 5000);
         setInterval(loadVacancyPeek, 30000);
+
+        // Enable transitions after page load
+        requestAnimationFrame(() => {
+            document.body.classList.remove('preload');
+        });
     </script>
 
     {% include 'partials/chat_widget.html' %}
