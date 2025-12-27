@@ -58,19 +58,19 @@
         {% include 'partials/sidebar_new.html' %}
 
         <!-- Main Content -->
-        <main class="flex-1 overflow-auto">
+        <main class="flex-1 overflow-auto min-w-0">
             <!-- Top Bar -->
-            <header class="sticky top-0 z-10 flex items-center justify-between h-16 px-4 bg-white/80 dark:bg-dark-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-dark-700 lg:px-8">
-                <div class="flex items-center gap-4">
-                    <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 lg:hidden">
-                        <svg class="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <header class="sticky top-0 z-10 flex items-center justify-between h-14 sm:h-16 px-3 sm:px-4 bg-white/80 dark:bg-dark-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-dark-700 lg:px-8">
+                <div class="flex items-center gap-2 sm:gap-4 min-w-0">
+                    <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 lg:hidden flex-shrink-0">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                         </svg>
                     </button>
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Edit Channel</h2>
+                    <h2 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">Edit Channel</h2>
                 </div>
-                <a href="/" class="text-sm text-gray-600 dark:text-gray-400 hover:text-accent">
-                    &larr; Back to channels
+                <a href="/" class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-accent flex-shrink-0">
+                    &larr; Back
                 </a>
             </header>
 
@@ -247,11 +247,11 @@
                     </div>
 
                     <!-- Submit -->
-                    <div class="flex items-center gap-4">
-                        <button type="submit" class="px-6 py-3 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white font-medium hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl">
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+                        <button type="submit" class="px-6 py-3 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-white font-medium hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl text-center">
                             Save Changes
                         </button>
-                        <a href="/" class="px-6 py-3 rounded-lg border border-gray-300 dark:border-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">
+                        <a href="/" class="px-6 py-3 rounded-lg border border-gray-300 dark:border-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition text-center">
                             Cancel
                         </a>
                     </div>

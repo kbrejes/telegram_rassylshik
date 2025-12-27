@@ -164,15 +164,15 @@
         <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 lg:hidden hidden" onclick="toggleSidebar()"></div>
 
         <!-- Main Content -->
-        <main class="flex-1 flex flex-col min-h-screen lg:ml-0">
+        <main class="flex-1 flex flex-col min-h-screen min-w-0 lg:ml-0">
             <!-- Top Header (Mobile) -->
-            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 lg:hidden">
-                <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700">
+            <header class="sticky top-0 z-30 flex items-center gap-3 px-3 py-2.5 bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 lg:hidden">
+                <button onclick="toggleSidebar()" class="p-2 -ml-1 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 flex-shrink-0">
                     <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                     </svg>
                 </button>
-                <h1 class="text-lg font-semibold text-gray-900 dark:text-white">Channels</h1>
+                <h1 class="text-base font-semibold text-gray-900 dark:text-white truncate">Channels</h1>
             </header>
 
             <!-- Page Content -->
@@ -248,15 +248,15 @@
                         </div>
 
                         <!-- Vacancy Peek Section -->
-                        <div class="p-4" id="vacancy-peek-{{ channel.id }}">
-                            <div class="flex items-center justify-between mb-3">
+                        <div class="p-3 sm:p-4" id="vacancy-peek-{{ channel.id }}">
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-3">
                                 <h4 class="text-sm font-medium text-gray-700 dark:text-gray-400">Recent Vacancies</h4>
                                 <div class="flex items-center gap-2">
                                     <div class="flex rounded-lg border border-gray-200 dark:border-dark-700 overflow-hidden">
-                                        <button class="px-2.5 py-1 text-xs font-medium bg-violet-50 dark:bg-dark-700 text-violet-700 dark:text-white border-r border-gray-200 dark:border-dark-600 sort-btn active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
-                                        <button class="px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-dark-700 sort-btn" onclick="sortVacancies('messages')" id="sort-messages">Has msgs</button>
+                                        <button class="px-2 sm:px-2.5 py-1 text-xs font-medium bg-violet-50 dark:bg-dark-700 text-violet-700 dark:text-white border-r border-gray-200 dark:border-dark-600 sort-btn active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
+                                        <button class="px-2 sm:px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-dark-700 sort-btn" onclick="sortVacancies('messages')" id="sort-messages">Has msgs</button>
                                     </div>
-                                    <a href="/vacancy-log" class="text-xs text-violet-600 dark:text-accent hover:text-violet-800 dark:hover:text-violet-400 font-medium">View all →</a>
+                                    <a href="/vacancy-log" class="text-xs text-violet-600 dark:text-accent hover:text-violet-800 dark:hover:text-violet-400 font-medium whitespace-nowrap">View all →</a>
                                 </div>
                             </div>
 
@@ -268,7 +268,7 @@
                             </div>
 
                             <!-- Vacancy Table -->
-                            <div class="vacancy-peek-content max-h-40 overflow-y-auto rounded-lg border border-gray-200 dark:border-dark-600" id="vacancy-content-{{ channel.id }}">
+                            <div class="vacancy-peek-content max-h-40 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600" id="vacancy-content-{{ channel.id }}">
                                 <div class="flex items-center justify-center py-6 text-sm text-gray-400">Loading...</div>
                             </div>
                         </div>
