@@ -208,7 +208,6 @@
                                 </div>
                                 <div>
                                     <h3 class="font-semibold text-gray-900 dark:text-white">{{ channel.name }}</h3>
-                                    <p class="text-xs text-gray-500 dark:text-gray-500">ID: {{ channel.id }}</p>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">
@@ -235,7 +234,6 @@
                         <!-- Agents Row -->
                         <div class="px-4 py-3 bg-gray-50 dark:bg-dark-850 border-b border-gray-100 dark:border-dark-700">
                             <div class="flex items-center gap-2 flex-wrap" id="agents-{{ channel.id }}">
-                                <span class="text-xs font-medium text-gray-500 dark:text-gray-500 mr-1">Agents:</span>
                                 {% if channel.agents %}
                                     {% for agent in channel.agents %}
                                     <div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-dark-700 rounded-full border border-gray-200 dark:border-dark-600 text-xs" data-session="{{ agent.session_name }}">
@@ -251,8 +249,8 @@
 
                         <!-- Vacancy Peek Section -->
                         <div class="p-3 sm:p-4" id="vacancy-peek-{{ channel.id }}">
-                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-3">
-                                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-400">Recent Vacancies</h4>
+                            <div class="flex items-center justify-between gap-2 mb-3">
+                                <div></div>
                                 <div class="flex items-center gap-2">
                                     <div class="flex rounded-lg border border-gray-200 dark:border-dark-700 overflow-hidden">
                                         <button class="px-2 sm:px-2.5 py-1 text-xs font-medium bg-violet-50 dark:bg-dark-700 text-violet-700 dark:text-white border-r border-gray-200 dark:border-dark-600 sort-btn active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
@@ -260,13 +258,6 @@
                                     </div>
                                     <a href="/vacancy-log" class="text-xs text-violet-600 dark:text-accent hover:text-violet-800 dark:hover:text-violet-400 font-medium whitespace-nowrap">View all →</a>
                                 </div>
-                            </div>
-
-                            <!-- Stats Row -->
-                            <div class="flex gap-4 mb-3" id="vacancy-stats-{{ channel.id }}">
-                                <div class="text-xs text-gray-500 dark:text-gray-400">Total: <span class="font-semibold text-gray-900 dark:text-white">-</span></div>
-                                <div class="text-xs text-gray-500 dark:text-gray-400">Passed: <span class="font-semibold text-green-600 dark:text-green-400">-</span></div>
-                                <div class="text-xs text-gray-500 dark:text-gray-400">Filtered: <span class="font-semibold text-red-600 dark:text-red-400">-</span></div>
                             </div>
 
                             <!-- Vacancy Table -->
@@ -330,7 +321,6 @@
         let peekVacancies = [];
         let currentSort = 'latest';
         let allVacancies = [];
-        let vacancyStats = null;
 
         // Load status and update UI (uses cached fetch from cache.js)
         async function loadStatus() {
@@ -457,16 +447,7 @@
 
             document.querySelectorAll('[id^="vacancy-peek-"]').forEach(peek => {
                 const channelId = peek.id.replace('vacancy-peek-', '');
-                const statsContainer = document.getElementById(`vacancy-stats-${channelId}`);
                 const contentContainer = document.getElementById(`vacancy-content-${channelId}`);
-
-                if (vacancyStats) {
-                    statsContainer.innerHTML = `
-                        <div class="text-xs text-gray-500 dark:text-gray-400">Total: <span class="font-semibold text-gray-900 dark:text-white">${vacancyStats.total}</span></div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400">Passed: <span class="font-semibold text-green-600 dark:text-green-400">${vacancyStats.passed}</span></div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400">Filtered: <span class="font-semibold text-red-600 dark:text-red-400">${vacancyStats.filtered}</span></div>
-                    `;
-                }
 
                 if (sorted.length === 0) {
                     contentContainer.innerHTML = '<div class="flex items-center justify-center py-6 text-sm text-gray-400 dark:text-gray-500">No vacancies yet</div>';
