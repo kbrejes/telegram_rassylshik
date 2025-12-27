@@ -181,7 +181,7 @@ class ConversationMemory:
         persona_path: str = "personas/default.txt",
         procedural_path: str = "procedural_memory.txt",
         weaviate_host: str = "localhost",
-        weaviate_port: int = 8080,
+        weaviate_port: int = 8081,
         short_term_limit: int = 12,
         use_weaviate: bool = True,
         working_memory_dir: str = "data/working_memory",

@@ -43,7 +43,7 @@ class AIConfig:
     reply_delay_seconds: tuple = (3, 8)  # (min, max) random delay
     context_window_messages: int = 24
     weaviate_host: str = "localhost"
-    weaviate_port: int = 8080
+    weaviate_port: int = 8081  # Use 8081 since 8080 is web app
     use_weaviate: bool = True
     knowledge_files: list = field(default_factory=list)
 
@@ -71,7 +71,7 @@ class AIConfig:
             reply_delay_seconds=delay,
             context_window_messages=data.get("context_window_messages", 24),
             weaviate_host=data.get("weaviate_host", "localhost"),
-            weaviate_port=data.get("weaviate_port", 8080),
+            weaviate_port=data.get("weaviate_port", 8081),
             use_weaviate=data.get("use_weaviate", True),
             knowledge_files=data.get("knowledge_files", []),
             use_state_analyzer=data.get("use_state_analyzer", True),
