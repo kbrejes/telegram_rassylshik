@@ -1,4 +1,59 @@
 /**
+ * Add smooth animations on page load
+ */
+(function initAnimations() {
+    // Add animation styles
+    const style = document.createElement('style');
+    style.textContent = `
+        /* Page fade-in */
+        main { animation: fadeIn 0.15s ease-out; }
+
+        /* Modal animations */
+        .modal-enter { animation: modalIn 0.15s ease-out; }
+        .modal-backdrop { animation: fadeIn 0.1s ease-out; }
+
+        /* Card animations */
+        .card-glow { transition: all 0.15s ease; }
+
+        /* Smooth transitions for interactive elements */
+        button, a, input, select, textarea { transition: all 0.1s ease; }
+
+        /* Table row hover */
+        tbody tr { transition: background-color 0.1s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Grid items stagger animation */
+        .grid > * { animation: slideUp 0.15s ease-out backwards; }
+        .grid > *:nth-child(1) { animation-delay: 0ms; }
+        .grid > *:nth-child(2) { animation-delay: 30ms; }
+        .grid > *:nth-child(3) { animation-delay: 60ms; }
+        .grid > *:nth-child(4) { animation-delay: 90ms; }
+        .grid > *:nth-child(5) { animation-delay: 120ms; }
+        .grid > *:nth-child(n+6) { animation-delay: 150ms; }
+    `;
+    document.head.appendChild(style);
+})();
+
+/**
  * Simple client-side cache with TTL
  * Stores data in localStorage with expiration
  */

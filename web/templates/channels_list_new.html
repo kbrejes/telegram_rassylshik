@@ -291,9 +291,9 @@
 
     <!-- Vacancy Detail Modal -->
     <div id="modal-overlay" class="fixed inset-0 z-50 hidden" onclick="closeModal(event)">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm modal-backdrop"></div>
         <div class="flex items-stretch min-h-full p-3 sm:p-6">
-            <div class="relative bg-white dark:bg-dark-900 rounded-xl shadow-xl w-full flex flex-col overflow-hidden dark:border dark:border-dark-700" onclick="event.stopPropagation()">
+            <div id="modal-content" class="relative bg-white dark:bg-dark-900 rounded-xl shadow-xl w-full flex flex-col overflow-hidden dark:border dark:border-dark-700 modal-enter" onclick="event.stopPropagation()">
                 <div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 dark:border-dark-700 flex-shrink-0">
                     <div id="modal-status-badge"></div>
                     <button onclick="closeModal()" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg transition-colors">
