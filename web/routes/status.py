@@ -100,6 +100,10 @@ async def disconnect_agent(session_name: str):
 @router.delete("/agents/{session_name}")
 async def delete_agent(session_name: str):
     """Queue deletion of an agent (disconnect + delete session file)."""
+    # Protect the main bot session from deletion
+    if session_name == "bot_session":
+        raise HTTPException(status_code=403, detail="Cannot delete the main bot session")
+
     command_id = command_queue.add_command("delete_agent", session_name)
     return CommandResponse(
         success=True,

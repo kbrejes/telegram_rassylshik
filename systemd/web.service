@@ -1,0 +1,19 @@
+[Unit]
+Description=Telegram Bot Web Interface
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/brejestovski_kirill/telegram_rassylshik
+ExecStart=/usr/bin/python3 -m uvicorn web.app:app --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/brejestovski_kirill/telegram_rassylshik/logs/uvicorn.log
+StandardError=append:/home/brejestovski_kirill/telegram_rassylshik/logs/uvicorn.log
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

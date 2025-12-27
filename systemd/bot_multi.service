@@ -1,0 +1,19 @@
+[Unit]
+Description=Telegram Job Notification Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/brejestovski_kirill/telegram_rassylshik
+ExecStart=/usr/bin/python3 bot_multi.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/brejestovski_kirill/telegram_rassylshik/logs/bot_multi.log
+StandardError=append:/home/brejestovski_kirill/telegram_rassylshik/logs/bot_multi.log
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

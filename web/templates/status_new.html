@@ -317,6 +317,9 @@
             let html = '';
 
             for (const [sessionName, agent] of allAgents) {
+                // Skip bot_session - it's the main bot, not an agent
+                if (sessionName === 'bot_session') continue;
+
                 const status = agent.status || 'disconnected';
                 const userInfo = agent.user_info;
 
