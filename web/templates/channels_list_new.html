@@ -657,7 +657,22 @@
             if (e.key === 'Escape') closeModal();
         });
 
-        // Load on page load
+        // Show cached data immediately on page load (before async calls)
+        (function initFromCache() {
+            // Cached agent status
+            const cachedStatus = AppCache.get('status');
+            if (cachedStatus) {
+                updateAllStatus(cachedStatus);
+            }
+            // Cached vacancies
+            const cachedVacancies = AppCache.get('vacancies');
+            if (cachedVacancies && cachedVacancies.success) {
+                allVacancies = cachedVacancies.vacancies;
+                renderVacancies();
+            }
+        })();
+
+        // Load fresh data
         loadStatus();
         loadVacancyPeek();
         setInterval(loadStatus, 5000);
