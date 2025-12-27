@@ -719,11 +719,13 @@
                 html += '</div>';
                 logContainer.innerHTML = html;
 
-                // Scroll to bottom of messages
-                const messagesContainer = logContainer.querySelector('.overflow-y-auto');
-                if (messagesContainer) {
-                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                }
+                // Scroll to bottom of messages (instant, no animation)
+                requestAnimationFrame(() => {
+                    const messagesContainer = logContainer.querySelector('.overflow-y-auto');
+                    if (messagesContainer) {
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                    }
+                });
 
                 // Show chat input
                 if (chatInput) {
