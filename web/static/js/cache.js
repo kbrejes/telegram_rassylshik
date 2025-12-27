@@ -41,14 +41,14 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Grid items stagger animation */
-        .grid > * { animation: slideUp 0.15s ease-out backwards; }
-        .grid > *:nth-child(1) { animation-delay: 0ms; }
-        .grid > *:nth-child(2) { animation-delay: 30ms; }
-        .grid > *:nth-child(3) { animation-delay: 60ms; }
-        .grid > *:nth-child(4) { animation-delay: 90ms; }
-        .grid > *:nth-child(5) { animation-delay: 120ms; }
-        .grid > *:nth-child(n+6) { animation-delay: 150ms; }
+        /* Grid items stagger animation - only on initial load */
+        .grid.animate-in > * { animation: slideUp 0.15s ease-out backwards; }
+        .grid.animate-in > *:nth-child(1) { animation-delay: 0ms; }
+        .grid.animate-in > *:nth-child(2) { animation-delay: 30ms; }
+        .grid.animate-in > *:nth-child(3) { animation-delay: 60ms; }
+        .grid.animate-in > *:nth-child(4) { animation-delay: 90ms; }
+        .grid.animate-in > *:nth-child(5) { animation-delay: 120ms; }
+        .grid.animate-in > *:nth-child(n+6) { animation-delay: 150ms; }
     `;
     document.head.appendChild(style);
 })();

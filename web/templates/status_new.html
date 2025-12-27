@@ -310,6 +310,8 @@
             renderAgentsFromMap(allAgents);
         }
 
+        let hasAnimated = false;
+
         function renderAgentsFromMap(allAgents) {
             const container = document.getElementById('agents-grid');
             let html = '';
@@ -381,6 +383,13 @@
             `;
 
             container.innerHTML = html;
+
+            // Animate only on first render
+            if (!hasAnimated) {
+                hasAnimated = true;
+                container.classList.add('animate-in');
+                setTimeout(() => container.classList.remove('animate-in'), 300);
+            }
         }
 
         async function connectAgent(sessionName) {
