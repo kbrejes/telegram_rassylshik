@@ -86,9 +86,9 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
                 except Exception:
                     pass
 
-        # Get crm_topic_contacts with vacancy_id mapping
-        cursor = await conn.execute("SELECT vacancy_id, contact_id FROM crm_topic_contacts WHERE vacancy_id IS NOT NULL")
-        vacancy_to_contact = {r[0]: str(r[1]) for r in await cursor.fetchall()}
+        # Get crm_topic_contacts with vacancy_id mapping (including contact_name)
+        cursor = await conn.execute("SELECT vacancy_id, contact_id, contact_name FROM crm_topic_contacts WHERE vacancy_id IS NOT NULL")
+        vacancy_to_contact = {r[0]: {"contact_id": str(r[1]), "contact_name": r[2]} for r in await cursor.fetchall()}
 
         vacancies = []
         for r in rows:
@@ -99,7 +99,9 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
             vacancy_id = r[0]
 
             # Check if this vacancy has a linked CRM contact with active conversation
-            contact_id = vacancy_to_contact.get(vacancy_id)
+            crm_data = vacancy_to_contact.get(vacancy_id)
+            contact_id = crm_data["contact_id"] if crm_data else None
+            contact_name = crm_data["contact_name"] if crm_data else None
             has_messages = contact_id is not None and contact_id in contacts_with_convos
 
             vacancies.append({
@@ -114,6 +116,7 @@ async def get_vacancy_log(limit: int = 50, offset: int = 0, filter_status: Optio
                 "status": r[7],
                 "processed_at": r[8],
                 "contact_username": contact_username,
+                "contact_name": contact_name,
                 "has_messages": has_messages
             })
 
