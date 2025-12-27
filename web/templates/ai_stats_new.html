@@ -72,13 +72,13 @@
                     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4" id="stats-grid"></div>
 
                     <!-- Outcome Breakdown -->
-                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                    <div class="bg-white dark:bg-dark-900 rounded-xl  p-5">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4">Outcome Breakdown</h3>
                         <div class="flex flex-wrap gap-2" id="outcome-breakdown"></div>
                     </div>
 
                     <!-- Recent Outcomes -->
-                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 overflow-hidden">
+                    <div class="bg-white dark:bg-dark-900 rounded-xl  overflow-hidden">
                         <div class="px-5 py-4 border-b border-gray-100 dark:border-dark-700">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Recent Outcomes</h3>
                         </div>
@@ -86,7 +86,7 @@
                     </div>
 
                     <!-- Experiments -->
-                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 overflow-hidden">
+                    <div class="bg-white dark:bg-dark-900 rounded-xl  overflow-hidden">
                         <div class="px-5 py-4 border-b border-gray-100 dark:border-dark-700">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">A/B Experiments</h3>
                         </div>
@@ -94,7 +94,7 @@
                     </div>
 
                     <!-- Suggestions -->
-                    <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 overflow-hidden">
+                    <div class="bg-white dark:bg-dark-900 rounded-xl  overflow-hidden">
                         <div class="px-5 py-4 border-b border-gray-100 dark:border-dark-700">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Prompt Improvement Suggestions</h3>
                         </div>
@@ -131,27 +131,27 @@
             const stats = data.stats;
 
             document.getElementById('stats-grid').innerHTML = `
-                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                <div class="bg-white dark:bg-dark-900 rounded-xl  p-4 text-center">
                     <div class="text-2xl font-bold text-gray-900 dark:text-white">${stats.total_outcomes}</div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Total Outcomes</div>
                 </div>
-                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                <div class="bg-white dark:bg-dark-900 rounded-xl  p-4 text-center">
                     <div class="text-2xl font-bold text-green-600 dark:text-green-400">${stats.outcome_breakdown.call_scheduled || 0}</div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Calls Scheduled</div>
                 </div>
-                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                <div class="bg-white dark:bg-dark-900 rounded-xl  p-4 text-center">
                     <div class="text-2xl font-bold text-red-600 dark:text-red-400">${stats.outcome_breakdown.declined || 0}</div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Declined</div>
                 </div>
-                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                <div class="bg-white dark:bg-dark-900 rounded-xl  p-4 text-center">
                     <div class="text-2xl font-bold text-amber-600 dark:text-amber-400">${stats.outcome_breakdown.disengaged || 0}</div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Disengaged</div>
                 </div>
-                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                <div class="bg-white dark:bg-dark-900 rounded-xl  p-4 text-center">
                     <div class="text-2xl font-bold text-gray-900 dark:text-white">${stats.experiments_count}</div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Experiments</div>
                 </div>
-                <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 p-4 text-center">
+                <div class="bg-white dark:bg-dark-900 rounded-xl  p-4 text-center">
                     <div class="text-2xl font-bold text-gray-900 dark:text-white">${stats.suggestions_count}</div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Suggestions</div>
                 </div>
