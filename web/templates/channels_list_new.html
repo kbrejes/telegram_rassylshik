@@ -205,7 +205,7 @@
                                 </div>
                                 <div class="min-w-0">
                                     <h3 class="font-semibold text-gray-900 dark:text-white truncate">{{ channel.name }}</h3>
-                                    <div class="flex flex-col gap-1 mt-1">
+                                    <div class="flex flex-wrap gap-1 mt-1">
                                         <span id="bot-status-indicator" class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-dark-700 text-gray-500 dark:text-gray-400">
                                             <span id="bot-status-dot" class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
                                             <span id="bot-status-text">...</span>
@@ -330,9 +330,9 @@
 
             const bot = data.status?.bot;
             if (bot?.connected && bot?.authorized) {
-                dot.className = 'w-1.5 h-1.5 rounded-full bg-green-500 shadow-sm shadow-green-500/50';
-                text.textContent = 'Tracking';
-                text.parentElement.className = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-blue-500';
+                text.textContent = 'Live';
+                text.parentElement.className = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
             } else {
                 dot.className = 'w-1.5 h-1.5 rounded-full bg-red-500';
                 text.textContent = 'Offline';
