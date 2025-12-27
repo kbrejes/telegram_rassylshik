@@ -218,7 +218,7 @@
                             </div>
                             <!-- Invisible divider -->
                             <div class="flex-1"></div>
-                            <div class="flex items-center gap-2 flex-shrink-0">
+                            <div class="flex flex-wrap items-center gap-2">
                                 <!-- Toggle Switch -->
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" class="sr-only peer" {% if channel.enabled %}checked{% endif %} onchange="toggleChannel('{{ channel.id }}', this.checked)">
