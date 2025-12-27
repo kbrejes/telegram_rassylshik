@@ -8,6 +8,9 @@
         /* Page fade-in */
         main { animation: fadeIn 0.15s ease-out; }
 
+        /* Exclude chat widget from page animations */
+        #supervisor-chat-widget, #supervisor-chat-widget * { animation: none !important; }
+
         /* Modal animations */
         .modal-enter { animation: modalIn 0.15s ease-out; }
         .modal-backdrop { animation: fadeIn 0.1s ease-out; }
