@@ -205,8 +205,12 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                                     </svg>
                                 </div>
-                                <div>
+                                <div class="flex items-center gap-2">
                                     <h3 class="font-semibold text-gray-900 dark:text-white">{{ channel.name }}</h3>
+                                    <span id="bot-status-indicator" class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-dark-700 text-gray-500 dark:text-gray-400">
+                                        <span id="bot-status-dot" class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                                        <span id="bot-status-text">...</span>
+                                    </span>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">
@@ -323,7 +327,28 @@
 
         // Load status and update UI (uses cached fetch from cache.js)
         async function loadStatus() {
-            loadCachedStatus(updateAllStatus);
+            loadCachedStatus((data) => {
+                updateAllStatus(data);
+                updateBotStatusIndicator(data);
+            });
+        }
+
+        // Update bot status indicator on channel card
+        function updateBotStatusIndicator(data) {
+            const dot = document.getElementById('bot-status-dot');
+            const text = document.getElementById('bot-status-text');
+            if (!dot || !text || !data || !data.success) return;
+
+            const bot = data.status?.bot;
+            if (bot?.connected && bot?.authorized) {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-green-500 shadow-sm shadow-green-500/50';
+                text.textContent = 'Tracking';
+                text.parentElement.className = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+            } else {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-red-500';
+                text.textContent = 'Offline';
+                text.parentElement.className = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+            }
         }
 
         // Toggle channel enabled/disabled
@@ -663,6 +688,7 @@
             const cachedStatus = AppCache.get('status');
             if (cachedStatus) {
                 updateAllStatus(cachedStatus);
+                updateBotStatusIndicator(cachedStatus);
             }
             // Cached vacancies
             const cachedVacancies = AppCache.get('vacancies');
