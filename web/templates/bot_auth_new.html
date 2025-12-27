@@ -35,7 +35,7 @@
         {% set active_page = 'auth' %}
         {% include 'partials/sidebar_new.html' %}
 
-        <main class="flex-1 flex flex-col min-h-screen lg:ml-0">
+        <main class="flex-1 flex flex-col min-h-screen min-w-0 lg:ml-0 overflow-x-hidden">
             <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-800 border-b border-gray-200 dark:border-dark-700 lg:hidden">
                 <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700">
                     <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
