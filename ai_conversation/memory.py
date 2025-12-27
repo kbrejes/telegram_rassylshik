@@ -236,11 +236,15 @@ class ConversationMemory:
             import weaviate
             from weaviate.classes.config import Property, DataType
 
-            # For weaviate-client v4, use connect_to_local with port parameter
-            # The HTTP port is what we specify; gRPC uses port+1 by default
-            self.vdb_client = weaviate.connect_to_local(
-                port=port,
+            # For weaviate-client v4, use connect_to_custom for non-default ports
+            logger.info(f"[WEAVIATE] Connecting to {host}:{port}...")
+            self.vdb_client = weaviate.connect_to_custom(
+                http_host=host,
+                http_port=port,
+                http_secure=False,
+                grpc_host=host,
                 grpc_port=50051,
+                grpc_secure=False,
             )
 
             if not self.vdb_client.is_ready():
