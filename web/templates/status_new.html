@@ -307,6 +307,11 @@
                 }
             }
 
+            renderAgentsFromMap(allAgents);
+        }
+
+        function renderAgentsFromMap(allAgents) {
+            const container = document.getElementById('agents-grid');
             let html = '';
 
             for (const [sessionName, agent] of allAgents) {
@@ -632,6 +637,28 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeAddAgentModal();
         });
+
+        // Show cached agents immediately on page load (before async calls)
+        (function initFromCache() {
+            const cachedStatus = AppCache.get('status');
+            const cachedSessions = AppCache.get('sessions');
+            if (cachedStatus && cachedStatus.success && cachedStatus.status.agents) {
+                const agents = cachedStatus.status.agents;
+                const sessions = (cachedSessions && cachedSessions.success) ? cachedSessions.sessions : [];
+                // Build allAgents map synchronously
+                const allAgents = new Map();
+                for (const [name, agent] of Object.entries(agents)) {
+                    allAgents.set(name, { ...agent, registered: true });
+                }
+                for (const session of sessions) {
+                    if (!allAgents.has(session.session_name)) {
+                        allAgents.set(session.session_name, { status: 'disconnected', phone: '', user_info: session.user_info, registered: false });
+                    }
+                }
+                // Render immediately
+                renderAgentsFromMap(allAgents);
+            }
+        })();
 
         startPolling();
     </script>
