@@ -33,18 +33,8 @@ __all__ = [
 class ConfigManager:
     """Менеджер для работы с конфигурацией каналов"""
 
-    # Дефолтные LLM провайдеры
+    # Дефолтные LLM провайдеры (only cloud providers with English models)
     DEFAULT_LLM_PROVIDERS = {
-        "ollama": {
-            "base_url": "http://localhost:11434/v1",
-            "api_key": "ollama",
-            "default_model": "qwen2.5:3b"
-        },
-        "lm_studio": {
-            "base_url": "http://127.0.0.1:1234/v1",
-            "api_key": "lm-studio",
-            "default_model": "qwen2.5-vl-7b-instruct"
-        },
         "openai": {
             "base_url": "https://api.openai.com/v1",
             "api_key": "${OPENAI_API_KEY}",

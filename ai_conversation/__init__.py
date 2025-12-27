@@ -2,7 +2,7 @@
 AI Conversation Module
 
 Provides intelligent conversation capabilities using LLM with multi-level memory system.
-Supports multiple LLM backends: Ollama, LM Studio, OpenAI.
+Supports multiple LLM backends: OpenAI, Groq, Gemini, OpenRouter.
 
 Two-level phase system:
 1. StateAnalyzer - LLM-based analyzer that determines conversation phase

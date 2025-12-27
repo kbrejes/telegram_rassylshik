@@ -2,9 +2,9 @@
 Unified LLM Client
 
 Provides a single interface for multiple LLM backends:
-- Ollama (local)
-- LM Studio (local)
 - OpenAI (cloud)
+- Groq (cloud, fast inference)
+- OpenRouter (cloud, multiple models)
 
 All backends use OpenAI-compatible API, so we use the same client with different base_url.
 """
@@ -26,26 +26,6 @@ class LLMProviderConfig:
     base_url: str
     api_key: str
     default_model: str
-
-    @classmethod
-    def ollama(cls, model: str = "qwen2.5:3b") -> "LLMProviderConfig":
-        """Create Ollama provider config."""
-        return cls(
-            name="ollama",
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
-            default_model=model,
-        )
-
-    @classmethod
-    def lm_studio(cls, model: str = "qwen2.5-vl-7b-instruct") -> "LLMProviderConfig":
-        """Create LM Studio provider config."""
-        return cls(
-            name="lm_studio",
-            base_url="http://127.0.0.1:1234/v1",
-            api_key="lm-studio",
-            default_model=model,
-        )
 
     @classmethod
     def openai(cls, model: str = "gpt-4o-mini", api_key: Optional[str] = None) -> "LLMProviderConfig":
@@ -120,7 +100,7 @@ class UnifiedLLMClient:
 
     Usage:
         # Using preset
-        client = UnifiedLLMClient.from_provider("ollama")
+        client = UnifiedLLMClient.from_provider("groq")
 
         # Using custom config
         config = LLMProviderConfig(...)
@@ -136,10 +116,8 @@ class UnifiedLLMClient:
         response = await client.achat([...])
     """
 
-    # Preset providers
+    # Preset providers (cloud only, English models)
     PROVIDERS = {
-        "ollama": LLMProviderConfig.ollama,
-        "lm_studio": LLMProviderConfig.lm_studio,
         "openai": LLMProviderConfig.openai,
         "groq": LLMProviderConfig.groq,
         "together": LLMProviderConfig.together,
@@ -148,20 +126,17 @@ class UnifiedLLMClient:
     }
 
     # Fallback providers config: (provider_factory, models_to_try)
-    # Priority: big/quality models first, small models as last resort
+    # Priority: big/quality models first, smaller models as last resort
     FALLBACK_CHAIN = [
-        # Groq big models
+        # Groq big models (Llama - English)
         ("groq", [
             "llama-3.3-70b-versatile",
-            "openai/gpt-oss-120b",      # 120B open-source GPT
-            "qwen/qwen3-32b",           # 32B Qwen
         ]),
         # Google Gemini (15 RPM, 1M tok/month free)
         ("gemini", ["gemini-2.0-flash", "gemini-1.5-flash"]),
         # OpenRouter free models
         ("openrouter", [
             "google/gemini-2.0-flash-exp:free",
-            "qwen/qwen3-coder:free",
         ]),
         # Groq smaller models as last resort
         ("groq", [
@@ -216,7 +191,7 @@ class UnifiedLLMClient:
         Create client from provider name.
 
         Args:
-            provider: Provider name ("ollama", "lm_studio", "openai")
+            provider: Provider name ("openai", "groq", "gemini", "openrouter", "together")
             model: Model to use (optional)
             **kwargs: Additional arguments for UnifiedLLMClient
         """
@@ -298,9 +273,9 @@ class UnifiedLLMClient:
         Asynchronous chat completion with multi-provider fallback.
 
         Fallback order (big models first):
-        1. Groq llama-3.3-70b, llama-3.1-70b
-        2. Together AI llama-3.1-70b
-        3. OpenRouter llama-3.1-70b:free, qwen-2.5-72b:free
+        1. Groq llama-3.3-70b
+        2. Google Gemini
+        3. OpenRouter gemini-flash:free
         4. Groq llama-3.1-8b (last resort)
 
         Args:
@@ -373,7 +348,6 @@ class UnifiedLLMClient:
         Generate embedding for text.
 
         Note: Not all providers support embeddings.
-        For Ollama, use a model like "nomic-embed-text".
         For OpenAI, use "text-embedding-3-small".
 
         Args:
