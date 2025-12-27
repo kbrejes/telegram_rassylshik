@@ -36,7 +36,7 @@
         {% include 'partials/sidebar_new.html' %}
 
         <main class="flex-1 flex flex-col min-h-screen lg:ml-0">
-            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 lg:hidden">
+            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-800 border-b border-gray-200 dark:border-dark-700 lg:hidden">
                 <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700">
                     <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -57,7 +57,7 @@
                 <form id="profile-form" class="space-y-6">
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <!-- Basic Info -->
-                        <div class="bg-white dark:bg-dark-900 rounded-xl  p-5">
+                        <div class="bg-white dark:bg-dark-800 rounded-xl  p-5">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 pb-3 border-b border-gray-100 dark:border-dark-700">Basic Info</h3>
                             <div class="space-y-4">
                                 <div>
@@ -80,7 +80,7 @@
                         </div>
 
                         <!-- Professional Info -->
-                        <div class="bg-white dark:bg-dark-900 rounded-xl  p-5">
+                        <div class="bg-white dark:bg-dark-800 rounded-xl  p-5">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 pb-3 border-b border-gray-100 dark:border-dark-700">Professional Info</h3>
                             <div class="space-y-4">
                                 <div>
@@ -112,7 +112,7 @@
                         </div>
 
                         <!-- Links -->
-                        <div class="bg-white dark:bg-dark-900 rounded-xl  p-5">
+                        <div class="bg-white dark:bg-dark-800 rounded-xl  p-5">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 pb-3 border-b border-gray-100 dark:border-dark-700">Links</h3>
                             <div class="space-y-4">
                                 <div>
@@ -131,7 +131,7 @@
                         </div>
 
                         <!-- About -->
-                        <div class="bg-white dark:bg-dark-900 rounded-xl  p-5">
+                        <div class="bg-white dark:bg-dark-800 rounded-xl  p-5">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-4 pb-3 border-b border-gray-100 dark:border-dark-700">About</h3>
                             <div class="space-y-4">
                                 <div>
@@ -152,7 +152,7 @@
                 </form>
 
                 <!-- Bot Interactions -->
-                <div class="mt-8 bg-white dark:bg-dark-900 rounded-xl " x-data="{ open: true }">
+                <div class="mt-8 bg-white dark:bg-dark-800 rounded-xl " x-data="{ open: true }">
                     <button @click="open = !open" class="w-full flex items-center justify-between p-5 text-left">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Bot Interactions</h3>
                         <svg class="w-5 h-5 text-gray-400 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">

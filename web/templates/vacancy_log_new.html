@@ -39,7 +39,7 @@
 
         <!-- Main Content -->
         <main class="flex-1 flex flex-col min-h-screen lg:ml-0">
-            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 lg:hidden">
+            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-800 border-b border-gray-200 dark:border-dark-700 lg:hidden">
                 <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700">
                     <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -60,7 +60,7 @@
                 </div>
 
                 <!-- AI Filter Prompt (Collapsible) -->
-                <div class="bg-white dark:bg-dark-900 rounded-xl  mb-6" x-data="{ open: false }">
+                <div class="bg-white dark:bg-dark-800 rounded-xl  mb-6" x-data="{ open: false }">
                     <button @click="open = !open" class="w-full flex items-center justify-between p-4 text-left">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">AI Filter Prompt</h3>
                         <svg class="w-5 h-5 text-gray-400 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -86,7 +86,7 @@
                 </div>
 
                 <!-- Vacancy Table -->
-                <div class="bg-white dark:bg-dark-900 rounded-xl  overflow-hidden">
+                <div class="bg-white dark:bg-dark-800 rounded-xl  overflow-hidden">
                     <div id="loading" class="flex items-center justify-center py-12 text-gray-400">
                         <svg class="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -131,7 +131,7 @@
     <div id="modal-overlay" class="fixed inset-0 z-50 hidden" onclick="closeModal(event)">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm modal-backdrop"></div>
         <div class="flex items-center justify-center min-h-full p-4">
-            <div class="relative bg-white dark:bg-dark-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden dark:border dark:border-dark-700 modal-enter" onclick="event.stopPropagation()">
+            <div class="relative bg-white dark:bg-dark-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden dark:border dark:border-dark-700 modal-enter" onclick="event.stopPropagation()">
                 <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-dark-700">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Vacancy Details</h3>
                     <button onclick="closeModal()" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg">
