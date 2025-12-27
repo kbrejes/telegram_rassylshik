@@ -146,18 +146,18 @@
                             </button>
                         </div>
 
-                        <div class="flex gap-4">
-                            <!-- Tabs on left -->
-                            <div class="flex flex-col gap-1 min-w-[140px]">
-                                <button type="button" @click="activeTab = 'base_context'" :class="activeTab === 'base_context' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition">Base Context</button>
-                                <button type="button" @click="activeTab = 'discovery'" :class="activeTab === 'discovery' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition">Discovery</button>
-                                <button type="button" @click="activeTab = 'engagement'" :class="activeTab === 'engagement' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition">Engagement</button>
-                                <button type="button" @click="activeTab = 'call_ready'" :class="activeTab === 'call_ready' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition">Call Ready</button>
-                                <button type="button" @click="activeTab = 'call_pending'" :class="activeTab === 'call_pending' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition">Call Pending</button>
-                                <button type="button" @click="activeTab = 'call_declined'" :class="activeTab === 'call_declined' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition">Call Declined</button>
+                        <div class="flex flex-col md:flex-row gap-4">
+                            <!-- Tabs - horizontal scroll on mobile, vertical on desktop -->
+                            <div class="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-2 md:pb-0 md:min-w-[140px] -mx-2 px-2 md:mx-0 md:px-0">
+                                <button type="button" @click="activeTab = 'base_context'" :class="activeTab === 'base_context' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition whitespace-nowrap flex-shrink-0">Base Context</button>
+                                <button type="button" @click="activeTab = 'discovery'" :class="activeTab === 'discovery' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition whitespace-nowrap flex-shrink-0">Discovery</button>
+                                <button type="button" @click="activeTab = 'engagement'" :class="activeTab === 'engagement' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition whitespace-nowrap flex-shrink-0">Engagement</button>
+                                <button type="button" @click="activeTab = 'call_ready'" :class="activeTab === 'call_ready' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition whitespace-nowrap flex-shrink-0">Call Ready</button>
+                                <button type="button" @click="activeTab = 'call_pending'" :class="activeTab === 'call_pending' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition whitespace-nowrap flex-shrink-0">Call Pending</button>
+                                <button type="button" @click="activeTab = 'call_declined'" :class="activeTab === 'call_declined' ? 'bg-accent text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700'" class="px-3 py-2 text-sm text-left rounded-lg transition whitespace-nowrap flex-shrink-0">Call Declined</button>
                             </div>
 
-                            <!-- Textarea on right -->
+                            <!-- Textarea -->
                             <div class="flex-1">
                                 <textarea x-show="activeTab === 'base_context'" id="prompt_base_context" rows="10" placeholder="Base context prompt..."
                                     class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts.base_context }}{% endif %}</textarea>
