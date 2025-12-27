@@ -87,7 +87,6 @@
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Channel Name *</label>
                                 <input type="text" id="name" placeholder="e.g. Python Jobs" value="{% if channel %}{{ channel.name }}{% endif %}"
                                     class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition">
-                                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Convenient name for identification</p>
                             </div>
                         </div>
                     </div>
@@ -117,20 +116,12 @@
                                 </div>
                             </div>
                         </details>
-                    </div>
 
-                    <!-- AI Filter Prompt -->
-                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
-                        <details>
-                            <summary class="cursor-pointer">
-                                <h3 class="inline text-lg font-semibold text-gray-900 dark:text-white">AI Filter Prompt</h3>
-                                <span class="ml-2 text-sm text-gray-500">(vacancy filtering)</span>
+                        <details class="border border-gray-200 dark:border-dark-600 rounded-lg mt-4">
+                            <summary class="px-4 py-3 cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-700 rounded-lg select-none">
+                                AI Filter Prompt
                             </summary>
-                            <div class="mt-4 space-y-4">
-                                <p class="text-sm text-gray-500 dark:text-gray-400">
-                                    This prompt filters incoming vacancies. Use <code class="px-1 py-0.5 rounded bg-gray-100 dark:bg-dark-700">{min_salary}</code> for dynamic salary.
-                                    <a href="/vacancy-log" class="text-accent hover:underline ml-1">View filtered messages</a>
-                                </p>
+                            <div class="p-4 border-t border-gray-200 dark:border-dark-600 space-y-4">
                                 <textarea id="ai-filter-prompt" rows="10" placeholder="Loading..."
                                     class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm"></textarea>
                                 <div class="flex items-center gap-3">
@@ -146,37 +137,53 @@
                         </details>
                     </div>
 
-                    <!-- Divider -->
-                    <div class="flex items-center gap-4">
-                        <div class="flex-1 h-px bg-gray-200 dark:bg-dark-700"></div>
-                        <span class="text-sm text-gray-500 dark:text-gray-400">CRM Settings</span>
-                        <div class="flex-1 h-px bg-gray-200 dark:bg-dark-700"></div>
-                    </div>
-
-                    <!-- Linked Agents -->
+                    <!-- Conversation AI Prompts -->
                     <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Linked Agents</h3>
-
-                        <div id="channel-agents-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                            <!-- Linked agents loaded dynamically -->
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Conversation AI Prompts</h3>
+                            <button type="button" onclick="loadDefaultPrompts()" class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">
+                                Load Defaults
+                            </button>
                         </div>
 
-                        <div id="no-agents-warning" class="hidden p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm">
+                        <div class="space-y-3">
+                            {% set prompt_sections = [
+                                ('base_context', 'Base Context'),
+                                ('discovery', 'Discovery'),
+                                ('engagement', 'Engagement'),
+                                ('call_ready', 'Call Ready'),
+                                ('call_pending', 'Call Pending'),
+                                ('call_declined', 'Call Declined')
+                            ] %}
+
+                            {% for key, label in prompt_sections %}
+                            <details class="border border-gray-200 dark:border-dark-600 rounded-lg">
+                                <summary class="px-4 py-3 cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-700 rounded-lg select-none">
+                                    {{ label }}
+                                </summary>
+                                <div class="p-4 border-t border-gray-200 dark:border-dark-600">
+                                    <textarea id="prompt_{{ key }}" rows="4" placeholder="Prompt for {{ label }}..."
+                                        class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts[key] }}{% endif %}</textarea>
+                                </div>
+                            </details>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Agents -->
+                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Agents</h3>
+                            <a href="/agents" class="text-sm text-accent hover:underline">+ Add new agent</a>
+                        </div>
+
+                        <div id="all-agents-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <!-- All agents loaded dynamically -->
+                        </div>
+
+                        <div id="no-agents-warning" class="hidden p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm mt-4">
                             No agents linked. Link at least one agent for CRM to work.
                         </div>
-                    </div>
-
-                    <!-- Available Agents -->
-                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Available Agents</h3>
-
-                        <div id="available-agents-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            <!-- Available agents loaded dynamically -->
-                        </div>
-
-                        <a href="/agents" class="inline-flex items-center gap-2 mt-4 text-sm text-accent hover:underline">
-                            <span>+</span> Add new agent
-                        </a>
                     </div>
 
                     <!-- Auto Response Template -->
@@ -203,48 +210,6 @@
                                 </div>
                             </div>
                         </details>
-                    </div>
-
-                    <!-- Divider -->
-                    <div class="flex items-center gap-4">
-                        <div class="flex-1 h-px bg-gray-200 dark:bg-dark-700"></div>
-                        <span class="text-sm text-gray-500 dark:text-gray-400">AI Prompts</span>
-                        <div class="flex-1 h-px bg-gray-200 dark:bg-dark-700"></div>
-                    </div>
-
-                    <!-- AI Prompts -->
-                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-6 card-glow">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Conversation AI Prompts</h3>
-                            <button type="button" onclick="loadDefaultPrompts()" class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-dark-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">
-                                Load Defaults
-                            </button>
-                        </div>
-
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Configure AI behavior when communicating with contacts.</p>
-
-                        <div class="space-y-3">
-                            {% set prompt_sections = [
-                                ('base_context', 'Base Context'),
-                                ('discovery', 'Discovery'),
-                                ('engagement', 'Engagement'),
-                                ('call_ready', 'Call Ready'),
-                                ('call_pending', 'Call Pending'),
-                                ('call_declined', 'Call Declined')
-                            ] %}
-
-                            {% for key, label in prompt_sections %}
-                            <details class="border border-gray-200 dark:border-dark-600 rounded-lg">
-                                <summary class="px-4 py-3 cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-700 rounded-lg select-none">
-                                    {{ label }}
-                                </summary>
-                                <div class="p-4 border-t border-gray-200 dark:border-dark-600">
-                                    <textarea id="prompt_{{ key }}" rows="4" placeholder="Prompt for {{ label }}..."
-                                        class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts[key] }}{% endif %}</textarea>
-                                </div>
-                            </details>
-                            {% endfor %}
-                        </div>
                     </div>
 
                     <!-- Submit -->
@@ -592,58 +557,37 @@
         }
 
         function renderAgents() {
-            const linkedGrid = document.getElementById('channel-agents-grid');
-            const availableGrid = document.getElementById('available-agents-grid');
+            const grid = document.getElementById('all-agents-grid');
             const warning = document.getElementById('no-agents-warning');
 
-            const linkedAgents = allAgents.filter(a => linkedAgentNames.includes(a.session_name));
-            const availableAgents = allAgents.filter(a => !linkedAgentNames.includes(a.session_name));
-
-            // Linked agents
-            if (linkedAgents.length === 0) {
-                linkedGrid.innerHTML = '<div class="col-span-full text-gray-500 dark:text-gray-400 italic">No agents linked yet</div>';
+            if (allAgents.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-gray-500 dark:text-gray-400 italic">No agents available</div>';
                 warning.classList.remove('hidden');
-            } else {
-                warning.classList.add('hidden');
-                linkedGrid.innerHTML = linkedAgents.map(agent => {
-                    const meta = agent.username ? `@${agent.username}` : (agent.phone || agent.session_name);
-                    const isConnected = agent.status === 'connected';
-                    return `
-                        <div class="p-4 rounded-lg border-2 border-green-500 bg-green-50 dark:bg-green-900/20">
-                            <div class="font-medium text-gray-900 dark:text-white">${agent.name || agent.session_name}</div>
-                            <div class="text-sm text-gray-500 dark:text-gray-400">${meta}</div>
-                            <span class="inline-block mt-2 px-2 py-0.5 text-xs rounded-full ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-200'}">
-                                ${isConnected ? 'Connected' : 'Disconnected'}
-                            </span>
-                            <button type="button" onclick="unlinkAgent('${agent.session_name}')" class="mt-3 w-full px-3 py-2 rounded-lg bg-red-500 text-white text-sm hover:bg-red-600 transition">
-                                Unlink
-                            </button>
-                        </div>
-                    `;
-                }).join('');
+                return;
             }
 
-            // Available agents
-            if (availableAgents.length === 0) {
-                availableGrid.innerHTML = '<div class="col-span-full text-gray-500 dark:text-gray-400 italic">All agents are linked</div>';
-            } else {
-                availableGrid.innerHTML = availableAgents.map(agent => {
-                    const meta = agent.username ? `@${agent.username}` : (agent.phone || agent.session_name);
-                    const isConnected = agent.status === 'connected';
-                    return `
-                        <div class="p-4 rounded-lg border border-gray-200 dark:border-dark-600">
-                            <div class="font-medium text-gray-900 dark:text-white">${agent.name || agent.session_name}</div>
-                            <div class="text-sm text-gray-500 dark:text-gray-400">${meta}</div>
-                            <span class="inline-block mt-2 px-2 py-0.5 text-xs rounded-full ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-200'}">
-                                ${isConnected ? 'Connected' : 'Disconnected'}
-                            </span>
-                            <button type="button" onclick="linkAgent('${agent.session_name}', '${agent.phone || ''}')" class="mt-3 w-full px-3 py-2 rounded-lg bg-accent text-white text-sm hover:bg-violet-600 transition">
-                                Link
-                            </button>
-                        </div>
-                    `;
-                }).join('');
-            }
+            const linkedAgents = allAgents.filter(a => linkedAgentNames.includes(a.session_name));
+            warning.classList.toggle('hidden', linkedAgents.length > 0);
+
+            grid.innerHTML = allAgents.map(agent => {
+                const meta = agent.username ? `@${agent.username}` : (agent.phone || agent.session_name);
+                const isConnected = agent.status === 'connected';
+                const isLinked = linkedAgentNames.includes(agent.session_name);
+
+                return `
+                    <div class="p-4 rounded-lg border ${isLinked ? 'border-2 border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-dark-600'}">
+                        <div class="font-medium text-gray-900 dark:text-white">${agent.name || agent.session_name}</div>
+                        <div class="text-sm text-gray-500 dark:text-gray-400">${meta}</div>
+                        <span class="inline-block mt-2 px-2 py-0.5 text-xs rounded-full ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-200'}">
+                            ${isConnected ? 'Connected' : 'Disconnected'}
+                        </span>
+                        ${isLinked
+                            ? `<button type="button" onclick="unlinkAgent('${agent.session_name}')" class="mt-3 w-full px-3 py-2 rounded-lg bg-red-500 text-white text-sm hover:bg-red-600 transition">Unlink</button>`
+                            : `<button type="button" onclick="linkAgent('${agent.session_name}', '${agent.phone || ''}')" class="mt-3 w-full px-3 py-2 rounded-lg bg-accent text-white text-sm hover:bg-violet-600 transition">Link</button>`
+                        }
+                    </div>
+                `;
+            }).join('');
         }
 
         async function linkAgent(sessionName, phone) {
