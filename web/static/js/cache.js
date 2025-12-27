@@ -5,13 +5,8 @@
     // Add animation styles
     const style = document.createElement('style');
     style.textContent = `
-        /* No page fade-in - causes chat widget flicker */
-
-        /* Chat widget should never animate */
-        #supervisor-chat-widget,
-        #supervisor-chat-widget * {
-            animation: none !important;
-        }
+        /* Page fade-in */
+        main { animation: fadeIn 0.15s ease-out; }
 
         /* Modal animations */
         .modal-enter { animation: modalIn 0.15s ease-out; }

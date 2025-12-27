@@ -7,8 +7,8 @@
         </svg>
     </button>
 
-    <!-- Chat window -->
-    <div id="chat-window" class="chat-hidden">
+    <!-- Chat window - inline style ensures hidden on load before CSS -->
+    <div id="chat-window" class="chat-hidden" style="opacity: 0; pointer-events: none;">
         <div class="chat-header">
             <span class="chat-title">AI Supervisor</span>
             <div class="chat-controls">
@@ -449,6 +449,8 @@ function toggleChat() {
     const chatWindow = document.getElementById('chat-window');
 
     if (chatOpen) {
+        chatWindow.style.opacity = '';
+        chatWindow.style.pointerEvents = '';
         chatWindow.classList.remove('chat-hidden');
         loadProviders();
         loadChatHistory();
