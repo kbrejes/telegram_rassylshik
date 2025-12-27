@@ -170,6 +170,12 @@ class MultiChannelJobMonitorBot:
         # Ensure all agents are in their CRM groups
         await self._ensure_agents_in_crm_groups()
 
+        # Sync missed messages from while bot was offline
+        try:
+            await self.crm.sync_missed_messages(lookback_hours=2)
+        except Exception as e:
+            logger.warning(f"Error syncing missed messages: {e}")
+
         # Настройка фильтра логов
         self._setup_log_filter()
         

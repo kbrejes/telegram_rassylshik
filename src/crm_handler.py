@@ -638,6 +638,100 @@ class CRMHandler:
 
         await conv_manager.send_to_topic(topic_id, info_message, link_preview=False)
 
+    async def sync_missed_messages(self, lookback_hours: int = 2):
+        """
+        Sync messages that were missed while the bot was offline.
+        Fetches recent messages from all active conversations and processes unhandled ones.
+        """
+        from datetime import datetime, timedelta
+
+        logger.info(f"Syncing missed messages (lookback: {lookback_hours}h)...")
+        synced_count = 0
+
+        for channel_id, conv_manager in self.conversation_managers.items():
+            agent_pool = self.agent_pools.get(channel_id)
+            if not agent_pool:
+                continue
+
+            # Get an agent to fetch messages
+            agent = agent_pool.get_available_agent()
+            if not agent or not agent.client:
+                continue
+
+            ai_handler = self.ai_handlers.get(channel_id)
+
+            # Get all active contacts from the conversation manager
+            contacts = list(conv_manager._topic_cache.keys())
+
+            if not contacts:
+                continue
+
+            logger.info(f"  Channel {channel_id}: checking {len(contacts)} active conversations")
+
+            for contact_id in contacts:
+                try:
+                    topic_id = conv_manager.get_topic_id(contact_id)
+                    if not topic_id:
+                        continue
+
+                    # Fetch recent messages from this contact's chat
+                    cutoff_time = datetime.now(tz=None) - timedelta(hours=lookback_hours)
+
+                    async for message in agent.client.iter_messages(
+                        contact_id,
+                        limit=20,  # Last 20 messages max
+                    ):
+                        # Skip if message is too old
+                        if message.date and message.date.replace(tzinfo=None) < cutoff_time:
+                            break
+
+                        # Skip outgoing messages
+                        if message.out:
+                            continue
+
+                        # Skip if already processed (agent sent it)
+                        if conv_manager.is_agent_sent_message(message.id):
+                            continue
+
+                        # Skip if already synced (check database)
+                        if await db.is_message_synced(contact_id, message.id):
+                            continue
+
+                        # Skip non-text messages for now
+                        if not message.text:
+                            continue
+
+                        # Skip service messages
+                        from src.constants import SERVICE_MESSAGE_PREFIXES
+                        if any(message.text.startswith(p) for p in SERVICE_MESSAGE_PREFIXES):
+                            continue
+
+                        sender = await message.get_sender()
+                        if not sender:
+                            continue
+
+                        logger.info(f"    Syncing missed message from {contact_id}: {message.text[:50]}...")
+
+                        # Relay to CRM topic
+                        await self._relay_contact_message_to_topic(
+                            agent.client, conv_manager, sender, message,
+                            topic_id, ai_handler, channel_id
+                        )
+
+                        # Mark as synced to avoid duplicate processing
+                        await db.mark_message_synced(contact_id, message.id)
+                        synced_count += 1
+
+                        # Small delay between messages
+                        await asyncio.sleep(0.5)
+
+                except Exception as e:
+                    logger.warning(f"    Error syncing messages from {contact_id}: {e}")
+                    continue
+
+        logger.info(f"Synced {synced_count} missed messages")
+        return synced_count
+
     async def cleanup(self):
         """Очистка ресурсов CRM"""
         # Закрываем AI handlers

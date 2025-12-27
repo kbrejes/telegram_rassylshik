@@ -185,6 +185,17 @@ class Database:
             )
         """)
 
+        # Synced CRM messages (to avoid duplicate syncing on restart)
+        await self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS synced_crm_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(contact_id, message_id)
+            )
+        """)
+
         # === Bot Interaction Tables ===
 
         # Bot interactions tracking
@@ -966,6 +977,27 @@ class Database:
         """Clear all supervisor chat history."""
         await self._connection.execute("DELETE FROM supervisor_chat_history")
         await self._connection.commit()
+
+    # === Synced CRM Messages ===
+
+    async def is_message_synced(self, contact_id: int, message_id: int) -> bool:
+        """Check if a message was already synced to CRM."""
+        async with self._connection.execute(
+            "SELECT 1 FROM synced_crm_messages WHERE contact_id = ? AND message_id = ?",
+            (contact_id, message_id)
+        ) as cursor:
+            return await cursor.fetchone() is not None
+
+    async def mark_message_synced(self, contact_id: int, message_id: int):
+        """Mark a message as synced to CRM."""
+        try:
+            await self._connection.execute("""
+                INSERT OR IGNORE INTO synced_crm_messages (contact_id, message_id)
+                VALUES (?, ?)
+            """, (contact_id, message_id))
+            await self._connection.commit()
+        except Exception as e:
+            logger.warning(f"Error marking message as synced: {e}")
 
 
 # Глобальный экземпляр базы данных
