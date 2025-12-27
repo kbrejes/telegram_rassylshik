@@ -52,6 +52,20 @@
                 border-radius: 3px;
             }
         }
+        @layer components {
+            .sort-btn-active {
+                @apply bg-white text-gray-900;
+            }
+            .dark .sort-btn-active {
+                @apply bg-dark-600 text-white;
+            }
+            .sort-btn-inactive {
+                @apply text-gray-500;
+            }
+            .dark .sort-btn-inactive {
+                @apply text-gray-400;
+            }
+        }
     </style>
     <script>
         // Apply theme immediately to prevent flash
@@ -239,10 +253,10 @@
 
                         <!-- Vacancy Peek Section -->
                         <div class="p-3 sm:p-4" id="vacancy-peek-{{ channel.id }}">
-                            <div class="flex items-center gap-2 mb-3">
+                            <div class="flex items-center justify-between gap-2 mb-3">
                                 <div class="flex rounded-lg bg-gray-100 dark:bg-dark-700 p-0.5 gap-0.5">
-                                    <button class="px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md bg-white dark:bg-dark-600 text-gray-900 dark:text-white sort-btn active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
-                                    <button class="px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600 sort-btn" onclick="sortVacancies('messages')" id="sort-messages">Has msgs</button>
+                                    <button class="px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md sort-btn sort-btn-active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
+                                    <button class="px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md sort-btn sort-btn-inactive" onclick="sortVacancies('messages')" id="sort-messages">Has msgs</button>
                                 </div>
                                 <a href="/vacancy-log" class="text-xs text-violet-600 dark:text-accent hover:text-violet-800 dark:hover:text-violet-400 font-medium whitespace-nowrap">View all →</a>
                             </div>
@@ -444,23 +458,14 @@
 
         function sortVacancies(sortBy) {
             currentSort = sortBy;
-            const isDark = document.documentElement.classList.contains('dark');
 
             document.querySelectorAll('.sort-btn').forEach(btn => {
-                btn.classList.remove('active', 'bg-white', 'bg-dark-600', 'text-gray-900', 'text-white');
-                btn.classList.add('text-gray-500');
-                if (isDark) {
-                    btn.classList.add('text-gray-400');
-                }
+                btn.classList.remove('sort-btn-active');
+                btn.classList.add('sort-btn-inactive');
             });
             const activeBtn = document.getElementById(`sort-${sortBy}`);
-            activeBtn.classList.remove('text-gray-500', 'text-gray-400');
-            activeBtn.classList.add('active');
-            if (isDark) {
-                activeBtn.classList.add('bg-dark-600', 'text-white');
-            } else {
-                activeBtn.classList.add('bg-white', 'text-gray-900');
-            }
+            activeBtn.classList.remove('sort-btn-inactive');
+            activeBtn.classList.add('sort-btn-active');
 
             renderVacancies();
         }
