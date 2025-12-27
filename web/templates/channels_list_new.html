@@ -204,7 +204,7 @@
                     {% for channel in channels %}
                     <div class="bg-white dark:bg-dark-900 rounded-xl border border-gray-200 dark:border-dark-700 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden card-glow {% if not channel.enabled %}opacity-60{% endif %}" data-channel-id="{{ channel.id }}">
                         <!-- Channel Header -->
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 border-b border-gray-100 dark:border-dark-700">
+                        <div class="flex flex-col sm:flex-row sm:items-start justify-between p-4 gap-3 border-b border-gray-100 dark:border-dark-700">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg {% if channel.enabled %}bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400{% else %}bg-gray-100 dark:bg-dark-700 text-gray-400{% endif %}">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -226,7 +226,7 @@
                             </div>
                             <!-- Invisible divider -->
                             <div class="hidden sm:block flex-1"></div>
-                            <div class="flex items-center gap-2 self-end sm:self-auto">
+                            <div class="flex items-center gap-2 self-start">
                                 <!-- Toggle Switch -->
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" class="sr-only peer" {% if channel.enabled %}checked{% endif %} onchange="toggleChannel('{{ channel.id }}', this.checked)">
