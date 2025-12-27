@@ -8,6 +8,8 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Client-side caching for faster navigation -->
+    <script src="/static/js/cache.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -330,66 +332,9 @@
         let allVacancies = [];
         let vacancyStats = null;
 
-        // Load status and update UI
+        // Load status and update UI (uses cached fetch from cache.js)
         async function loadStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
-
-                if (data.success) {
-                    const bot = data.status.bot;
-                    const botDot = document.getElementById('sidebar-bot-dot');
-                    const botName = document.getElementById('sidebar-bot-name');
-                    const botInfo = document.getElementById('sidebar-bot-info');
-
-                    if (bot.connected && bot.authorized) {
-                        botDot.className = 'w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm shadow-green-500/50';
-                        if (bot.user_info) {
-                            botName.textContent = bot.user_info.first_name || 'Bot';
-                            botInfo.textContent = '@' + (bot.user_info.username || 'connected');
-                        } else {
-                            botName.textContent = 'Bot';
-                            botInfo.textContent = 'Connected';
-                        }
-                    } else {
-                        botDot.className = 'w-2.5 h-2.5 rounded-full bg-gray-400';
-                        botName.textContent = 'Bot';
-                        botInfo.textContent = 'Offline';
-                    }
-
-                    // Update agent statuses
-                    const agents = data.status.agents || {};
-                    document.querySelectorAll('[data-session]').forEach(badge => {
-                        const sessionName = badge.dataset.session;
-                        const agentStatus = agents[sessionName];
-                        const dot = badge.querySelector('.dot');
-                        const nameSpan = badge.querySelector('.name');
-
-                        if (agentStatus) {
-                            const status = agentStatus.status || 'disconnected';
-                            if (status === 'connected') {
-                                dot.className = 'w-2 h-2 rounded-full bg-green-500 shadow-sm shadow-green-500/50 dot';
-                            } else if (status === 'flood_wait') {
-                                dot.className = 'w-2 h-2 rounded-full bg-amber-500 shadow-sm shadow-amber-500/50 dot';
-                            } else if (status === 'error' || status === 'auth_expired') {
-                                dot.className = 'w-2 h-2 rounded-full bg-red-500 shadow-sm shadow-red-500/50 dot';
-                            } else {
-                                dot.className = 'w-2 h-2 rounded-full bg-gray-400 dot';
-                            }
-
-                            if (agentStatus.user_info) {
-                                const name = agentStatus.user_info.first_name || sessionName;
-                                const username = agentStatus.user_info.username;
-                                nameSpan.textContent = username ? `${name} (@${username})` : name;
-                            }
-                        } else {
-                            dot.className = 'w-2 h-2 rounded-full bg-gray-400 dot';
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error('Error loading status:', error);
-            }
+            loadCachedStatus(updateAllStatus);
         }
 
         // Toggle channel enabled/disabled

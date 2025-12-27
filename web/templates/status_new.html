@@ -6,6 +6,7 @@
     <title>Agents - Job Notification Bot</title>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/js/cache.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -273,18 +274,13 @@
         let deletedAgents = new Set();
 
         async function loadStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
-
-                if (data.success) {
-                    updateBotStatus(data.status.bot);
+            loadCachedStatus((data) => {
+                if (data && data.success) {
+                    updateSidebarStatus(data);  // From cache.js
                     updateAgentsGrid(data.status.agents);
                     document.getElementById('last-updated').textContent = `Last updated: ${new Date(data.last_updated).toLocaleTimeString()}`;
                 }
-            } catch (error) {
-                console.error('Error loading status:', error);
-            }
+            });
         }
 
         async function loadSessions() {
@@ -295,27 +291,6 @@
             } catch (error) {
                 console.error('Error loading sessions:', error);
                 return [];
-            }
-        }
-
-        function updateBotStatus(bot) {
-            const botDot = document.getElementById('sidebar-bot-dot');
-            const botName = document.getElementById('sidebar-bot-name');
-            const botInfo = document.getElementById('sidebar-bot-info');
-
-            if (bot.connected && bot.authorized) {
-                botDot.className = 'w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm shadow-green-500/50';
-                if (bot.user_info) {
-                    botName.textContent = bot.user_info.first_name || 'Bot';
-                    botInfo.textContent = '@' + (bot.user_info.username || 'connected');
-                } else {
-                    botName.textContent = 'Bot';
-                    botInfo.textContent = 'Connected';
-                }
-            } else {
-                botDot.className = 'w-2.5 h-2.5 rounded-full bg-gray-400';
-                botName.textContent = 'Bot';
-                botInfo.textContent = 'Offline';
             }
         }
 
