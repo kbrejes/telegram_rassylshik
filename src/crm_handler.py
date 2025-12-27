@@ -674,11 +674,18 @@ class CRMHandler:
                     if not topic_id:
                         continue
 
+                    # Try to get the entity - may fail if agent hasn't seen this user
+                    try:
+                        entity = await agent.client.get_input_entity(contact_id)
+                    except ValueError:
+                        # User not in agent's entity cache, skip
+                        continue
+
                     # Fetch recent messages from this contact's chat
                     cutoff_time = datetime.now(tz=None) - timedelta(hours=lookback_hours)
 
                     async for message in agent.client.iter_messages(
-                        contact_id,
+                        entity,
                         limit=20,  # Last 20 messages max
                     ):
                         # Skip if message is too old
