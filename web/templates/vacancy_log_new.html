@@ -172,26 +172,44 @@
         }
 
         async function loadVacancies() {
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('vacancies-container').classList.add('hidden');
+            const cacheKey = `vacancies_${currentFilter}_${currentOffset}`;
+
+            // Show cached data immediately if available
+            const cached = AppCache.get(cacheKey);
+            if (cached) {
+                applyVacancyData(cached);
+            } else {
+                document.getElementById('loading').classList.remove('hidden');
+                document.getElementById('vacancies-container').classList.add('hidden');
+            }
+
+            // Fetch fresh data
             try {
                 const params = new URLSearchParams({ limit, offset: currentOffset, filter_status: currentFilter });
                 const response = await fetch(`/api/vacancies/log?${params}`);
                 const data = await response.json();
                 if (!data.success) throw new Error(data.error);
-                vacancies = data.vacancies;
-                totalCount = data.total;
-                if (data.stats) {
-                    document.getElementById('stat-total').textContent = data.stats.total || 0;
-                    document.getElementById('stat-passed').textContent = data.stats.passed || 0;
-                    document.getElementById('stat-filtered').textContent = data.stats.filtered || 0;
-                }
-                renderVacancies();
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('vacancies-container').classList.remove('hidden');
+
+                AppCache.set(cacheKey, data, AppCache.TTL.vacancies);
+                applyVacancyData(data);
             } catch (error) {
-                document.getElementById('loading').innerHTML = `<div class="text-red-500">Error: ${error.message}</div>`;
+                if (!cached) {
+                    document.getElementById('loading').innerHTML = `<div class="text-red-500">Error: ${error.message}</div>`;
+                }
             }
+        }
+
+        function applyVacancyData(data) {
+            vacancies = data.vacancies;
+            totalCount = data.total;
+            if (data.stats) {
+                document.getElementById('stat-total').textContent = data.stats.total || 0;
+                document.getElementById('stat-passed').textContent = data.stats.passed || 0;
+                document.getElementById('stat-filtered').textContent = data.stats.filtered || 0;
+            }
+            renderVacancies();
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('vacancies-container').classList.remove('hidden');
         }
 
         function renderVacancies() {

@@ -206,3 +206,39 @@ function toggleSidebar() {
     if (sidebar) sidebar.classList.toggle('-translate-x-full');
     if (overlay) overlay.classList.toggle('hidden');
 }
+
+/**
+ * Load and cache vacancies list
+ */
+async function loadCachedVacancies(onUpdate, limit = 50) {
+    return cachedFetch(
+        `/api/vacancies/log?limit=${limit}`,
+        'vacancies',
+        AppCache.TTL.vacancies,
+        onUpdate
+    );
+}
+
+/**
+ * Load and cache vacancy messages
+ */
+async function loadCachedVacancyMessages(vacancyId, onUpdate) {
+    return cachedFetch(
+        `/api/vacancies/messages/${vacancyId}`,
+        `vacancy_messages_${vacancyId}`,
+        60000, // 1 minute cache for messages
+        onUpdate
+    );
+}
+
+/**
+ * Load and cache sessions list (for agents page)
+ */
+async function loadCachedSessions(onUpdate) {
+    return cachedFetch(
+        '/api/status/sessions',
+        'sessions',
+        AppCache.TTL.agents,
+        onUpdate
+    );
+}

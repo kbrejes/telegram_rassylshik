@@ -259,14 +259,27 @@
             });
         }
 
+        let cachedSessions = null;
+
         async function loadSessions() {
+            // Return cached sessions immediately if available
+            const cached = AppCache.get('sessions');
+            if (cached && cached.success) {
+                cachedSessions = cached.sessions;
+            }
+
+            // Fetch fresh in background
             try {
                 const response = await fetch('/api/status/sessions');
                 const data = await response.json();
-                return data.success ? data.sessions : [];
+                if (data.success) {
+                    AppCache.set('sessions', data, AppCache.TTL.agents);
+                    cachedSessions = data.sessions;
+                }
+                return data.success ? data.sessions : (cachedSessions || []);
             } catch (error) {
                 console.error('Error loading sessions:', error);
-                return [];
+                return cachedSessions || [];
             }
         }
 
