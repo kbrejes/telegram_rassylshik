@@ -461,7 +461,7 @@
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-dark-700">`;
 
-                    sorted.slice(0, 10).forEach((v, idx) => {
+                    sorted.slice(0, 50).forEach((v, idx) => {
                         const statusClass = v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
                         const statusLabel = v.is_relevant ? 'Passed' : 'Filtered';
                         const time = formatTime(v.processed_at);
