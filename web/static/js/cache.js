@@ -8,8 +8,17 @@
         /* Page fade-in */
         main { animation: fadeIn 0.15s ease-out; }
 
-        /* Exclude chat widget from page animations */
-        #supervisor-chat-widget, #supervisor-chat-widget * { animation: none !important; }
+        /* Exclude chat widget from page animations - force immediate visibility */
+        #supervisor-chat-widget {
+            animation: none !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            transform: none !important;
+        }
+        #supervisor-chat-widget > #chat-bubble {
+            animation: none !important;
+            opacity: 1 !important;
+        }
 
         /* Modal animations */
         .modal-enter { animation: modalIn 0.15s ease-out; }
