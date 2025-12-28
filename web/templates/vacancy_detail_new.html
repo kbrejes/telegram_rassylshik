@@ -65,6 +65,28 @@
             }
             .tooltip-container:hover .tooltip-content { display: block; }
         }
+        /* Swipe animations */
+        @keyframes slideOutLeft {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(-30%); opacity: 0; }
+        }
+        @keyframes slideOutRight {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(30%); opacity: 0; }
+        }
+        @keyframes slideInLeft {
+            from { transform: translateX(30%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(-30%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .slide-out-left { animation: slideOutLeft 0.2s ease-out forwards; }
+        .slide-out-right { animation: slideOutRight 0.2s ease-out forwards; }
+        .slide-in-left { animation: slideInLeft 0.2s ease-out forwards; }
+        .slide-in-right { animation: slideInRight 0.2s ease-out forwards; }
+        #chat-container { will-change: transform, opacity; }
     </style>
     <script>
         // Fix mobile viewport height
@@ -117,7 +139,7 @@
                     <div id="contacts-tabs" class="flex gap-2 overflow-x-auto pb-2 flex-shrink-0"></div>
 
                     <!-- CRM Conversation -->
-                        <div class="bg-white dark:bg-dark-800 rounded-xl flex-1 flex flex-col min-h-[300px] lg:min-h-0 overflow-hidden">
+                        <div id="chat-container" class="bg-white dark:bg-dark-800 rounded-xl flex-1 flex flex-col min-h-[300px] lg:min-h-0 overflow-hidden">
                             <div id="conversation-header" class="px-4 py-3 border-b border-gray-100 dark:border-dark-700 flex items-center gap-3 flex-shrink-0">
                                 <div id="contact-avatar" class="w-8 h-8 rounded-full bg-gray-200 dark:bg-dark-600 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-gray-300"></div>
                                 <span id="contact-name" class="text-sm font-medium text-gray-900 dark:text-white"></span>
@@ -574,6 +596,41 @@
         let touchEndX = 0;
         let touchEndY = 0;
         const minSwipeDistance = 80;
+        let swipeDirection = null;
+        let isAnimating = false;
+
+        function animatedSwitch(newId, direction) {
+            if (isAnimating) return;
+            isAnimating = true;
+
+            const chatContainer = document.getElementById('chat-container');
+            if (!chatContainer) {
+                switchVacancy(newId);
+                isAnimating = false;
+                return;
+            }
+
+            // Slide out animation
+            const outClass = direction === 'left' ? 'slide-out-left' : 'slide-out-right';
+            const inClass = direction === 'left' ? 'slide-in-left' : 'slide-in-right';
+
+            chatContainer.classList.add(outClass);
+
+            setTimeout(() => {
+                chatContainer.classList.remove(outClass);
+                swipeDirection = direction;
+                switchVacancy(newId);
+
+                // Slide in animation after content loads
+                requestAnimationFrame(() => {
+                    chatContainer.classList.add(inClass);
+                    setTimeout(() => {
+                        chatContainer.classList.remove(inClass);
+                        isAnimating = false;
+                    }, 200);
+                });
+            }, 180);
+        }
 
         function handleSwipe() {
             const deltaX = touchEndX - touchStartX;
@@ -590,13 +647,13 @@
                     // Swipe left -> next chat
                     const nextIndex = currentIndex + 1;
                     if (nextIndex < contacts.length) {
-                        switchVacancy(contacts[nextIndex].id);
+                        animatedSwitch(contacts[nextIndex].id, 'left');
                     }
                 } else {
                     // Swipe right -> previous chat
                     const prevIndex = currentIndex - 1;
                     if (prevIndex >= 0) {
-                        switchVacancy(contacts[prevIndex].id);
+                        animatedSwitch(contacts[prevIndex].id, 'right');
                     }
                 }
             }
