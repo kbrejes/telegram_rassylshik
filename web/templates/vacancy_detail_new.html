@@ -176,7 +176,11 @@
         // Tooltip click handling for mobile
         function toggleTooltip(event) {
             event.stopPropagation();
-            const container = event.currentTarget.closest('.tooltip-container');
+            event.preventDefault();
+            // Use event.target and traverse up (more reliable with inline handlers)
+            const container = event.target.closest('.tooltip-container');
+            if (!container) return;
+
             const wasActive = container.classList.contains('active');
 
             // Close all tooltips
