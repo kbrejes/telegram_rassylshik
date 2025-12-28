@@ -29,6 +29,37 @@
         }
     </style>
     <script>if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark');</script>
+    <style>
+        /* Collapse sidebar by default on this page */
+        #sidebar { transform: translateX(-100%) !important; }
+        #sidebar.sidebar-open { transform: translateX(0) !important; }
+        /* Tooltip styles */
+        .tooltip-container { position: relative; }
+        .tooltip-content {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: #18181b;
+            color: #fff;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.4;
+            max-width: 300px;
+            width: max-content;
+            z-index: 100;
+            transition: opacity 0.15s, visibility 0.15s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .tooltip-container:hover .tooltip-content { visibility: visible; opacity: 1; }
+        @media (max-width: 640px) {
+            .tooltip-content { left: 0; transform: none; max-width: 250px; }
+        }
+    </style>
 </head>
 <body class="h-full bg-gray-50 dark:bg-dark-950 transition-colors duration-200">
     <div class="flex h-full">
@@ -47,8 +78,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                     </svg>
                 </a>
-                <div class="flex items-center gap-3 flex-1 min-w-0">
-                    <div id="header-status-badge"></div>
+                <div class="flex items-center gap-2 flex-1 min-w-0">
+                    <div id="header-status-badge" class="flex items-center gap-2"></div>
                 </div>
                 <div class="flex items-center gap-1">
                     <a href="javascript:history.back()" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition-colors" title="Exit full page">
@@ -82,17 +113,7 @@
                     <!-- Contact tabs -->
                     <div id="contacts-tabs" class="flex gap-2 overflow-x-auto pb-2 flex-shrink-0"></div>
 
-                        <!-- AI Reason -->
-                        <div class="bg-violet-50 dark:bg-violet-900/20 rounded-xl p-3 flex-shrink-0">
-                            <div class="flex items-start gap-2">
-                                <svg class="w-4 h-4 flex-shrink-0 mt-0.5 text-violet-500 dark:text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-                                </svg>
-                                <div id="ai-reason" class="text-sm text-violet-700 dark:text-violet-300"></div>
-                            </div>
-                        </div>
-
-                        <!-- CRM Conversation -->
+                    <!-- CRM Conversation -->
                         <div class="bg-white dark:bg-dark-800 rounded-xl flex-1 flex flex-col min-h-[300px] lg:min-h-0 overflow-hidden">
                             <div class="px-4 py-3 border-b border-gray-100 dark:border-dark-700 flex items-center justify-between flex-shrink-0">
                                 <div class="flex items-center gap-2">
@@ -151,7 +172,7 @@
         let recentVacancies = [];
 
         function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            document.getElementById('sidebar').classList.toggle('sidebar-open');
             document.getElementById('sidebar-overlay').classList.toggle('hidden');
         }
 
@@ -164,7 +185,23 @@
 
         async function loadVacancy() {
             try {
-                // Load current vacancy and recent vacancies in parallel
+                // Try to load from cache first, then fetch fresh
+                const cachedVacancy = AppCache.get(`vacancy_${vacancyId}`);
+                const cachedRecent = AppCache.get('recent_vacancies');
+
+                if (cachedVacancy && cachedRecent) {
+                    // Show cached data immediately
+                    currentVacancy = cachedVacancy.vacancy;
+                    currentContactId = cachedVacancy.vacancy.contact_id;
+                    recentVacancies = cachedRecent.filter(v => v.has_messages || v.contact_name || v.contact_username);
+                    renderVacancy(cachedVacancy.vacancy);
+                    renderContactCircles();
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('content').classList.remove('hidden');
+                    loadConversation();
+                }
+
+                // Fetch fresh data in background
                 const [vacancyRes, recentRes] = await Promise.all([
                     fetch(`/api/vacancies/${vacancyId}`),
                     fetch('/api/vacancies/log?limit=20&filter_status=passed')
@@ -174,13 +211,19 @@
                 const recentData = await recentRes.json();
 
                 if (!vacancyData.success) {
-                    throw new Error(vacancyData.error || 'Failed to load vacancy');
+                    if (!cachedVacancy) throw new Error(vacancyData.error || 'Failed to load vacancy');
+                    return;
+                }
+
+                // Cache the data
+                AppCache.set(`vacancy_${vacancyId}`, vacancyData, 60000);
+                if (recentData.success) {
+                    AppCache.set('recent_vacancies', recentData.vacancies, 30000);
                 }
 
                 currentVacancy = vacancyData.vacancy;
                 currentContactId = vacancyData.vacancy.contact_id;
 
-                // Store recent vacancies with contacts
                 if (recentData.success) {
                     recentVacancies = recentData.vacancies.filter(v => v.has_messages || v.contact_name || v.contact_username);
                 }
@@ -191,8 +234,7 @@
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('content').classList.remove('hidden');
 
-                // Load conversation
-                loadConversation();
+                if (!cachedVacancy) loadConversation();
             } catch (error) {
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('error').classList.remove('hidden');
@@ -224,17 +266,36 @@
         }
 
         function renderVacancy(v) {
-            // Status badge in header
+            // Status badge with AI reason tooltip in header
             const statusBadge = document.getElementById('header-status-badge');
+            const aiReason = escapeHtml(v.ai_reason || 'No analysis available');
+
             if (v.is_relevant) {
-                statusBadge.innerHTML = `<span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Passed</span>`;
+                statusBadge.innerHTML = `
+                    <span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Passed</span>
+                    <div class="tooltip-container">
+                        <button class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                            </svg>
+                        </button>
+                        <div class="tooltip-content">${aiReason}</div>
+                    </div>
+                `;
             } else {
                 const label = getFilteredLabel(v.ai_reason);
-                statusBadge.innerHTML = `<span class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">${label}</span>`;
+                statusBadge.innerHTML = `
+                    <span class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">${label}</span>
+                    <div class="tooltip-container">
+                        <button class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                            </svg>
+                        </button>
+                        <div class="tooltip-content">${aiReason}</div>
+                    </div>
+                `;
             }
-
-            // AI reason
-            document.getElementById('ai-reason').textContent = v.ai_reason || 'No analysis available';
 
             // Source channel and text
             document.getElementById('source-channel').textContent = v.chat_title || 'Unknown';
@@ -259,11 +320,9 @@
         }
 
         async function loadConversation() {
-            const messageLog = document.getElementById('message-log');
-
-            try {
-                const response = await fetch(`/api/vacancies/messages/${vacancyId}`);
-                const data = await response.json();
+            // Use cached fetch from cache.js
+            loadCachedVacancyMessages(vacancyId, (data) => {
+                const messageLog = document.getElementById('message-log');
 
                 if (!data.success) {
                     messageLog.innerHTML = `<div class="text-center text-gray-400 py-6">Failed to load conversation</div>`;
@@ -295,11 +354,7 @@
 
                 // Scroll to bottom
                 messageLog.scrollTop = messageLog.scrollHeight;
-
-            } catch (error) {
-                console.error('Error loading conversation:', error);
-                messageLog.innerHTML = `<div class="text-center text-red-400 py-6">Error loading conversation</div>`;
-            }
+            });
         }
 
         async function sendChatMessage() {
