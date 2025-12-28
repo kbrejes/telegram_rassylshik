@@ -30,58 +30,59 @@
     </style>
     <script>if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark');</script>
     <style>
-        /* Collapse sidebar by default and don't take space */
+        /* Collapse sidebar */
         #sidebar { transform: translateX(-100%) !important; position: fixed !important; }
         #sidebar.sidebar-open { transform: translateX(0) !important; }
-        /* Mobile viewport fix for Safari */
-        @supports (height: 100dvh) {
-            .h-full, html, body { height: 100dvh !important; }
-        }
-        /* Safe area for mobile browsers */
-        .pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 0), 12px); }
-        /* Tooltip styles - click to toggle on mobile */
+        /* Tooltip */
         .tooltip-container { position: relative; display: inline-flex; }
         .tooltip-content {
-            visibility: hidden;
-            opacity: 0;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: auto;
-            margin-top: 8px;
-            padding: 10px 14px;
+            display: none;
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            bottom: auto;
+            top: auto;
+            padding: 12px;
             background: #18181b;
             color: #fff;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 13px;
             line-height: 1.5;
-            width: max-content;
-            max-width: min(350px, calc(100vw - 24px));
-            z-index: 100;
-            transition: opacity 0.15s, visibility 0.15s;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
-        }
-        /* Keep tooltip within viewport */
-        .tooltip-right .tooltip-content { left: auto; right: 0; }
-        /* Show on hover (desktop) */
-        @media (hover: hover) {
-            .tooltip-container:hover .tooltip-content { visibility: visible; opacity: 1; }
-        }
-        /* Show when active (mobile tap) */
-        .tooltip-container.active .tooltip-content { visibility: visible; opacity: 1; }
-        /* Source tooltip - larger and scrollable */
-        .tooltip-source {
-            max-height: min(250px, 40vh);
+            z-index: 200;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            max-height: 50vh;
             overflow-y: auto;
         }
+        .tooltip-container.active .tooltip-content { display: block; }
+        @media (hover: hover) and (min-width: 768px) {
+            .tooltip-content {
+                position: absolute;
+                left: 0;
+                right: auto;
+                top: 100%;
+                bottom: auto;
+                margin-top: 8px;
+                width: max-content;
+                max-width: 400px;
+            }
+            .tooltip-container:hover .tooltip-content { display: block; }
+        }
     </style>
+    <script>
+        // Fix mobile viewport height
+        function setVh() {
+            document.documentElement.style.setProperty('--vh', window.innerHeight + 'px');
+        }
+        setVh();
+        window.addEventListener('resize', setVh);
+    </script>
 </head>
-<body class="h-full bg-gray-50 dark:bg-dark-950 transition-colors duration-200">
-    <div class="flex h-full">
+<body class="bg-gray-50 dark:bg-dark-950 transition-colors duration-200" style="height: var(--vh, 100vh); overflow: hidden;">
+    <div class="flex" style="height: var(--vh, 100vh);">
         {% set active_page = 'channels' %}
         {% include 'partials/sidebar_new.html' %}
 
-        <main class="flex-1 flex flex-col min-h-screen min-w-0 lg:ml-0 overflow-x-hidden">
+        <main class="flex-1 flex flex-col min-w-0 overflow-hidden" style="height: var(--vh, 100vh);">
             <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-800 border-b border-gray-200 dark:border-dark-700">
                 <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700">
                     <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -138,7 +139,7 @@
                                     Loading conversation...
                                 </div>
                             </div>
-                            <div id="chat-input-container" class="hidden px-4 py-3 pb-safe border-t border-gray-100 dark:border-dark-700 flex-shrink-0">
+                            <div id="chat-input-container" class="hidden px-4 py-3 border-t border-gray-100 dark:border-dark-700 flex-shrink-0">
                                 <div class="flex gap-2">
                                     <input type="text" id="chat-message-input" placeholder="Type a message..."
                                         class="flex-1 px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none text-sm"
@@ -347,7 +348,7 @@
                         <span onclick="toggleTooltip(event)" class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 cursor-help">Passed</span>
                         <div class="tooltip-content">${aiReason}</div>
                     </div>
-                    <div class="tooltip-container tooltip-right">
+                    <div class="tooltip-container">
                         <button onclick="toggleTooltip(event)" class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
@@ -366,7 +367,7 @@
                         <span onclick="toggleTooltip(event)" class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 cursor-help">${label}</span>
                         <div class="tooltip-content">${aiReason}</div>
                     </div>
-                    <div class="tooltip-container tooltip-right">
+                    <div class="tooltip-container">
                         <button onclick="toggleTooltip(event)" class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
