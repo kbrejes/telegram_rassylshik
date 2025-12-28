@@ -300,3 +300,67 @@ async def send_crm_message(request: SendMessageRequest):
     except Exception as e:
         logger.error(f"Error sending CRM message: {e}")
         return {"success": False, "error": str(e)}
+
+
+# NOTE: This route must be at the end to avoid catching other routes like /messages, /send-message
+@router.get("/{vacancy_id}")
+async def get_vacancy(vacancy_id: int):
+    """Get single vacancy by ID."""
+    try:
+        conn = await get_db_connection()
+
+        cursor = await conn.execute("""
+            SELECT
+                pj.id,
+                pj.message_id,
+                pj.chat_id,
+                pj.chat_title,
+                pj.message_text,
+                pj.is_relevant,
+                pj.ai_reason,
+                pj.status,
+                datetime(pj.processed_at) as processed_at,
+                pj.contact_username
+            FROM processed_jobs pj
+            WHERE pj.id = ?
+        """, (vacancy_id,))
+        row = await cursor.fetchone()
+
+        if not row:
+            await conn.close()
+            return {"success": False, "error": "Vacancy not found"}
+
+        # Get CRM contact info
+        cursor = await conn.execute("""
+            SELECT contact_id, contact_name
+            FROM crm_topic_contacts
+            WHERE vacancy_id = ?
+        """, (vacancy_id,))
+        crm_contact = await cursor.fetchone()
+
+        await conn.close()
+
+        text = row[4] or ""
+        text_preview = text[:300] + "..." if len(text) > 300 else text
+
+        vacancy = {
+            "id": row[0],
+            "message_id": row[1],
+            "chat_id": row[2],
+            "chat_title": row[3],
+            "text_preview": text_preview,
+            "text_full": text,
+            "is_relevant": bool(row[5]),
+            "ai_reason": row[6],
+            "status": row[7],
+            "processed_at": row[8],
+            "contact_username": row[9],
+            "contact_id": str(crm_contact[0]) if crm_contact else None,
+            "contact_name": crm_contact[1] if crm_contact else None
+        }
+
+        return {"success": True, "vacancy": vacancy}
+
+    except Exception as e:
+        logger.error(f"Error getting vacancy: {e}")
+        return {"success": False, "error": str(e)}

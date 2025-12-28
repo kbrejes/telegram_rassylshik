@@ -102,3 +102,12 @@ async def candidate_page(request: Request):
         "candidate_profile_new.html",
         {"request": request}
     )
+
+
+@router.get("/vacancy/{vacancy_id}")
+async def vacancy_detail_page(request: Request, vacancy_id: int):
+    """Vacancy detail full page"""
+    return templates.TemplateResponse(
+        "vacancy_detail_new.html",
+        {"request": request, "vacancy_id": vacancy_id}
+    )

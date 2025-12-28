@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }" x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vacancy Details - Job Notification Bot</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/js/cache.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: { DEFAULT: 'hsl(240 5.9% 10%)', foreground: 'hsl(240 4.8% 95.9%)', accent: 'hsl(240 3.7% 15.9%)', border: 'hsl(240 3.7% 15.9%)' },
+                        accent: '#8b5cf6',
+                        dark: { 950: '#09090b', 900: '#0c0c0f', 850: '#111114', 800: '#18181b', 700: '#27272a', 600: '#3f3f46' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+            .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+            .scrollbar-thin::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        }
+    </style>
+    <script>if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark');</script>
+</head>
+<body class="h-full bg-gray-50 dark:bg-dark-950 transition-colors duration-200">
+    <div class="flex h-full">
+        {% set active_page = 'channels' %}
+        {% include 'partials/sidebar_new.html' %}
+
+        <main class="flex-1 flex flex-col min-h-screen min-w-0 lg:ml-0 overflow-x-hidden">
+            <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-800 border-b border-gray-200 dark:border-dark-700">
+                <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 lg:hidden">
+                    <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+                <a href="/" class="p-2 -ml-2 lg:ml-0 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors" title="Back to channels">
+                    <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                </a>
+                <div class="flex items-center gap-3 flex-1 min-w-0">
+                    <h1 class="text-lg font-semibold text-gray-900 dark:text-white truncate">Vacancy Details</h1>
+                    <div id="header-status-badge"></div>
+                </div>
+            </header>
+
+            <div class="flex-1 flex flex-col p-4 lg:p-8 overflow-hidden">
+                <div id="loading" class="flex items-center justify-center py-12 text-gray-400">
+                    <svg class="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    Loading vacancy...
+                </div>
+
+                <div id="error" class="hidden text-center py-12">
+                    <div class="text-red-500 mb-4">Failed to load vacancy</div>
+                    <a href="/" class="text-violet-600 dark:text-violet-400 hover:underline">Back to channels</a>
+                </div>
+
+                <div id="content" class="hidden flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
+                    <!-- Contact sidebar (desktop) -->
+                    <div id="contacts-sidebar" class="hidden lg:flex flex-col gap-2 flex-shrink-0"></div>
+
+                    <!-- Main content -->
+                    <div class="flex-1 flex flex-col gap-4 min-w-0 min-h-0">
+                        <!-- Contact pills (mobile) -->
+                        <div id="contacts-mobile" class="flex gap-2 overflow-x-auto pb-2 lg:hidden"></div>
+
+                        <!-- AI Reason -->
+                        <div class="bg-violet-50 dark:bg-violet-900/20 rounded-xl p-4 flex-shrink-0">
+                            <div class="flex items-start gap-3">
+                                <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-violet-500 dark:text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                </svg>
+                                <div>
+                                    <div class="text-sm font-medium text-violet-700 dark:text-violet-300 mb-1">AI Analysis</div>
+                                    <div id="ai-reason" class="text-sm text-violet-600 dark:text-violet-400"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CRM Conversation -->
+                        <div class="bg-white dark:bg-dark-800 rounded-xl flex-1 flex flex-col min-h-0 overflow-hidden">
+                            <div class="px-4 py-3 border-b border-gray-100 dark:border-dark-700 flex items-center justify-between flex-shrink-0">
+                                <div class="flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                    </svg>
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white">Conversation</span>
+                                </div>
+                                <span id="contact-name" class="text-xs text-gray-400"></span>
+                            </div>
+                            <div id="message-log" class="flex-1 overflow-y-auto p-4 scrollbar-thin">
+                                <div class="flex items-center justify-center py-6 text-sm text-gray-400 dark:text-gray-500">
+                                    <svg class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Loading conversation...
+                                </div>
+                            </div>
+                            <div id="chat-input-container" class="hidden px-4 py-3 border-t border-gray-100 dark:border-dark-700 flex-shrink-0">
+                                <div class="flex gap-2">
+                                    <input type="text" id="chat-message-input" placeholder="Type a message..."
+                                        class="flex-1 px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none text-sm"
+                                        onkeydown="if(event.key === 'Enter') sendChatMessage()">
+                                    <button onclick="sendChatMessage()" class="px-4 py-2.5 rounded-lg bg-accent text-white hover:bg-violet-600 transition flex-shrink-0">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Source Text -->
+                        <details class="group bg-white dark:bg-dark-800 rounded-xl overflow-hidden flex-shrink-0">
+                            <summary class="flex items-center justify-between px-4 py-3 cursor-pointer select-none hover:bg-gray-50 dark:hover:bg-dark-700 transition-colors">
+                                <div class="flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-gray-400 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Source text</span>
+                                </div>
+                                <span id="source-channel" class="text-xs text-gray-400 dark:text-gray-500"></span>
+                            </summary>
+                            <div id="source-text" class="px-4 pb-4 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-64 overflow-y-auto scrollbar-thin"></div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const vacancyId = {{ vacancy_id }};
+        let currentVacancy = null;
+        let currentContactId = null;
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            document.getElementById('sidebar-overlay').classList.toggle('hidden');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadVacancy() {
+            try {
+                const response = await fetch(`/api/vacancies/${vacancyId}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load vacancy');
+                }
+
+                currentVacancy = data.vacancy;
+                currentContactId = data.vacancy.contact_id;
+                renderVacancy(data.vacancy);
+
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('content').classList.remove('hidden');
+
+                // Load conversation
+                loadConversation();
+            } catch (error) {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('error').classList.remove('hidden');
+                console.error('Error loading vacancy:', error);
+            }
+        }
+
+        function renderVacancy(v) {
+            // Status badge in header
+            const statusBadge = document.getElementById('header-status-badge');
+            if (v.is_relevant) {
+                statusBadge.innerHTML = `<span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Passed</span>`;
+            } else {
+                const label = getFilteredLabel(v.ai_reason);
+                statusBadge.innerHTML = `<span class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">${label}</span>`;
+            }
+
+            // AI reason
+            document.getElementById('ai-reason').textContent = v.ai_reason || 'No analysis available';
+
+            // Source channel and text
+            document.getElementById('source-channel').textContent = v.chat_title || 'Unknown';
+            document.getElementById('source-text').textContent = v.text_full || v.text_preview || 'No text available';
+
+            // Contact name
+            if (v.contact_name) {
+                document.getElementById('contact-name').textContent = v.contact_name;
+            }
+
+            // Contact sidebar (for now just one contact per vacancy)
+            if (v.contact_name || v.contact_username) {
+                const initials = v.contact_name
+                    ? v.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+                    : (v.contact_username ? v.contact_username[0].toUpperCase() : '?');
+
+                const contactHtml = `
+                    <button class="w-12 h-12 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-sm font-medium text-violet-700 dark:text-violet-300 ring-2 ring-accent ring-offset-2 dark:ring-offset-dark-950" title="${escapeHtml(v.contact_name || v.contact_username || 'Contact')}">
+                        ${initials}
+                    </button>
+                `;
+                document.getElementById('contacts-sidebar').innerHTML = contactHtml;
+                document.getElementById('contacts-sidebar').classList.remove('hidden');
+
+                // Mobile version
+                document.getElementById('contacts-mobile').innerHTML = `
+                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium">
+                        <span class="w-6 h-6 rounded-full bg-violet-200 dark:bg-violet-800 flex items-center justify-center text-xs">${initials}</span>
+                        ${escapeHtml(v.contact_name || v.contact_username)}
+                    </div>
+                `;
+            }
+        }
+
+        function getFilteredLabel(reason) {
+            if (!reason) return 'Filtered';
+            const r = reason.toLowerCase();
+            if (r.includes('salary') || r.includes('зарплат')) return 'Low salary';
+            if (r.includes('remote') || r.includes('office') || r.includes('офис') || r.includes('удален')) return 'Not remote';
+            if (r.includes('recruiter') || r.includes('hr') || r.includes('рекрутер')) return 'Recruiter';
+            if (r.includes('experience') || r.includes('опыт') || r.includes('senior') || r.includes('lead')) return 'Experience';
+            if (r.includes('location') || r.includes('локац') || r.includes('город')) return 'Location';
+            if (r.includes('stack') || r.includes('технолог') || r.includes('python') || r.includes('java')) return 'Tech stack';
+            return 'Filtered';
+        }
+
+        async function loadConversation() {
+            const messageLog = document.getElementById('message-log');
+
+            try {
+                const response = await fetch(`/api/vacancies/messages/${vacancyId}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    messageLog.innerHTML = `<div class="text-center text-gray-400 py-6">Failed to load conversation</div>`;
+                    return;
+                }
+
+                if (!data.conversations || data.conversations.length === 0 || !data.conversations[0].messages?.length) {
+                    messageLog.innerHTML = `<div class="text-center text-gray-400 py-6">No conversation yet</div>`;
+                    return;
+                }
+
+                const conv = data.conversations[0];
+                currentContactId = conv.contact_id;
+
+                // Show chat input
+                document.getElementById('chat-input-container').classList.remove('hidden');
+
+                // Render messages
+                messageLog.innerHTML = conv.messages.map(msg => {
+                    const isBot = msg.role === 'assistant';
+                    return `
+                        <div class="flex ${isBot ? 'justify-start' : 'justify-end'} mb-3">
+                            <div class="${isBot ? 'bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white' : 'bg-accent text-white'} rounded-2xl px-4 py-2.5 max-w-[80%]">
+                                <div class="text-sm whitespace-pre-wrap">${escapeHtml(msg.content)}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Scroll to bottom
+                messageLog.scrollTop = messageLog.scrollHeight;
+
+            } catch (error) {
+                console.error('Error loading conversation:', error);
+                messageLog.innerHTML = `<div class="text-center text-red-400 py-6">Error loading conversation</div>`;
+            }
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-message-input');
+            const message = input?.value?.trim();
+            if (!message || !currentContactId) return;
+
+            input.value = '';
+            input.disabled = true;
+
+            // Add message to UI immediately
+            const messageLog = document.getElementById('message-log');
+            messageLog.innerHTML += `
+                <div class="flex justify-end mb-3">
+                    <div class="bg-accent text-white rounded-2xl px-4 py-2.5 max-w-[80%]">
+                        <div class="text-sm whitespace-pre-wrap">${escapeHtml(message)}</div>
+                    </div>
+                </div>
+            `;
+            messageLog.scrollTop = messageLog.scrollHeight;
+
+            try {
+                const response = await fetch('/api/vacancies/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contact_id: currentContactId, message })
+                });
+                const data = await response.json();
+
+                if (!data.success) {
+                    console.error('Failed to send message:', data.error);
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+            } finally {
+                input.disabled = false;
+                input.focus();
+            }
+        }
+
+        // Load on page ready
+        document.addEventListener('DOMContentLoaded', loadVacancy);
+    </script>
+</body>
+</html>
