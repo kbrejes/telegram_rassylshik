@@ -550,6 +550,20 @@ class CRMHandler:
             # Привязываем агента к теме
             if topic_id:
                 self.topic_to_agent[topic_id] = agent
+                # Save agent binding to DB
+                try:
+                    from pathlib import Path
+                    agent_name = Path(agent.session_name).stem if agent else None
+                    await db.save_topic_contact(
+                        group_id=conv_manager.group_id,
+                        topic_id=topic_id,
+                        contact_id=contact_user.id,
+                        contact_name=full_name[:128],
+                        agent_session=agent_name,
+                        vacancy_id=vacancy_id
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save agent binding: {e}")
 
             # Инициализируем AI контекст
             if auto_response_sent and topic_id:
