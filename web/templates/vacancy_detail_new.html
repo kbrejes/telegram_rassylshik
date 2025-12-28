@@ -33,7 +33,13 @@
         /* Collapse sidebar by default and don't take space */
         #sidebar { transform: translateX(-100%) !important; position: fixed !important; }
         #sidebar.sidebar-open { transform: translateX(0) !important; }
-        /* Tooltip styles */
+        /* Mobile viewport fix for Safari */
+        @supports (height: 100dvh) {
+            .h-full, html, body { height: 100dvh !important; }
+        }
+        /* Safe area for mobile browsers */
+        .pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 0), 12px); }
+        /* Tooltip styles - click to toggle on mobile */
         .tooltip-container { position: relative; display: inline-flex; }
         .tooltip-content {
             visibility: hidden;
@@ -41,6 +47,7 @@
             position: absolute;
             top: 100%;
             left: 0;
+            right: auto;
             margin-top: 8px;
             padding: 10px 14px;
             background: #18181b;
@@ -49,16 +56,22 @@
             font-size: 13px;
             line-height: 1.5;
             width: max-content;
-            max-width: min(400px, calc(100vw - 32px));
+            max-width: min(350px, calc(100vw - 24px));
             z-index: 100;
             transition: opacity 0.15s, visibility 0.15s;
             box-shadow: 0 4px 20px rgba(0,0,0,0.25);
         }
-        .tooltip-container:hover .tooltip-content,
-        .tooltip-container:focus-within .tooltip-content { visibility: visible; opacity: 1; }
+        /* Keep tooltip within viewport */
+        .tooltip-right .tooltip-content { left: auto; right: 0; }
+        /* Show on hover (desktop) */
+        @media (hover: hover) {
+            .tooltip-container:hover .tooltip-content { visibility: visible; opacity: 1; }
+        }
+        /* Show when active (mobile tap) */
+        .tooltip-container.active .tooltip-content { visibility: visible; opacity: 1; }
         /* Source tooltip - larger and scrollable */
         .tooltip-source {
-            max-height: min(300px, 50vh);
+            max-height: min(250px, 40vh);
             overflow-y: auto;
         }
     </style>
@@ -125,7 +138,7 @@
                                     Loading conversation...
                                 </div>
                             </div>
-                            <div id="chat-input-container" class="hidden px-4 py-3 border-t border-gray-100 dark:border-dark-700 flex-shrink-0">
+                            <div id="chat-input-container" class="hidden px-4 py-3 pb-safe border-t border-gray-100 dark:border-dark-700 flex-shrink-0">
                                 <div class="flex gap-2">
                                     <input type="text" id="chat-message-input" placeholder="Type a message..."
                                         class="flex-1 px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none text-sm"
@@ -163,6 +176,28 @@
             div.textContent = text;
             return div.innerHTML;
         }
+
+        // Tooltip click handling for mobile
+        function toggleTooltip(event) {
+            event.stopPropagation();
+            const container = event.currentTarget.closest('.tooltip-container');
+            const wasActive = container.classList.contains('active');
+
+            // Close all tooltips
+            document.querySelectorAll('.tooltip-container.active').forEach(t => t.classList.remove('active'));
+
+            // Toggle this one
+            if (!wasActive) {
+                container.classList.add('active');
+            }
+        }
+
+        // Close tooltips when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.tooltip-container')) {
+                document.querySelectorAll('.tooltip-container.active').forEach(t => t.classList.remove('active'));
+            }
+        });
 
         async function loadVacancy() {
             try {
@@ -309,11 +344,11 @@
             if (v.is_relevant) {
                 statusBadge.innerHTML = `
                     <div class="tooltip-container">
-                        <span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 cursor-help">Passed</span>
+                        <span onclick="toggleTooltip(event)" class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 cursor-help">Passed</span>
                         <div class="tooltip-content">${aiReason}</div>
                     </div>
-                    <div class="tooltip-container">
-                        <button class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
+                    <div class="tooltip-container tooltip-right">
+                        <button onclick="toggleTooltip(event)" class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
                             </svg>
@@ -328,11 +363,11 @@
                 const label = getFilteredLabel(v.ai_reason);
                 statusBadge.innerHTML = `
                     <div class="tooltip-container">
-                        <span class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 cursor-help">${label}</span>
+                        <span onclick="toggleTooltip(event)" class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 cursor-help">${label}</span>
                         <div class="tooltip-content">${aiReason}</div>
                     </div>
-                    <div class="tooltip-container">
-                        <button class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
+                    <div class="tooltip-container tooltip-right">
+                        <button onclick="toggleTooltip(event)" class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
                             </svg>

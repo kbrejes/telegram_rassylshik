@@ -510,7 +510,7 @@
                         const ledClass = v.has_messages ? 'bg-cyan-500' : 'bg-gray-300 dark:bg-dark-600';
 
                         html += `
-                            <tr class="hover:bg-gray-100 dark:hover:bg-dark-700 active:bg-gray-200 dark:active:bg-dark-600 cursor-pointer transition-colors" onclick="showVacancyDetails(${idx})">
+                            <tr class="hover:bg-gray-100 dark:hover:bg-dark-700 active:bg-gray-200 dark:active:bg-dark-600 cursor-pointer transition-colors" onclick="openVacancyPage(${v.id})">
                                 <td class="px-3 py-2 text-gray-700 dark:text-gray-300 truncate max-w-[150px]" title="${displayName}">${displayName}</td>
                                 <td class="px-3 py-2 text-right">
                                     <div class="flex items-center justify-end gap-1.5">
@@ -547,6 +547,17 @@
 
         let currentVacancyIdx = null;
         let currentContactId = null;
+
+        // Navigate to full vacancy page
+        function openVacancyPage(vacancyId) {
+            // Pre-cache the vacancy data for instant load
+            const vacancy = peekVacancies.find(v => v.id === vacancyId);
+            if (vacancy) {
+                AppCache.set(`vacancy_${vacancyId}`, { success: true, vacancy }, 60000);
+                AppCache.set('recent_vacancies', peekVacancies, 30000);
+            }
+            window.location.href = `/vacancy/${vacancyId}`;
+        }
 
         async function showVacancyDetails(idx) {
             const v = peekVacancies[idx];
