@@ -440,12 +440,19 @@
             input.value = '';
             input.disabled = true;
 
-            // Add message to UI immediately
+            // Add message to UI immediately with pending state
             const messageLog = document.getElementById('message-log');
+            const msgId = 'msg-' + Date.now();
             messageLog.innerHTML += `
-                <div class="flex justify-end mb-3">
-                    <div class="bg-accent text-white rounded-2xl px-4 py-2.5 max-w-[80%]">
+                <div id="${msgId}" class="flex justify-end mb-3">
+                    <div class="bg-accent text-white rounded-2xl px-4 py-2.5 max-w-[80%] relative">
                         <div class="text-sm whitespace-pre-wrap">${escapeHtml(message)}</div>
+                        <div class="sending-indicator absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white/20 flex items-center justify-center">
+                            <svg class="w-2.5 h-2.5 animate-spin text-white/70" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                        </div>
                     </div>
                 </div>
             `;
@@ -458,12 +465,35 @@
                     body: JSON.stringify({ contact_id: currentContactId, message })
                 });
                 const data = await response.json();
+                const msgEl = document.getElementById(msgId);
 
-                if (!data.success) {
-                    console.error('Failed to send message:', data.error);
+                if (data.success) {
+                    // Remove sending indicator on success
+                    msgEl?.querySelector('.sending-indicator')?.remove();
+                } else {
+                    // Show error state
+                    if (msgEl) {
+                        const bubble = msgEl.querySelector('.bg-accent');
+                        bubble.classList.remove('bg-accent');
+                        bubble.classList.add('bg-red-500');
+                        const indicator = msgEl.querySelector('.sending-indicator');
+                        if (indicator) {
+                            indicator.innerHTML = `<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`;
+                            indicator.classList.remove('bg-white/20');
+                            indicator.classList.add('bg-red-700');
+                            indicator.title = data.error || 'Failed to send';
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Error sending message:', error);
+                const msgEl = document.getElementById(msgId);
+                if (msgEl) {
+                    const bubble = msgEl.querySelector('.bg-accent');
+                    bubble?.classList.remove('bg-accent');
+                    bubble?.classList.add('bg-red-500');
+                    msgEl.querySelector('.sending-indicator')?.remove();
+                }
             } finally {
                 input.disabled = false;
                 input.focus();
