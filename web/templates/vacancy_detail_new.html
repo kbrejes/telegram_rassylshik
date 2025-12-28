@@ -146,6 +146,7 @@
         const vacancyId = {{ vacancy_id }};
         let currentVacancy = null;
         let currentContactId = null;
+        let recentVacancies = [];
 
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('-translate-x-full');
@@ -161,16 +162,29 @@
 
         async function loadVacancy() {
             try {
-                const response = await fetch(`/api/vacancies/${vacancyId}`);
-                const data = await response.json();
+                // Load current vacancy and recent vacancies in parallel
+                const [vacancyRes, recentRes] = await Promise.all([
+                    fetch(`/api/vacancies/${vacancyId}`),
+                    fetch('/api/vacancies/log?limit=20&filter_status=passed')
+                ]);
 
-                if (!data.success) {
-                    throw new Error(data.error || 'Failed to load vacancy');
+                const vacancyData = await vacancyRes.json();
+                const recentData = await recentRes.json();
+
+                if (!vacancyData.success) {
+                    throw new Error(vacancyData.error || 'Failed to load vacancy');
                 }
 
-                currentVacancy = data.vacancy;
-                currentContactId = data.vacancy.contact_id;
-                renderVacancy(data.vacancy);
+                currentVacancy = vacancyData.vacancy;
+                currentContactId = vacancyData.vacancy.contact_id;
+
+                // Store recent vacancies with contacts
+                if (recentData.success) {
+                    recentVacancies = recentData.vacancies.filter(v => v.has_messages || v.contact_name || v.contact_username);
+                }
+
+                renderVacancy(vacancyData.vacancy);
+                renderContactCircles();
 
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('content').classList.remove('hidden');
@@ -182,6 +196,49 @@
                 document.getElementById('error').classList.remove('hidden');
                 console.error('Error loading vacancy:', error);
             }
+        }
+
+        function renderContactCircles() {
+            const contacts = recentVacancies.slice(0, 10);
+            if (contacts.length === 0) return;
+
+            // Desktop sidebar
+            const circlesHtml = contacts.map(v => {
+                const isActive = v.id === vacancyId;
+                const initials = v.contact_name
+                    ? v.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+                    : (v.contact_username ? v.contact_username[0].toUpperCase() : '?');
+                const activeClass = isActive
+                    ? 'ring-2 ring-accent ring-offset-2 dark:ring-offset-dark-950'
+                    : 'opacity-60 hover:opacity-100';
+                return `
+                    <a href="/vacancy/${v.id}" class="w-10 h-10 rounded-full bg-gray-200 dark:bg-dark-600 flex items-center justify-center text-xs font-medium text-gray-700 dark:text-gray-300 transition-all ${activeClass}" title="${escapeHtml(v.contact_name || v.contact_username || 'Contact')}">
+                        ${initials}
+                    </a>
+                `;
+            }).join('');
+
+            document.getElementById('contacts-sidebar').innerHTML = circlesHtml;
+            document.getElementById('contacts-sidebar').classList.remove('hidden');
+
+            // Mobile horizontal scroll
+            const mobileHtml = contacts.map(v => {
+                const isActive = v.id === vacancyId;
+                const initials = v.contact_name
+                    ? v.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+                    : (v.contact_username ? v.contact_username[0].toUpperCase() : '?');
+                const activeClass = isActive
+                    ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                    : 'bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400';
+                return `
+                    <a href="/vacancy/${v.id}" class="flex items-center gap-2 px-3 py-1.5 rounded-full ${activeClass} text-sm font-medium whitespace-nowrap transition-all">
+                        <span class="w-6 h-6 rounded-full ${isActive ? 'bg-violet-200 dark:bg-violet-800' : 'bg-gray-200 dark:bg-dark-600'} flex items-center justify-center text-xs">${initials}</span>
+                        ${escapeHtml(v.contact_name || v.contact_username || 'Contact')}
+                    </a>
+                `;
+            }).join('');
+
+            document.getElementById('contacts-mobile').innerHTML = mobileHtml;
         }
 
         function renderVacancy(v) {
@@ -204,29 +261,6 @@
             // Contact name
             if (v.contact_name) {
                 document.getElementById('contact-name').textContent = v.contact_name;
-            }
-
-            // Contact sidebar (for now just one contact per vacancy)
-            if (v.contact_name || v.contact_username) {
-                const initials = v.contact_name
-                    ? v.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
-                    : (v.contact_username ? v.contact_username[0].toUpperCase() : '?');
-
-                const contactHtml = `
-                    <button class="w-12 h-12 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-sm font-medium text-violet-700 dark:text-violet-300 ring-2 ring-accent ring-offset-2 dark:ring-offset-dark-950" title="${escapeHtml(v.contact_name || v.contact_username || 'Contact')}">
-                        ${initials}
-                    </button>
-                `;
-                document.getElementById('contacts-sidebar').innerHTML = contactHtml;
-                document.getElementById('contacts-sidebar').classList.remove('hidden');
-
-                // Mobile version
-                document.getElementById('contacts-mobile').innerHTML = `
-                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-sm font-medium">
-                        <span class="w-6 h-6 rounded-full bg-violet-200 dark:bg-violet-800 flex items-center justify-center text-xs">${initials}</span>
-                        ${escapeHtml(v.contact_name || v.contact_username)}
-                    </div>
-                `;
             }
         }
 
