@@ -11,6 +11,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from auth import bot_auth_manager
 from src.session_config import get_bot_session_path
+from src.connection_status import status_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/bot", tags=["bot-auth"])
@@ -105,10 +106,14 @@ async def verify_bot_code(request: BotAuthVerifyCodeRequest):
         logger.info("Проверка кода для основного бота")
         result = await bot_auth_manager.verify_code(request.code)
 
-        # Если успешно - обновляем bot_state
+        # Если успешно - обновляем bot_state и status_manager
         if result.get("authenticated"):
             bot_state["status"] = "authenticated"
             bot_state["error"] = None
+            # Update the file-based status for immediate UI reflection
+            user_info = result.get("user_info")
+            status_manager.update_bot_status(True, True, user_info)
+            logger.info("Bot status updated after successful code verification")
 
         return result
     except Exception as e:
@@ -123,10 +128,14 @@ async def verify_bot_password(request: BotAuthVerifyPasswordRequest):
         logger.info("Проверка 2FA пароля для основного бота")
         result = await bot_auth_manager.verify_password(request.password)
 
-        # Если успешно - обновляем bot_state
+        # Если успешно - обновляем bot_state и status_manager
         if result.get("authenticated"):
             bot_state["status"] = "authenticated"
             bot_state["error"] = None
+            # Update the file-based status for immediate UI reflection
+            user_info = result.get("user_info")
+            status_manager.update_bot_status(True, True, user_info)
+            logger.info("Bot status updated after successful 2FA verification")
 
         return result
     except Exception as e:
@@ -171,6 +180,9 @@ async def reset_bot_session():
             bot_state["status"] = "needs_auth"
             bot_state["error"] = None
             bot_state["user_info"] = None
+            # Update file-based status
+            status_manager.update_bot_status(False, False, None)
+            logger.info("Bot status cleared after session reset")
 
         return result
     except Exception as e:
