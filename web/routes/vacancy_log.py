@@ -288,12 +288,12 @@ async def send_crm_message(request: SendMessageRequest):
         import asyncio
         for _ in range(10):  # Wait up to 5 seconds
             await asyncio.sleep(0.5)
-            status = command_queue.get_command_status(command_id)
-            if status and status.get("status") in ["completed", "failed"]:
-                if status.get("status") == "completed":
+            cmd = command_queue.get_command_status(command_id)
+            if cmd and cmd.status in ["completed", "failed"]:
+                if cmd.status == "completed":
                     return {"success": True}
                 else:
-                    return {"success": False, "error": status.get("error", "Unknown error")}
+                    return {"success": False, "error": cmd.result_message or "Unknown error"}
 
         return {"success": False, "error": "Timeout waiting for message to be sent"}
 

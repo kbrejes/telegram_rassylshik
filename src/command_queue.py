@@ -21,8 +21,8 @@ COMMAND_FILE = Path(__file__).parent.parent / "configs" / "connection_commands.j
 class Command:
     """A command to be executed by the bot."""
     id: str
-    type: str  # connect_agent | disconnect_agent | delete_agent | connect_all | disconnect_all | health_check
-    target: str  # session_name or "all"
+    type: str  # connect_agent | disconnect_agent | delete_agent | connect_all | disconnect_all | health_check | send_crm_message
+    target: any  # session_name, "all", or dict for complex commands
     created_at: str
     status: str = "pending"  # pending | processing | completed | failed
     result_message: Optional[str] = None
@@ -75,13 +75,13 @@ class CommandQueue:
             json.dump({"commands": commands}, f, ensure_ascii=False, indent=2)
         temp_file.replace(self.command_file)
 
-    def add_command(self, command_type: str, target: str = "all") -> str:
+    def add_command(self, command_type: str, target: any = "all") -> str:
         """
         Add a command to the queue.
 
         Args:
-            command_type: Type of command (connect_agent, disconnect_agent, etc.)
-            target: Target session name or "all"
+            command_type: Type of command (connect_agent, disconnect_agent, send_crm_message, etc.)
+            target: Target session name, "all", or dict for complex commands
 
         Returns:
             Command ID
