@@ -30,11 +30,11 @@
     </style>
     <script>if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark');</script>
     <style>
-        /* Collapse sidebar by default on this page */
-        #sidebar { transform: translateX(-100%) !important; }
+        /* Collapse sidebar by default and don't take space */
+        #sidebar { transform: translateX(-100%) !important; position: fixed !important; }
         #sidebar.sidebar-open { transform: translateX(0) !important; }
         /* Tooltip styles */
-        .tooltip-container { position: relative; }
+        .tooltip-container { position: relative; display: inline-flex; }
         .tooltip-content {
             visibility: hidden;
             opacity: 0;
@@ -68,7 +68,7 @@
 
         <main class="flex-1 flex flex-col min-h-screen min-w-0 lg:ml-0 overflow-x-hidden">
             <header class="sticky top-0 z-30 flex items-center gap-4 px-4 py-3 bg-white dark:bg-dark-800 border-b border-gray-200 dark:border-dark-700">
-                <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 lg:hidden">
+                <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700">
                     <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                     </svg>
@@ -80,6 +80,7 @@
                 </a>
                 <div class="flex items-center gap-2 flex-1 min-w-0">
                     <div id="header-status-badge" class="flex items-center gap-2"></div>
+                    <div id="header-source-tooltip" class="hidden"></div>
                 </div>
                 <div class="flex items-center gap-1">
                     <a href="javascript:history.back()" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition-colors" title="Exit full page">
@@ -115,14 +116,9 @@
 
                     <!-- CRM Conversation -->
                         <div class="bg-white dark:bg-dark-800 rounded-xl flex-1 flex flex-col min-h-[300px] lg:min-h-0 overflow-hidden">
-                            <div class="px-4 py-3 border-b border-gray-100 dark:border-dark-700 flex items-center justify-between flex-shrink-0">
-                                <div class="flex items-center gap-2">
-                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                                    </svg>
-                                    <span class="text-sm font-medium text-gray-900 dark:text-white">Conversation</span>
-                                </div>
-                                <span id="contact-name" class="text-xs text-gray-400"></span>
+                            <div id="conversation-header" class="px-4 py-3 border-b border-gray-100 dark:border-dark-700 flex items-center gap-3 flex-shrink-0">
+                                <div id="contact-avatar" class="w-8 h-8 rounded-full bg-gray-200 dark:bg-dark-600 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-gray-300"></div>
+                                <span id="contact-name" class="text-sm font-medium text-gray-900 dark:text-white"></span>
                             </div>
                             <div id="message-log" class="flex-1 overflow-y-auto p-4 scrollbar-thin">
                                 <div class="flex items-center justify-center py-6 text-sm text-gray-400 dark:text-gray-500">
@@ -146,20 +142,6 @@
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Source Text -->
-                        <details class="group bg-white dark:bg-dark-800 rounded-xl overflow-hidden flex-shrink-0">
-                            <summary class="flex items-center justify-between px-4 py-3 cursor-pointer select-none hover:bg-gray-50 dark:hover:bg-dark-700 transition-colors">
-                                <div class="flex items-center gap-2">
-                                    <svg class="w-4 h-4 text-gray-400 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                                    </svg>
-                                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Source text</span>
-                                </div>
-                                <span id="source-channel" class="text-xs text-gray-400 dark:text-gray-500"></span>
-                            </summary>
-                            <div id="source-text" class="px-4 pb-4 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-64 overflow-y-auto scrollbar-thin"></div>
-                        </details>
                 </div>
             </div>
         </main>
@@ -297,14 +279,32 @@
                 `;
             }
 
-            // Source channel and text
-            document.getElementById('source-channel').textContent = v.chat_title || 'Unknown';
-            document.getElementById('source-text').textContent = v.text_full || v.text_preview || 'No text available';
+            // Source text tooltip in header
+            const sourceTooltip = document.getElementById('header-source-tooltip');
+            const sourceText = escapeHtml(v.text_full || v.text_preview || 'No text available');
+            const channelName = escapeHtml(v.chat_title || 'Unknown');
+            sourceTooltip.classList.remove('hidden');
+            sourceTooltip.innerHTML = `
+                <div class="tooltip-container">
+                    <button class="p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </button>
+                    <div class="tooltip-content" style="max-width: 400px; max-height: 300px; overflow-y: auto;">
+                        <div class="text-xs text-gray-400 mb-2">${channelName}</div>
+                        <div class="whitespace-pre-wrap">${sourceText}</div>
+                    </div>
+                </div>
+            `;
 
-            // Contact name
-            if (v.contact_name) {
-                document.getElementById('contact-name').textContent = v.contact_name;
-            }
+            // Contact avatar and name
+            const contactName = v.contact_name || v.contact_username || 'Contact';
+            const initials = v.contact_name
+                ? v.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+                : (v.contact_username ? v.contact_username[0].toUpperCase() : '?');
+            document.getElementById('contact-avatar').textContent = initials;
+            document.getElementById('contact-name').textContent = contactName;
         }
 
         function getFilteredLabel(reason) {
