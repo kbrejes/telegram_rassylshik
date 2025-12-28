@@ -472,11 +472,13 @@
                 document.getElementById('chat-input-container').classList.remove('hidden');
 
                 // Render messages
+                // From operator's view: our messages (assistant) on right, their messages (user) on left
                 messageLog.innerHTML = conv.messages.map(msg => {
-                    const isBot = msg.role === 'assistant';
+                    if (msg.role === 'system') return ''; // Skip system messages
+                    const isOurs = msg.role === 'assistant';
                     return `
-                        <div class="flex ${isBot ? 'justify-start' : 'justify-end'} mb-3">
-                            <div class="${isBot ? 'bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white' : 'bg-accent text-white'} rounded-2xl px-4 py-2.5 max-w-[80%]">
+                        <div class="flex ${isOurs ? 'justify-end' : 'justify-start'} mb-3">
+                            <div class="${isOurs ? 'bg-accent text-white' : 'bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white'} rounded-2xl px-4 py-2.5 max-w-[80%]">
                                 <div class="text-sm whitespace-pre-wrap">${escapeHtml(msg.content)}</div>
                             </div>
                         </div>
