@@ -568,6 +568,57 @@
             }
         }
 
+        // Swipe gesture support for mobile
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchEndX = 0;
+        let touchEndY = 0;
+        const minSwipeDistance = 80;
+
+        function handleSwipe() {
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+
+            // Only trigger if horizontal swipe is dominant and long enough
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > minSwipeDistance) {
+                const contacts = recentVacancies.slice(0, 10);
+                const currentIndex = contacts.findIndex(v => v.id === currentVacancyId);
+
+                if (currentIndex === -1) return;
+
+                if (deltaX < 0) {
+                    // Swipe left -> next chat
+                    const nextIndex = currentIndex + 1;
+                    if (nextIndex < contacts.length) {
+                        switchVacancy(contacts[nextIndex].id);
+                    }
+                } else {
+                    // Swipe right -> previous chat
+                    const prevIndex = currentIndex - 1;
+                    if (prevIndex >= 0) {
+                        switchVacancy(contacts[prevIndex].id);
+                    }
+                }
+            }
+        }
+
+        // Add touch listeners to the main content area
+        document.addEventListener('DOMContentLoaded', () => {
+            const mainContent = document.querySelector('main');
+            if (mainContent) {
+                mainContent.addEventListener('touchstart', (e) => {
+                    touchStartX = e.changedTouches[0].screenX;
+                    touchStartY = e.changedTouches[0].screenY;
+                }, { passive: true });
+
+                mainContent.addEventListener('touchend', (e) => {
+                    touchEndX = e.changedTouches[0].screenX;
+                    touchEndY = e.changedTouches[0].screenY;
+                    handleSwipe();
+                }, { passive: true });
+            }
+        });
+
         // Load on page ready
         document.addEventListener('DOMContentLoaded', () => {
             loadVacancy();
