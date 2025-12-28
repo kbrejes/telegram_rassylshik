@@ -149,10 +149,13 @@
     </div>
 
     <script>
-        const vacancyId = {{ vacancy_id }};
+        let currentVacancyId = {{ vacancy_id }};
         let currentVacancy = null;
         let currentContactId = null;
         let recentVacancies = [];
+
+        // Set initial history state
+        history.replaceState({ vacancyId: currentVacancyId }, '', `/vacancy/${currentVacancyId}`);
 
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('sidebar-open');
@@ -169,7 +172,7 @@
         async function loadVacancy() {
             try {
                 // Try to load from cache first, then fetch fresh
-                const cachedVacancy = AppCache.get(`vacancy_${vacancyId}`);
+                const cachedVacancy = AppCache.get(`vacancy_${currentVacancyId}`);
                 const cachedRecent = AppCache.get('recent_vacancies');
 
                 if (cachedVacancy && cachedRecent) {
@@ -186,7 +189,7 @@
 
                 // Fetch fresh data in background
                 const [vacancyRes, recentRes] = await Promise.all([
-                    fetch(`/api/vacancies/${vacancyId}`),
+                    fetch(`/api/vacancies/${currentVacancyId}`),
                     fetch('/api/vacancies/log?limit=20&filter_status=passed')
                 ]);
 
@@ -199,7 +202,7 @@
                 }
 
                 // Cache the data
-                AppCache.set(`vacancy_${vacancyId}`, vacancyData, 60000);
+                AppCache.set(`vacancy_${currentVacancyId}`, vacancyData, 60000);
                 if (recentData.success) {
                     AppCache.set('recent_vacancies', recentData.vacancies, 30000);
                 }
@@ -230,7 +233,7 @@
             if (contacts.length === 0) return;
 
             const tabsHtml = contacts.map(v => {
-                const isActive = v.id === vacancyId;
+                const isActive = v.id === currentVacancyId;
                 const initials = v.contact_name
                     ? v.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
                     : (v.contact_username ? v.contact_username[0].toUpperCase() : '?');
@@ -238,15 +241,68 @@
                     ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
                     : 'bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600';
                 return `
-                    <a href="/vacancy/${v.id}" class="flex items-center gap-2 px-3 py-1.5 rounded-full ${activeClass} text-sm font-medium whitespace-nowrap transition-all">
+                    <button onclick="switchVacancy(${v.id})" class="flex items-center gap-2 px-3 py-1.5 rounded-full ${activeClass} text-sm font-medium whitespace-nowrap transition-all">
                         <span class="w-6 h-6 rounded-full ${isActive ? 'bg-violet-200 dark:bg-violet-800' : 'bg-gray-200 dark:bg-dark-600'} flex items-center justify-center text-xs">${initials}</span>
                         ${escapeHtml(v.contact_name || v.contact_username || 'Contact')}
-                    </a>
+                    </button>
                 `;
             }).join('');
 
             document.getElementById('contacts-tabs').innerHTML = tabsHtml;
         }
+
+        async function switchVacancy(newId) {
+            if (newId === currentVacancyId) return;
+
+            currentVacancyId = newId;
+            history.pushState({ vacancyId: newId }, '', `/vacancy/${newId}`);
+
+            // Show loading in message log
+            document.getElementById('message-log').innerHTML = `
+                <div class="flex items-center justify-center py-6 text-sm text-gray-400 dark:text-gray-500">
+                    <svg class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading...
+                </div>
+            `;
+            document.getElementById('chat-input-container').classList.add('hidden');
+
+            // Update tabs immediately
+            renderContactCircles();
+
+            // Load new vacancy data
+            try {
+                const cachedVacancy = AppCache.get(`vacancy_${newId}`);
+                if (cachedVacancy) {
+                    currentVacancy = cachedVacancy.vacancy;
+                    currentContactId = cachedVacancy.vacancy.contact_id;
+                    renderVacancy(cachedVacancy.vacancy);
+                }
+
+                const response = await fetch(`/api/vacancies/${newId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    AppCache.set(`vacancy_${newId}`, data, 60000);
+                    currentVacancy = data.vacancy;
+                    currentContactId = data.vacancy.contact_id;
+                    renderVacancy(data.vacancy);
+                }
+
+                loadConversation();
+            } catch (error) {
+                console.error('Error switching vacancy:', error);
+            }
+        }
+
+        // Handle browser back/forward
+        window.addEventListener('popstate', (e) => {
+            if (e.state?.vacancyId) {
+                switchVacancy(e.state.vacancyId);
+            }
+        });
 
         function renderVacancy(v) {
             const statusBadge = document.getElementById('header-status-badge');
@@ -317,7 +373,7 @@
 
         async function loadConversation() {
             // Use cached fetch from cache.js
-            loadCachedVacancyMessages(vacancyId, (data) => {
+            loadCachedVacancyMessages(currentVacancyId, (data) => {
                 const messageLog = document.getElementById('message-log');
 
                 if (!data.success) {
