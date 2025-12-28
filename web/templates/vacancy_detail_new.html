@@ -418,34 +418,41 @@
             if (!container || !currentAgentSession) return;
 
             const agent = agentsStatus[currentAgentSession];
-            const agentName = agent?.user_info?.first_name || currentAgentSession;
+            const firstName = agent?.user_info?.first_name || '';
+            const lastName = agent?.user_info?.last_name || '';
+            const fullName = `${firstName} ${lastName}`.trim() || currentAgentSession;
             const agentUsername = agent?.user_info?.username;
             const isConnected = agent?.status === 'connected';
-            const isFloodWait = agent?.flood_wait_until;
+            const floodWaitUntil = agent?.flood_wait_until;
 
-            let statusColor = 'bg-gray-400';
             let statusText = 'Offline';
-            if (isConnected && !isFloodWait) {
-                statusColor = 'bg-green-500';
-                statusText = 'Active';
-            } else if (isFloodWait) {
-                statusColor = 'bg-amber-500';
-                statusText = 'Rate limited';
+            let statusClass = 'text-gray-400';
+            if (isConnected && !floodWaitUntil) {
+                statusText = 'Online';
+                statusClass = 'text-green-500';
+            } else if (floodWaitUntil) {
+                const remaining = Math.max(0, Math.floor((floodWaitUntil * 1000 - Date.now()) / 1000));
+                if (remaining > 0) {
+                    const hours = Math.floor(remaining / 3600);
+                    const mins = Math.floor((remaining % 3600) / 60);
+                    statusText = `Flood limit: ${hours}h ${mins}m`;
+                } else {
+                    statusText = 'Online';
+                }
+                statusClass = 'text-amber-500';
             }
 
             container.innerHTML = `
                 <div class="tooltip-container">
-                    <button onclick="toggleTooltip(event)" class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-gray-100 dark:bg-dark-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600 transition-colors">
-                        <span class="w-1.5 h-1.5 rounded-full ${statusColor}"></span>
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button onclick="toggleTooltip(event)" class="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                         </svg>
-                        <span>${escapeHtml(agentName)}</span>
                     </button>
                     <div class="tooltip-content">
-                        <div class="font-medium">${escapeHtml(agentName)}</div>
+                        <div class="font-medium">${escapeHtml(fullName)}</div>
                         ${agentUsername ? `<div class="text-gray-400">@${escapeHtml(agentUsername)}</div>` : ''}
-                        <div class="mt-1 text-xs">${statusText}</div>
+                        <div class="mt-1 text-xs ${statusClass}">${statusText}</div>
                     </div>
                 </div>
             `;
