@@ -293,6 +293,7 @@ class ChannelUpdateRequest(BaseModel):
     agents: Optional[List[AgentRequest]] = None
     auto_response_enabled: Optional[bool] = None
     auto_response_template: Optional[str] = None
+    ai_conversation_enabled: Optional[bool] = None
     prompts: Optional[PromptsRequest] = None
 
 

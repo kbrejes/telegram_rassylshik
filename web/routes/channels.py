@@ -227,6 +227,9 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
             channel.auto_response_enabled = data.auto_response_enabled
         if data.auto_response_template is not None:
             channel.auto_response_template = data.auto_response_template
+        if data.ai_conversation_enabled is not None:
+            channel.ai_conversation_enabled = data.ai_conversation_enabled
+            logger.info(f"  Updated ai_conversation_enabled to: {data.ai_conversation_enabled}")
 
         # Обновляем промпты если переданы
         if data.prompts is not None:
