@@ -48,7 +48,6 @@
                     </svg>
                 </a>
                 <div class="flex items-center gap-3 flex-1 min-w-0">
-                    <h1 class="text-lg font-semibold text-gray-900 dark:text-white truncate">Vacancy Details</h1>
                     <div id="header-status-badge"></div>
                 </div>
                 <div class="flex items-center gap-1">
@@ -79,14 +78,9 @@
                     <a href="/" class="text-violet-600 dark:text-violet-400 hover:underline">Back to channels</a>
                 </div>
 
-                <div id="content" class="hidden flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
-                    <!-- Contact sidebar (desktop) -->
-                    <div id="contacts-sidebar" class="hidden lg:flex flex-col gap-2 flex-shrink-0"></div>
-
-                    <!-- Main content -->
-                    <div class="flex-1 flex flex-col gap-4 min-w-0 min-h-0">
-                        <!-- Contact pills (mobile) -->
-                        <div id="contacts-mobile" class="flex gap-2 overflow-x-auto pb-2 lg:hidden"></div>
+                <div id="content" class="hidden flex-1 flex flex-col gap-4 min-h-0">
+                    <!-- Contact tabs -->
+                    <div id="contacts-tabs" class="flex gap-2 overflow-x-auto pb-2 flex-shrink-0"></div>
 
                         <!-- AI Reason -->
                         <div class="bg-violet-50 dark:bg-violet-900/20 rounded-xl p-3 flex-shrink-0">
@@ -145,7 +139,6 @@
                             </summary>
                             <div id="source-text" class="px-4 pb-4 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-64 overflow-y-auto scrollbar-thin"></div>
                         </details>
-                    </div>
                 </div>
             </div>
         </main>
@@ -211,34 +204,14 @@
             const contacts = recentVacancies.slice(0, 10);
             if (contacts.length === 0) return;
 
-            // Desktop sidebar
-            const circlesHtml = contacts.map(v => {
-                const isActive = v.id === vacancyId;
-                const initials = v.contact_name
-                    ? v.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
-                    : (v.contact_username ? v.contact_username[0].toUpperCase() : '?');
-                const activeClass = isActive
-                    ? 'ring-2 ring-accent ring-offset-2 dark:ring-offset-dark-950'
-                    : 'opacity-60 hover:opacity-100';
-                return `
-                    <a href="/vacancy/${v.id}" class="w-10 h-10 rounded-full bg-gray-200 dark:bg-dark-600 flex items-center justify-center text-xs font-medium text-gray-700 dark:text-gray-300 transition-all ${activeClass}" title="${escapeHtml(v.contact_name || v.contact_username || 'Contact')}">
-                        ${initials}
-                    </a>
-                `;
-            }).join('');
-
-            document.getElementById('contacts-sidebar').innerHTML = circlesHtml;
-            document.getElementById('contacts-sidebar').classList.remove('hidden');
-
-            // Mobile horizontal scroll
-            const mobileHtml = contacts.map(v => {
+            const tabsHtml = contacts.map(v => {
                 const isActive = v.id === vacancyId;
                 const initials = v.contact_name
                     ? v.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
                     : (v.contact_username ? v.contact_username[0].toUpperCase() : '?');
                 const activeClass = isActive
                     ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
-                    : 'bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400';
+                    : 'bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600';
                 return `
                     <a href="/vacancy/${v.id}" class="flex items-center gap-2 px-3 py-1.5 rounded-full ${activeClass} text-sm font-medium whitespace-nowrap transition-all">
                         <span class="w-6 h-6 rounded-full ${isActive ? 'bg-violet-200 dark:bg-violet-800' : 'bg-gray-200 dark:bg-dark-600'} flex items-center justify-center text-xs">${initials}</span>
@@ -247,7 +220,7 @@
                 `;
             }).join('');
 
-            document.getElementById('contacts-mobile').innerHTML = mobileHtml;
+            document.getElementById('contacts-tabs').innerHTML = tabsHtml;
         }
 
         function renderVacancy(v) {
