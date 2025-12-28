@@ -40,24 +40,26 @@
             opacity: 0;
             position: absolute;
             top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
+            left: 0;
             margin-top: 8px;
-            padding: 8px 12px;
+            padding: 10px 14px;
             background: #18181b;
             color: #fff;
             border-radius: 8px;
             font-size: 13px;
-            line-height: 1.4;
-            max-width: 300px;
+            line-height: 1.5;
             width: max-content;
+            max-width: min(400px, calc(100vw - 32px));
             z-index: 100;
             transition: opacity 0.15s, visibility 0.15s;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
         }
-        .tooltip-container:hover .tooltip-content { visibility: visible; opacity: 1; }
-        @media (max-width: 640px) {
-            .tooltip-content { left: 0; transform: none; max-width: 250px; }
+        .tooltip-container:hover .tooltip-content,
+        .tooltip-container:focus-within .tooltip-content { visibility: visible; opacity: 1; }
+        /* Source tooltip - larger and scrollable */
+        .tooltip-source {
+            max-height: min(300px, 50vh);
+            overflow-y: auto;
         }
     </style>
 </head>
@@ -80,7 +82,6 @@
                 </a>
                 <div class="flex items-center gap-2 flex-1 min-w-0">
                     <div id="header-status-badge" class="flex items-center gap-2"></div>
-                    <div id="header-source-tooltip" class="hidden"></div>
                 </div>
                 <div class="flex items-center gap-1">
                     <a href="javascript:history.back()" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition-colors" title="Exit full page">
@@ -96,7 +97,7 @@
                 </div>
             </header>
 
-            <div class="flex-1 flex flex-col p-4 lg:p-8 overflow-auto lg:overflow-hidden">
+            <div class="flex-1 flex flex-col p-4 lg:p-6 min-h-0 overflow-hidden">
                 <div id="loading" class="flex items-center justify-center py-12 text-gray-400">
                     <svg class="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -248,55 +249,50 @@
         }
 
         function renderVacancy(v) {
-            // Status badge with AI reason tooltip in header
             const statusBadge = document.getElementById('header-status-badge');
             const aiReason = escapeHtml(v.ai_reason || 'No analysis available');
+            const sourceText = escapeHtml(v.text_full || v.text_preview || 'No text available');
+            const channelName = escapeHtml(v.chat_title || 'Unknown');
 
+            // Status badge with AI reason tooltip + lightbulb with source text
             if (v.is_relevant) {
                 statusBadge.innerHTML = `
-                    <span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Passed</span>
+                    <div class="tooltip-container">
+                        <span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 cursor-help">Passed</span>
+                        <div class="tooltip-content">${aiReason}</div>
+                    </div>
                     <div class="tooltip-container">
                         <button class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
                             </svg>
                         </button>
-                        <div class="tooltip-content">${aiReason}</div>
+                        <div class="tooltip-content tooltip-source">
+                            <div class="text-xs text-gray-400 mb-2">${channelName}</div>
+                            <div class="whitespace-pre-wrap">${sourceText}</div>
+                        </div>
                     </div>
                 `;
             } else {
                 const label = getFilteredLabel(v.ai_reason);
                 statusBadge.innerHTML = `
-                    <span class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">${label}</span>
+                    <div class="tooltip-container">
+                        <span class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 cursor-help">${label}</span>
+                        <div class="tooltip-content">${aiReason}</div>
+                    </div>
                     <div class="tooltip-container">
                         <button class="p-1.5 text-violet-500 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
                             </svg>
                         </button>
-                        <div class="tooltip-content">${aiReason}</div>
+                        <div class="tooltip-content tooltip-source">
+                            <div class="text-xs text-gray-400 mb-2">${channelName}</div>
+                            <div class="whitespace-pre-wrap">${sourceText}</div>
+                        </div>
                     </div>
                 `;
             }
-
-            // Source text tooltip in header
-            const sourceTooltip = document.getElementById('header-source-tooltip');
-            const sourceText = escapeHtml(v.text_full || v.text_preview || 'No text available');
-            const channelName = escapeHtml(v.chat_title || 'Unknown');
-            sourceTooltip.classList.remove('hidden');
-            sourceTooltip.innerHTML = `
-                <div class="tooltip-container">
-                    <button class="p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </button>
-                    <div class="tooltip-content" style="max-width: 400px; max-height: 300px; overflow-y: auto;">
-                        <div class="text-xs text-gray-400 mb-2">${channelName}</div>
-                        <div class="whitespace-pre-wrap">${sourceText}</div>
-                    </div>
-                </div>
-            `;
 
             // Contact avatar and name
             const contactName = v.contact_name || v.contact_username || 'Contact';
