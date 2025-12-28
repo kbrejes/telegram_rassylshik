@@ -215,7 +215,7 @@ async def get_vacancy_messages(vacancy_id: int):
 
         # Find CRM topic contact linked to this vacancy
         cursor = await conn.execute("""
-            SELECT contact_id, contact_name
+            SELECT contact_id, contact_name, agent_session
             FROM crm_topic_contacts
             WHERE vacancy_id = ?
         """, (vacancy_id,))
@@ -226,6 +226,7 @@ async def get_vacancy_messages(vacancy_id: int):
         if crm_contact:
             contact_id = str(crm_contact[0])
             contact_name = crm_contact[1]
+            agent_session = crm_contact[2]
 
             # Load conversation state from file
             conv_file = CONVERSATION_STATES_DIR / f"{contact_id}.json"
@@ -250,6 +251,7 @@ async def get_vacancy_messages(vacancy_id: int):
             result.append({
                 "contact_id": contact_id,
                 "contact_name": contact_name,
+                "agent_session": agent_session,
                 "current_phase": conv_data.get("current_phase", "unknown"),
                 "total_messages": conv_data.get("total_messages", 0),
                 "call_offered": conv_data.get("call_offered", False),

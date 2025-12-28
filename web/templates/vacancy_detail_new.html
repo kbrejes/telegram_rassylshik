@@ -88,8 +88,9 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                     </svg>
                 </button>
-                <div class="flex items-center gap-2 flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto">
                     <div id="header-status-badge" class="flex items-center gap-2"></div>
+                    <div id="agent-badge-container" class="flex-shrink-0"></div>
                 </div>
                 <a href="/" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition-colors" title="Close">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -153,6 +154,8 @@
         let currentVacancyId = {{ vacancy_id }};
         let currentVacancy = null;
         let currentContactId = null;
+        let currentAgentSession = null;
+        let agentsStatus = {};
         let recentVacancies = [];
 
         // Set initial history state
@@ -394,6 +397,57 @@
             return 'Filtered';
         }
 
+        async function loadAgentsStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                if (data.success && data.status?.agents) {
+                    agentsStatus = data.status.agents;
+                    updateAgentBadge();
+                }
+            } catch (e) {
+                console.error('Failed to load agents status:', e);
+            }
+        }
+
+        function updateAgentBadge() {
+            const container = document.getElementById('agent-badge-container');
+            if (!container || !currentAgentSession) return;
+
+            const agent = agentsStatus[currentAgentSession];
+            const agentName = agent?.user_info?.first_name || currentAgentSession;
+            const agentUsername = agent?.user_info?.username;
+            const isConnected = agent?.status === 'connected';
+            const isFloodWait = agent?.flood_wait_until;
+
+            let statusColor = 'bg-gray-400';
+            let statusText = 'Offline';
+            if (isConnected && !isFloodWait) {
+                statusColor = 'bg-green-500';
+                statusText = 'Active';
+            } else if (isFloodWait) {
+                statusColor = 'bg-amber-500';
+                statusText = 'Rate limited';
+            }
+
+            container.innerHTML = `
+                <div class="tooltip-container">
+                    <button onclick="toggleTooltip(event)" class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-gray-100 dark:bg-dark-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600 transition-colors">
+                        <span class="w-1.5 h-1.5 rounded-full ${statusColor}"></span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                        </svg>
+                        <span>${escapeHtml(agentName)}</span>
+                    </button>
+                    <div class="tooltip-content">
+                        <div class="font-medium">${escapeHtml(agentName)}</div>
+                        ${agentUsername ? `<div class="text-gray-400">@${escapeHtml(agentUsername)}</div>` : ''}
+                        <div class="mt-1 text-xs">${statusText}</div>
+                    </div>
+                </div>
+            `;
+        }
+
         async function loadConversation() {
             // Use cached fetch from cache.js
             loadCachedVacancyMessages(currentVacancyId, (data) => {
@@ -411,6 +465,8 @@
 
                 const conv = data.conversations[0];
                 currentContactId = conv.contact_id;
+                currentAgentSession = conv.agent_session;
+                updateAgentBadge();
 
                 // Show chat input
                 document.getElementById('chat-input-container').classList.remove('hidden');
@@ -501,7 +557,10 @@
         }
 
         // Load on page ready
-        document.addEventListener('DOMContentLoaded', loadVacancy);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadVacancy();
+            loadAgentsStatus();
+        });
     </script>
 </body>
 </html>
