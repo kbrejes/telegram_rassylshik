@@ -292,7 +292,7 @@
                     ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
                     : 'bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600';
                 return `
-                    <button onclick="switchVacancy(${v.id})" class="flex items-center gap-2 px-3 py-1.5 rounded-full ${activeClass} text-sm font-medium whitespace-nowrap transition-all">
+                    <button onclick="switchVacancy(${v.id})" data-vacancy-id="${v.id}" class="flex items-center gap-2 px-3 py-1.5 rounded-full ${activeClass} text-sm font-medium whitespace-nowrap transition-all">
                         <span class="w-6 h-6 rounded-full ${isActive ? 'bg-violet-200 dark:bg-violet-800' : 'bg-gray-200 dark:bg-dark-600'} flex items-center justify-center text-xs">${initials}</span>
                         ${escapeHtml(v.contact_name || v.contact_username || 'Contact')}
                     </button>
@@ -300,6 +300,14 @@
             }).join('');
 
             document.getElementById('contacts-tabs').innerHTML = tabsHtml;
+
+            // Scroll active tab into view
+            requestAnimationFrame(() => {
+                const activeTab = document.querySelector(`[data-vacancy-id="${currentVacancyId}"]`);
+                if (activeTab) {
+                    activeTab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                }
+            });
         }
 
         async function switchVacancy(newId) {
