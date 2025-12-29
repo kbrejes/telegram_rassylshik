@@ -170,6 +170,36 @@ gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through
 
 ---
 
+## Deployment - TWO SEPARATE SERVICES
+
+**CRITICAL: The bot and web API run as separate processes. You must restart BOTH when deploying changes.**
+
+| Service | Command | What it runs | Log file |
+|---------|---------|--------------|----------|
+| `bot_multi.service` | `python3 bot_multi.py` | Telegram monitoring, CRM, agents | `logs/bot_multi.log` |
+| `web.service` | `uvicorn web.app:app` | Web API (FastAPI), all `/api/*` routes | `logs/uvicorn.log` |
+
+**Deploy changes to server:**
+```bash
+# 1. Pull latest code
+gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap --command="cd /home/brejestovski_kirill/telegram_rassylshik && sudo git pull origin feature/self-correcting-prompts"
+
+# 2. Restart BOTH services
+gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap --command="sudo systemctl restart bot_multi web"
+```
+
+**Which service to restart:**
+- Changed `bot_multi.py`, `src/`, `ai_conversation/` → restart `bot_multi`
+- Changed `web/` (routes, templates, API) → restart `web`
+- Changed both → restart both: `sudo systemctl restart bot_multi web`
+
+**Check service status:**
+```bash
+gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap --command="sudo systemctl status bot_multi web --no-pager"
+```
+
+---
+
 ## Stable Version
 
 **Current stable:** `stable-2025-12-25`
