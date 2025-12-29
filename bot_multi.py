@@ -332,6 +332,9 @@ class MultiChannelJobMonitorBot:
                 message = event.message
                 chat = await event.get_chat()
 
+                # DEBUG: log all incoming messages
+                logger.info(f"[DEBUG] Message from chat_id={chat.id}, monitored={chat.id in self.monitored_sources}, title={getattr(chat, 'title', 'N/A')}")
+
                 # Проверяем, нужно ли мониторить этот чат
                 if chat.id not in self.monitored_sources:
                     return
