@@ -257,12 +257,12 @@
                                 <div class="min-w-0">
                                     <h3 class="font-semibold text-gray-900 dark:text-white truncate">{{ channel.name }}</h3>
                                     <div class="flex flex-wrap gap-1 mt-1">
-                                        <span id="bot-status-indicator" class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-dark-700 text-gray-500 dark:text-gray-400">
-                                            <span id="bot-status-dot" class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                                            <span id="bot-status-text">...</span>
+                                        <span class="bot-status-indicator inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-dark-700 text-gray-500 dark:text-gray-400">
+                                            <span class="bot-status-dot w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                                            <span class="bot-status-text">...</span>
                                         </span>
-                                        <span id="agents-count-indicator" class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-dark-700 text-gray-500 dark:text-gray-400">
-                                            <span id="agents-count-text">...</span>
+                                        <span class="agents-count-indicator inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-dark-700 text-gray-500 dark:text-gray-400">
+                                            <span class="agents-count-text">...</span>
                                         </span>
                                     </div>
                                 </div>
@@ -508,32 +508,43 @@
             });
         }
 
-        // Update bot status indicator on channel card
+        // Update bot status indicator on ALL channel cards
         function updateBotStatusIndicator(data) {
-            const dot = document.getElementById('bot-status-dot');
-            const text = document.getElementById('bot-status-text');
-            if (!dot || !text || !data || !data.success) return;
+            if (!data || !data.success) return;
+
+            const dots = document.querySelectorAll('.bot-status-dot');
+            const texts = document.querySelectorAll('.bot-status-text');
+            const indicators = document.querySelectorAll('.bot-status-indicator');
 
             const bot = data.status?.bot;
-            if (bot?.connected && bot?.authorized) {
-                dot.className = 'w-1.5 h-1.5 rounded-full bg-blue-500';
-                text.textContent = 'Live';
-                text.parentElement.className = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
-            } else {
-                dot.className = 'w-1.5 h-1.5 rounded-full bg-red-500';
-                text.textContent = 'Offline';
-                text.parentElement.className = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
-            }
+            const isLive = bot?.connected && bot?.authorized;
+
+            dots.forEach(dot => {
+                dot.className = isLive
+                    ? 'bot-status-dot w-1.5 h-1.5 rounded-full bg-blue-500'
+                    : 'bot-status-dot w-1.5 h-1.5 rounded-full bg-red-500';
+            });
+
+            texts.forEach(text => {
+                text.textContent = isLive ? 'Live' : 'Offline';
+            });
+
+            indicators.forEach(indicator => {
+                indicator.className = isLive
+                    ? 'bot-status-indicator inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    : 'bot-status-indicator inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+            });
 
             // Update agents count
             updateAgentsCountIndicator(data);
         }
 
-        // Update agents running count
+        // Update agents running count on ALL channel cards
         function updateAgentsCountIndicator(data) {
-            const text = document.getElementById('agents-count-text');
-            const indicator = document.getElementById('agents-count-indicator');
-            if (!text || !indicator || !data || !data.success) return;
+            if (!data || !data.success) return;
+
+            const texts = document.querySelectorAll('.agents-count-text');
+            const indicators = document.querySelectorAll('.agents-count-indicator');
 
             const agents = data.status?.agents || {};
             let activeCount = 0;
@@ -546,14 +557,23 @@
                 }
             }
 
-            text.textContent = `${activeCount}/${totalCount} agents`;
+            const statusText = `${activeCount}/${totalCount} agents`;
+            let indicatorClass;
             if (activeCount === 0) {
-                indicator.className = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+                indicatorClass = 'agents-count-indicator inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
             } else if (activeCount < totalCount) {
-                indicator.className = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400';
+                indicatorClass = 'agents-count-indicator inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400';
             } else {
-                indicator.className = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+                indicatorClass = 'agents-count-indicator inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
             }
+
+            texts.forEach(text => {
+                text.textContent = statusText;
+            });
+
+            indicators.forEach(indicator => {
+                indicator.className = indicatorClass;
+            });
         }
 
         // Toggle AI conversation on/off (auto-response and filtering stay active)
