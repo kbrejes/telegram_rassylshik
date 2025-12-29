@@ -71,6 +71,43 @@
             animation: none !important;
         }
     </style>
+    <style>
+        /* Tooltip for vacancy peek */
+        .vacancy-row {
+            position: relative;
+        }
+        .vacancy-row:hover .vacancy-tooltip {
+            display: block;
+        }
+        .vacancy-tooltip {
+            display: none;
+            position: absolute;
+            left: 0;
+            top: 100%;
+            z-index: 100;
+            background: #1f2937;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            max-width: 350px;
+            width: max-content;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            line-height: 1.5;
+            margin-top: 4px;
+            pointer-events: none;
+        }
+        .vacancy-tooltip::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: -6px;
+            border: 6px solid transparent;
+            border-bottom-color: #1f2937;
+        }
+    </style>
     <script>
         // Apply theme immediately to prevent flash
         if (localStorage.getItem('darkMode') === 'true') {
@@ -475,10 +512,16 @@
                         // Show contact name if available, then username, then source channel
                         const displayName = v.contact_name || (v.contact_username ? `@${v.contact_username}` : null) || v.chat_title || 'Unknown';
                         const ledClass = v.has_messages ? 'bg-cyan-500' : 'bg-gray-300 dark:bg-dark-600';
+                        // Tooltip text (first 250 chars)
+                        const tooltipText = (v.text_full || v.text_preview || '').substring(0, 250);
+                        const truncated = tooltipText.length >= 250 ? '...' : '';
 
                         html += `
-                            <tr class="hover:bg-gray-100 dark:hover:bg-dark-700 active:bg-gray-200 dark:active:bg-dark-600 cursor-pointer transition-colors" onclick="openVacancyPage(${v.id})">
-                                <td class="px-3 py-2 text-gray-700 dark:text-gray-300 truncate max-w-[150px]" title="${displayName}">${displayName}</td>
+                            <tr class="vacancy-row hover:bg-gray-100 dark:hover:bg-dark-700 active:bg-gray-200 dark:active:bg-dark-600 cursor-pointer transition-colors" onclick="openVacancyPage(${v.id})">
+                                <td class="px-3 py-2 text-gray-700 dark:text-gray-300 truncate max-w-[150px]">
+                                    ${escapeHtml(displayName)}
+                                    <div class="vacancy-tooltip">${escapeHtml(tooltipText)}${truncated}</div>
+                                </td>
                                 <td class="px-3 py-2 text-right">
                                     <div class="flex items-center justify-end gap-1.5">
                                         <span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}">${statusLabel}</span>
