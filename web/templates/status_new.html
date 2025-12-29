@@ -311,20 +311,80 @@
         // Track agents that are currently connecting (for UI feedback)
         let connectingAgents = new Set();
 
-        // State configuration: dot color and label
+        // State configuration: dot color, label, and tooltip with explanation
         const STATE_CONFIG = {
-            connected:       { dot: 'bg-green-500', label: 'Connected', labelClass: 'text-green-600 dark:text-green-400' },
-            connecting:      { dot: 'bg-blue-500 animate-pulse', label: 'Connecting...', labelClass: 'text-blue-600 dark:text-blue-400' },
-            disconnected:    { dot: 'bg-gray-400', label: 'Disconnected', labelClass: 'text-gray-500 dark:text-gray-400' },
-            flood_wait:      { dot: 'bg-amber-500 animate-pulse', label: 'Rate Limited', labelClass: 'text-amber-600 dark:text-amber-400' },
-            spam_limited:    { dot: 'bg-orange-500', label: 'Spam Block', labelClass: 'text-orange-600 dark:text-orange-400' },
-            auth_required:   { dot: 'bg-yellow-500', label: 'Auth Required', labelClass: 'text-yellow-600 dark:text-yellow-400' },
-            code_rate_limit: { dot: 'bg-yellow-500', label: 'Code Rate Limited', labelClass: 'text-yellow-600 dark:text-yellow-400' },
-            auth_expired:    { dot: 'bg-red-500', label: 'Session Expired', labelClass: 'text-red-600 dark:text-red-400' },
-            blocked:         { dot: 'bg-red-600', label: 'Account Blocked', labelClass: 'text-red-600 dark:text-red-400' },
-            db_locked:       { dot: 'bg-orange-500', label: 'Session Locked', labelClass: 'text-orange-600 dark:text-orange-400' },
-            session_revoked: { dot: 'bg-red-500', label: 'Session Revoked', labelClass: 'text-red-600 dark:text-red-400' },
-            error:           { dot: 'bg-red-500', label: 'Error', labelClass: 'text-red-600 dark:text-red-400' }
+            connected: {
+                dot: 'bg-green-500',
+                label: 'Connected',
+                labelClass: 'text-green-600 dark:text-green-400',
+                tooltip: 'Agent is connected and ready to send messages.'
+            },
+            connecting: {
+                dot: 'bg-blue-500 animate-pulse',
+                label: 'Connecting...',
+                labelClass: 'text-blue-600 dark:text-blue-400',
+                tooltip: 'Attempting to connect to Telegram. Please wait...'
+            },
+            disconnected: {
+                dot: 'bg-gray-400',
+                label: 'Disconnected',
+                labelClass: 'text-gray-500 dark:text-gray-400',
+                tooltip: 'Agent session exists but is not active. Click Connect to activate.'
+            },
+            flood_wait: {
+                dot: 'bg-amber-500 animate-pulse',
+                label: 'Rate Limited',
+                labelClass: 'text-amber-600 dark:text-amber-400',
+                tooltip: 'Telegram rate limit hit. Agent will auto-recover after the timer. DO NOT delete - just wait.'
+            },
+            spam_limited: {
+                dot: 'bg-orange-500',
+                label: 'Spam Block',
+                labelClass: 'text-orange-600 dark:text-orange-400',
+                tooltip: 'Telegram flagged this account for spam (PeerFloodError). Wait 1-24 hours before using. DO NOT delete.'
+            },
+            auth_required: {
+                dot: 'bg-yellow-500',
+                label: 'Auth Required',
+                labelClass: 'text-yellow-600 dark:text-yellow-400',
+                tooltip: 'Session needs verification. Delete and re-add the agent with phone number.'
+            },
+            code_rate_limit: {
+                dot: 'bg-yellow-500',
+                label: 'Code Rate Limited',
+                labelClass: 'text-yellow-600 dark:text-yellow-400',
+                tooltip: 'Telegram is blocking code requests for this number. Wait 30-60 minutes, then click Retry. DO NOT delete.'
+            },
+            auth_expired: {
+                dot: 'bg-red-500',
+                label: 'Session Expired',
+                labelClass: 'text-red-600 dark:text-red-400',
+                tooltip: 'Session key expired. Delete and re-add the agent to authenticate again.'
+            },
+            blocked: {
+                dot: 'bg-red-600',
+                label: 'Account Blocked',
+                labelClass: 'text-red-600 dark:text-red-400',
+                tooltip: 'This Telegram account has been banned. You need to use a different phone number.'
+            },
+            db_locked: {
+                dot: 'bg-orange-500',
+                label: 'Session Locked',
+                labelClass: 'text-orange-600 dark:text-orange-400',
+                tooltip: 'Session file is locked by another process. Try restarting the bot service, then Connect again.'
+            },
+            session_revoked: {
+                dot: 'bg-red-500',
+                label: 'Session Revoked',
+                labelClass: 'text-red-600 dark:text-red-400',
+                tooltip: 'Session was terminated (logged out from another device or Telegram revoked it). Delete and re-add.'
+            },
+            error: {
+                dot: 'bg-red-500',
+                label: 'Error',
+                labelClass: 'text-red-600 dark:text-red-400',
+                tooltip: 'An error occurred. Check the error message below. Try clicking Connect again.'
+            }
         };
 
         function getAgentState(agent, sessionName) {
@@ -423,7 +483,7 @@
                                 ${username ? `<span class="text-xs text-gray-500 dark:text-gray-400">${username}</span>` : ''}
                             </div>
                             <div class="flex items-center gap-2 mb-3 ml-4">
-                                <span class="text-xs font-medium ${config.labelClass}">${config.label}</span>
+                                <span class="text-xs font-medium ${config.labelClass} cursor-help border-b border-dotted border-current" title="${config.tooltip}">${config.label}</span>
                                 ${floodBadge}
                             </div>
                             ${errorHint}
