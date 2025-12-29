@@ -145,6 +145,23 @@ class PhasePromptBuilder:
 
         return default
 
+    def _strip_calendar_link(self, text: str) -> str:
+        """Remove calendar link and related instructions from text."""
+        import re
+
+        # Remove the calendar link URL
+        text = re.sub(r'https://cal\.com/[^\s\n]+', '[ССЫЛКА УЖЕ ОТПРАВЛЕНА]', text)
+
+        # Remove the calendar section from base_context
+        text = re.sub(
+            r'ССЫЛКА НА КАЛЕНДАРЬ \(для созвонов\):.*?НЕ СПАМЬ ССЫЛКОЙ!.*?\n',
+            'КАЛЕНДАРЬ УЖЕ ОТПРАВЛЕН - НЕ ПОВТОРЯЙ ССЫЛКУ!\n',
+            text,
+            flags=re.DOTALL
+        )
+
+        return text
+
     def build_system_prompt(
         self,
         phase: str,
@@ -168,6 +185,9 @@ class PhasePromptBuilder:
         """
         parts = []
 
+        # Check if calendar was already sent
+        calendar_sent = state.calendar_sent if state else False
+
         # 0. Current date/time context
         now = datetime.now()
         weekdays_ru = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
@@ -186,6 +206,11 @@ class PhasePromptBuilder:
                     "- В ПЕРВОМ сообщении ОБЯЗАТЕЛЬНО представься: \"Привет, я Кирилл из агентства Лови Лидов\"",
                     "- ТЫ УЖЕ ПРЕДСТАВИЛСЯ. НЕ представляйся повторно!"
                 )
+
+            # CRITICAL: Remove calendar link if already sent
+            if calendar_sent:
+                base = self._strip_calendar_link(base)
+
             parts.append(base)
 
         # 2. Founders context (if needed)
@@ -197,6 +222,9 @@ class PhasePromptBuilder:
         # 3. Phase-specific instructions
         phase_prompt = self._load_prompt(phase, "phases")
         if phase_prompt:
+            # CRITICAL: Remove calendar link from phase prompt if already sent
+            if calendar_sent:
+                phase_prompt = self._strip_calendar_link(phase_prompt)
             parts.append(phase_prompt)
 
         # 4. Answer question instruction (if needed)
