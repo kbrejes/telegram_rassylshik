@@ -51,30 +51,81 @@ class CRMHandler:
         """Инициализация CRM агентов и conversation managers для каналов"""
         logger.info("Инициализация CRM агентов...")
 
-        # Очищаем старые данные при перезагрузке
-        # НО НЕ очищаем _registered_agent_handlers
-        self.agent_pools.clear()
-        self.conversation_managers.clear()
-        self.contact_to_channel.clear()
-        self.ai_handlers.clear()
-        self.channel_configs.clear()
+        # ATOMIC RELOAD: Build new data structures first, then swap
+        # This prevents race condition where messages arrive during reload
+        # and find empty conversation_managers dict
+
+        # Store old data for cleanup later
+        old_agent_pools = self.agent_pools
+        old_ai_handlers = self.ai_handlers
+
+        # Create new containers (DON'T clear old ones yet)
+        new_agent_pools: Dict[str, AgentPool] = {}
+        new_conversation_managers: Dict[str, ConversationManager] = {}
+        new_contact_to_channel: Dict[int, str] = {}
+        new_ai_handlers: Dict[str, AIConversationHandler] = {}
+        new_channel_configs: Dict[str, ChannelConfig] = {}
 
         # Инициализация AI handler pool (with database for self-correction)
-        self.ai_handler_pool = AIHandlerPool(config_manager.llm_providers, database=db)
+        new_ai_handler_pool = AIHandlerPool(config_manager.llm_providers, database=db)
 
         crm_enabled_channels = [ch for ch in output_channels if ch.crm_enabled]
 
         if not crm_enabled_channels:
             logger.info("Нет каналов с включенным CRM")
+            # Atomic swap to empty
+            self.agent_pools = new_agent_pools
+            self.conversation_managers = new_conversation_managers
+            self.contact_to_channel = new_contact_to_channel
+            self.ai_handlers = new_ai_handlers
+            self.channel_configs = new_channel_configs
+            self.ai_handler_pool = new_ai_handler_pool
             return
 
         for channel in crm_enabled_channels:
-            await self._setup_channel_crm(channel)
+            await self._setup_channel_crm_atomic(
+                channel,
+                new_agent_pools,
+                new_conversation_managers,
+                new_contact_to_channel,
+                new_ai_handlers,
+                new_channel_configs,
+                new_ai_handler_pool
+            )
+
+        # ATOMIC SWAP: Replace all data structures at once
+        self.agent_pools = new_agent_pools
+        self.conversation_managers = new_conversation_managers
+        self.contact_to_channel = new_contact_to_channel
+        self.ai_handlers = new_ai_handlers
+        self.channel_configs = new_channel_configs
+        self.ai_handler_pool = new_ai_handler_pool
 
         logger.info(f"CRM инициализирован для {len(self.agent_pools)} каналов")
 
     async def _setup_channel_crm(self, channel: ChannelConfig):
-        """Настройка CRM для одного канала"""
+        """Настройка CRM для одного канала (legacy wrapper)"""
+        await self._setup_channel_crm_atomic(
+            channel,
+            self.agent_pools,
+            self.conversation_managers,
+            self.contact_to_channel,
+            self.ai_handlers,
+            self.channel_configs,
+            self.ai_handler_pool
+        )
+
+    async def _setup_channel_crm_atomic(
+        self,
+        channel: ChannelConfig,
+        agent_pools: Dict[str, AgentPool],
+        conversation_managers: Dict[str, ConversationManager],
+        contact_to_channel: Dict[int, str],
+        ai_handlers: Dict[str, AIConversationHandler],
+        channel_configs: Dict[str, ChannelConfig],
+        ai_handler_pool: AIHandlerPool
+    ):
+        """Настройка CRM для одного канала (atomic version - writes to provided containers)"""
         try:
             logger.info(f"Настройка CRM для канала '{channel.name}'...")
 
@@ -95,8 +146,8 @@ class CRMHandler:
                 logger.error(f"  Не удалось инициализировать пул агентов для '{channel.name}'")
                 return
 
-            self.agent_pools[channel.id] = agent_pool
-            self.channel_configs[channel.id] = channel
+            agent_pools[channel.id] = agent_pool
+            channel_configs[channel.id] = channel
 
             # Получаем первого доступного агента
             primary_agent = agent_pool.get_available_agent()
@@ -130,7 +181,7 @@ class CRMHandler:
 
             # Восстанавливаем contact_to_channel маппинг
             for contact_id in conv_manager._topic_cache.keys():
-                self.contact_to_channel[contact_id] = channel.id
+                contact_to_channel[contact_id] = channel.id
             logger.info(f"  Восстановлено {len(conv_manager._topic_cache)} контактов")
 
             # Регистрируем обработчики
@@ -143,26 +194,35 @@ class CRMHandler:
                     self._register_contact_message_handler(agent.client, channel.id)
                     self._registered_agent_handlers.add(agent_id)
 
-            self.conversation_managers[channel.id] = conv_manager
+            conversation_managers[channel.id] = conv_manager
 
             # Инициализация AI handler
             if channel.ai_conversation_enabled:
-                await self._setup_ai_handler(channel)
+                await self._setup_ai_handler_atomic(channel, ai_handlers, ai_handler_pool)
 
         except Exception as e:
             logger.error(f"  Ошибка настройки CRM для '{channel.name}': {e}", exc_info=True)
 
     async def _setup_ai_handler(self, channel: ChannelConfig):
-        """Инициализация AI handler для канала"""
+        """Инициализация AI handler для канала (legacy wrapper)"""
+        await self._setup_ai_handler_atomic(channel, self.ai_handlers, self.ai_handler_pool)
+
+    async def _setup_ai_handler_atomic(
+        self,
+        channel: ChannelConfig,
+        ai_handlers: Dict[str, AIConversationHandler],
+        ai_handler_pool: AIHandlerPool
+    ):
+        """Инициализация AI handler для канала (atomic version)"""
         try:
             ai_config = AIHandlerConfig.from_dict(channel.ai_config.to_dict())
             start_time = time.time()
-            ai_handler = await self.ai_handler_pool.get_or_create(
+            ai_handler = await ai_handler_pool.get_or_create(
                 channel_id=channel.id,
                 ai_config=ai_config,
             )
             latency_ms = int((time.time() - start_time) * 1000)
-            self.ai_handlers[channel.id] = ai_handler
+            ai_handlers[channel.id] = ai_handler
 
             # Update LLM status
             provider_name = ai_config.provider if hasattr(ai_config, 'provider') else "groq"
