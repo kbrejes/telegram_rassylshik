@@ -547,6 +547,19 @@ class CRMHandler:
 
             contacted_users: Set[str] = set()
 
+            # Pre-resolve telegram contact to user_id using bot client
+            # This helps when agents don't have the user in their entity cache
+            resolved_user_id: Optional[int] = None
+            telegram_contact = contacts.get('telegram')
+            if telegram_contact:
+                try:
+                    user = await self.bot.client.get_entity(telegram_contact)
+                    if hasattr(user, 'id'):
+                        resolved_user_id = user.id
+                        logger.info(f"[CRM] Resolved {telegram_contact} to user_id={resolved_user_id}")
+                except Exception as e:
+                    logger.warning(f"[CRM] Could not resolve {telegram_contact}: {e}")
+
             for channel in matching_outputs:
                 if not channel.crm_enabled:
                     logger.debug(f"[CRM] Skipping channel '{channel.name}': CRM not enabled")
@@ -568,8 +581,9 @@ class CRMHandler:
                     continue
 
                 # Auto-response uses pool's send_message with fallback
+                # Pass resolved_user_id to avoid username resolution issues
                 auto_response_sent = await self._send_auto_response(
-                    channel, agent_pool, contacts, contacted_users
+                    channel, agent_pool, contacts, contacted_users, resolved_user_id
                 )
 
                 await self._create_crm_topic(
@@ -586,7 +600,8 @@ class CRMHandler:
         channel: ChannelConfig,
         agent_pool: AgentPool,
         contacts: Dict[str, Optional[str]],
-        contacted_users: Set[str]
+        contacted_users: Set[str],
+        resolved_user_id: Optional[int] = None
     ) -> bool:
         """Отправка автоответа контакту с fallback через пул агентов"""
         if not channel.auto_response_enabled or not channel.auto_response_template:
@@ -602,12 +617,14 @@ class CRMHandler:
             logger.debug(f"[AUTO-RESPONSE] Skipped: {telegram_contact} already contacted")
             return False
 
-        logger.info(f"[AUTO-RESPONSE] Attempting to send to {telegram_contact}...")
+        # Use resolved user_id if available (more reliable than username)
+        target = resolved_user_id if resolved_user_id else telegram_contact
+        logger.info(f"[AUTO-RESPONSE] Attempting to send to {telegram_contact} (target={target})...")
 
         try:
             # Use pool's send_message which has built-in agent rotation/fallback
             success = await agent_pool.send_message(
-                telegram_contact,
+                target,
                 channel.auto_response_template,
                 max_retries=len(agent_pool.agents) if agent_pool.agents else 3
             )
