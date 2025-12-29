@@ -238,18 +238,25 @@ class CRMHandler:
                     logger.info(f"[HANDLER] No topic found for sender {sender.id}, ignoring message")
                     return
 
+                logger.info(f"[HANDLER] Found channel {channel_id_found} for sender {sender.id}")
+
                 # Проверяем, не было ли это сообщение отправлено агентом
                 if conv_manager.is_agent_sent_message(message.id):
+                    logger.debug(f"[HANDLER] Ignoring agent-sent message {message.id}")
                     return
 
                 topic_id = conv_manager.get_topic_id(sender.id)
                 ai_handler = self.ai_handlers.get(channel_id_found)
+
+                logger.info(f"[HANDLER] topic_id={topic_id}, ai_handler={'YES' if ai_handler else 'NO'}")
 
                 if topic_id:
                     await self._relay_contact_message_to_topic(
                         agent_client, conv_manager, sender, message,
                         topic_id, ai_handler, channel_id_found
                     )
+                else:
+                    logger.warning(f"[HANDLER] No topic_id for sender {sender.id} in channel {channel_id_found}")
 
             except Exception as e:
                 logger.error(f"Ошибка в handle_contact_message: {e}", exc_info=True)
