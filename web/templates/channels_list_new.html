@@ -338,8 +338,18 @@
         let activeTooltipIdx = null;
         let tooltipTimeout = null;
 
+        // Get tooltip content based on type
+        function getTooltipContent(v, type) {
+            if (type === 'reason') {
+                return v.ai_reason || (v.is_relevant ? 'Passed AI filter' : 'No reason provided');
+            } else {
+                const text = (v.text_full || v.text_preview || '').substring(0, 250);
+                return text + (text.length >= 250 ? '...' : '');
+            }
+        }
+
         // Show tooltip on hover (desktop)
-        function showTooltip(event, idx) {
+        function showTooltip(event, idx, type = 'text') {
             if (window.innerWidth < 768) return; // Skip on mobile, use tap instead
 
             clearTimeout(tooltipTimeout);
@@ -347,9 +357,7 @@
             if (!v) return;
 
             const tooltip = document.getElementById('vacancy-tooltip');
-            const text = (v.text_full || v.text_preview || '').substring(0, 250);
-            const truncated = text.length >= 250 ? '...' : '';
-            tooltip.textContent = text + truncated;
+            tooltip.textContent = getTooltipContent(v, type);
 
             // Position near the icon
             const rect = event.target.closest('.peek-icon').getBoundingClientRect();
@@ -364,16 +372,20 @@
                 const tooltip = document.getElementById('vacancy-tooltip');
                 tooltip.classList.remove('show');
                 activeTooltipIdx = null;
+                activeTooltipType = null;
                 document.querySelectorAll('.peek-icon').forEach(el => el.classList.remove('active'));
             }, 100);
         }
 
+        let activeTooltipType = null;
+
         // Toggle tooltip on tap (mobile)
-        function toggleTooltip(event, idx) {
+        function toggleTooltip(event, idx, type = 'text') {
             const tooltip = document.getElementById('vacancy-tooltip');
+            const tooltipKey = `${idx}-${type}`;
 
             // If same tooltip is open, close it
-            if (activeTooltipIdx === idx && tooltip.classList.contains('show')) {
+            if (activeTooltipIdx === idx && activeTooltipType === type && tooltip.classList.contains('show')) {
                 hideTooltip();
                 return;
             }
@@ -384,9 +396,7 @@
             const v = peekVacancies[idx];
             if (!v) return;
 
-            const text = (v.text_full || v.text_preview || '').substring(0, 250);
-            const truncated = text.length >= 250 ? '...' : '';
-            tooltip.textContent = text + truncated;
+            tooltip.textContent = getTooltipContent(v, type);
 
             // Position near the icon
             const rect = event.target.closest('.peek-icon').getBoundingClientRect();
@@ -401,6 +411,7 @@
 
             event.target.closest('.peek-icon').classList.add('active');
             activeTooltipIdx = idx;
+            activeTooltipType = type;
         }
 
         // Close tooltip when clicking elsewhere
@@ -586,11 +597,14 @@
                         const tooltipText = (v.text_full || v.text_preview || '').substring(0, 250);
                         const truncated = tooltipText.length >= 250 ? '...' : '';
 
+                        // AI reason for status tooltip
+                        const aiReason = v.ai_reason || (v.is_relevant ? 'Passed AI filter' : 'No reason provided');
+
                         html += `
                             <tr class="hover:bg-gray-100 dark:hover:bg-dark-700 active:bg-gray-200 dark:active:bg-dark-600 cursor-pointer transition-colors" onclick="openVacancyPage(${v.id})">
                                 <td class="px-3 py-2">
                                     <div class="flex items-center gap-2">
-                                        <button class="peek-icon text-gray-400 dark:text-gray-500" onclick="event.stopPropagation(); toggleTooltip(event, ${idx})" onmouseenter="showTooltip(event, ${idx})" onmouseleave="hideTooltip()">
+                                        <button class="peek-icon text-gray-400 dark:text-gray-500" onclick="event.stopPropagation(); toggleTooltip(event, ${idx}, 'text')" onmouseenter="showTooltip(event, ${idx}, 'text')" onmouseleave="hideTooltip()">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -601,6 +615,11 @@
                                 </td>
                                 <td class="px-3 py-2 text-right">
                                     <div class="flex items-center justify-end gap-1.5">
+                                        <button class="peek-icon text-gray-400 dark:text-gray-500" onclick="event.stopPropagation(); toggleTooltip(event, ${idx}, 'reason')" onmouseenter="showTooltip(event, ${idx}, 'reason')" onmouseleave="hideTooltip()">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                        </button>
                                         <span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}">${statusLabel}</span>
                                         <span class="w-1.5 h-1.5 rounded-full ${ledClass}"></span>
                                     </div>
