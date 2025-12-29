@@ -231,6 +231,23 @@ class Database:
             )
         """)
 
+        # === Auto-Response Attempts ===
+        await self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS auto_response_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                vacancy_id INTEGER NOT NULL,
+                contact_username TEXT,
+                contact_user_id INTEGER,
+                agent_session TEXT,
+                status TEXT NOT NULL,
+                error_type TEXT,
+                error_message TEXT,
+                attempt_number INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (vacancy_id) REFERENCES processed_jobs(id)
+            )
+        """)
+
         # === Supervisor AI Chat ===
         await self._connection.execute("""
             CREATE TABLE IF NOT EXISTS supervisor_chat_history (
@@ -998,6 +1015,90 @@ class Database:
             await self._connection.commit()
         except Exception as e:
             logger.warning(f"Error marking message as synced: {e}")
+
+    # === Auto-Response Attempt Methods ===
+
+    async def save_auto_response_attempt(
+        self,
+        vacancy_id: int,
+        contact_username: Optional[str],
+        contact_user_id: Optional[int],
+        agent_session: Optional[str],
+        status: str,
+        error_type: Optional[str] = None,
+        error_message: Optional[str] = None,
+        attempt_number: int = 1
+    ) -> int:
+        """Save an auto-response attempt.
+
+        Status values:
+        - 'success': Message sent successfully
+        - 'failed': Send failed (with error_type and error_message)
+        - 'skipped': Skipped (no TG contact, already contacted, etc.)
+        - 'queued': Added to retry queue
+
+        Error types:
+        - 'invalid_peer': Invalid peer (bot, privacy settings, deleted account)
+        - 'spam_limit': Agent spam limitation
+        - 'flood_wait': Flood wait error
+        - 'no_contact': No TG contact extracted
+        - 'already_contacted': Contact already messaged
+        - 'no_agent': No available agent
+        - 'resolve_failed': Username resolution failed
+        - 'other': Other error
+        """
+        cursor = await self._connection.execute("""
+            INSERT INTO auto_response_attempts
+            (vacancy_id, contact_username, contact_user_id, agent_session, status, error_type, error_message, attempt_number)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (vacancy_id, contact_username, contact_user_id, agent_session, status, error_type, error_message, attempt_number))
+        await self._connection.commit()
+        return cursor.lastrowid
+
+    async def get_auto_response_attempts(self, vacancy_id: int) -> List[Dict]:
+        """Get all auto-response attempts for a vacancy."""
+        cursor = await self._connection.execute("""
+            SELECT id, contact_username, contact_user_id, agent_session, status,
+                   error_type, error_message, attempt_number, created_at
+            FROM auto_response_attempts
+            WHERE vacancy_id = ?
+            ORDER BY created_at ASC
+        """, (vacancy_id,))
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": r[0],
+                "contact_username": r[1],
+                "contact_user_id": r[2],
+                "agent_session": r[3],
+                "status": r[4],
+                "error_type": r[5],
+                "error_message": r[6],
+                "attempt_number": r[7],
+                "created_at": r[8]
+            }
+            for r in rows
+        ]
+
+    async def get_latest_auto_response_status(self, vacancy_id: int) -> Optional[Dict]:
+        """Get the latest auto-response attempt status for a vacancy."""
+        cursor = await self._connection.execute("""
+            SELECT status, error_type, error_message, contact_username, created_at
+            FROM auto_response_attempts
+            WHERE vacancy_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (vacancy_id,))
+        row = await cursor.fetchone()
+        if row:
+            return {
+                "status": row[0],
+                "error_type": row[1],
+                "error_message": row[2],
+                "contact_username": row[3],
+                "created_at": row[4]
+            }
+        return None
 
 
 # Глобальный экземпляр базы данных

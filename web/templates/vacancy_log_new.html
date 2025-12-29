@@ -296,12 +296,22 @@
 
         function showDetails(idx) {
             const v = vacancies[idx];
+            currentVacancyId = v.id;
             document.getElementById('modal-body').innerHTML = `
                 <div class="space-y-4">
                     <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Source</label><p class="text-sm text-gray-900 dark:text-white mt-1">${escapeHtml(v.chat_title || 'Unknown')}</p></div>
                     <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</label><p class="mt-1"><span class="px-2.5 py-1 text-xs font-medium rounded-full ${v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}">${v.is_relevant ? 'Passed' : 'Filtered'}</span></p></div>
                     <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">AI Reason</label><p class="text-sm text-gray-900 dark:text-gray-200 mt-1">${escapeHtml(v.ai_reason || 'No reason provided')}</p></div>
                     <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Processed</label><p class="text-sm text-gray-900 dark:text-gray-200 mt-1">${v.processed_at || '-'}</p></div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Contact</label>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-sm text-gray-900 dark:text-white">${v.contact_username ? '@' + escapeHtml(v.contact_username) : 'No contact'}</span>
+                            <div id="auto-response-status" class="flex items-center gap-1">
+                                <!-- Status badge and info icon will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
                     <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Full Text</label><div class="mt-2 p-3 bg-gray-50 dark:bg-dark-800 rounded-lg text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-64 overflow-y-auto">${escapeHtml(v.text_full || v.text_preview)}</div></div>
                     <div>
                         <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Conversation</label>
@@ -323,6 +333,69 @@
             `;
             document.getElementById('modal-overlay').classList.remove('hidden');
             loadConversation(v.id);
+            loadAutoResponseStatus(v.id);
+        }
+
+        async function loadAutoResponseStatus(vacancyId) {
+            const statusEl = document.getElementById('auto-response-status');
+            if (!statusEl) return;
+
+            try {
+                const response = await fetch(`/api/vacancies/${vacancyId}/auto-response-attempts`);
+                const data = await response.json();
+
+                if (!data.success || !data.summary) {
+                    statusEl.innerHTML = '';
+                    return;
+                }
+
+                const summary = data.summary;
+                let badgeClass = '';
+                let icon = '';
+
+                if (summary.status === 'success') {
+                    badgeClass = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+                    icon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+                } else if (summary.status === 'queued') {
+                    badgeClass = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
+                    icon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>';
+                } else if (summary.status === 'skipped') {
+                    badgeClass = 'bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400';
+                    icon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>';
+                } else if (summary.status === 'failed') {
+                    badgeClass = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+                    icon = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>';
+                }
+
+                // Build tooltip with attempt history
+                let tooltipContent = `<strong>Auto-Response: ${summary.message}</strong>`;
+                if (data.attempts && data.attempts.length > 0) {
+                    tooltipContent += '<hr class="my-1 border-gray-300 dark:border-gray-600">';
+                    data.attempts.forEach((a, i) => {
+                        const statusIcon = a.status === 'success' ? '✓' : a.status === 'queued' ? '⏳' : a.status === 'skipped' ? '−' : '✗';
+                        tooltipContent += `<div class="text-xs">${statusIcon} ${a.status}${a.error_type ? ' (' + a.error_type + ')' : ''}</div>`;
+                    });
+                }
+
+                statusEl.innerHTML = `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${badgeClass}">
+                        ${icon}
+                        ${escapeHtml(summary.message)}
+                    </span>
+                    <div class="relative inline-block group">
+                        <button class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </button>
+                        <div class="absolute z-50 hidden group-hover:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 text-xs bg-gray-900 dark:bg-gray-700 text-white rounded-lg shadow-lg">
+                            ${tooltipContent}
+                            <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading auto-response status:', error);
+                statusEl.innerHTML = '';
+            }
         }
 
         async function loadConversation(vacancyId) {
@@ -351,12 +424,30 @@
                         </div>
                     `).join('');
                 } else {
-                    // Show empty chat window
-                    container.innerHTML = '';
+                    // Show empty chat window with placeholder
+                    container.innerHTML = `
+                        <div class="flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-sm">
+                            <div class="text-center">
+                                <svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                </svg>
+                                Start a conversation
+                            </div>
+                        </div>
+                    `;
                 }
             } catch (error) {
-                // Show empty chat window on error
-                container.innerHTML = '';
+                // Show empty chat window with placeholder on error
+                container.innerHTML = `
+                    <div class="flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-sm">
+                        <div class="text-center">
+                            <svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                            Start a conversation
+                        </div>
+                    </div>
+                `;
             }
         }
 

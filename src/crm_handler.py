@@ -604,11 +604,15 @@ class CRMHandler:
                     logger.warning(f"  Нет доступных агентов для '{channel.name}'")
                     continue
 
+                # Look up vacancy_id for attempt logging
+                vacancy_id = await db.get_vacancy_id(message.id, chat.id)
+
                 # Auto-response uses pool's send_message with fallback
                 # Pass resolved user info to avoid username resolution issues
                 auto_response_sent = await self._send_auto_response(
                     channel, agent_pool, contacts, contacted_users,
-                    resolved_user_id, resolved_access_hash
+                    resolved_user_id, resolved_access_hash,
+                    vacancy_id=vacancy_id
                 )
 
                 await self._create_crm_topic(
@@ -627,20 +631,40 @@ class CRMHandler:
         contacts: Dict[str, Optional[str]],
         contacted_users: Set[str],
         resolved_user_id: Optional[int] = None,
-        resolved_access_hash: Optional[int] = None
+        resolved_access_hash: Optional[int] = None,
+        vacancy_id: Optional[int] = None
     ) -> bool:
         """Отправка автоответа контакту с fallback через пул агентов"""
+        telegram_contact = contacts.get('telegram')
+
+        # Helper to log attempts
+        async def log_attempt(status: str, error_type: str = None, error_message: str = None, agent_session: str = None):
+            if vacancy_id:
+                try:
+                    await db.save_auto_response_attempt(
+                        vacancy_id=vacancy_id,
+                        contact_username=telegram_contact,
+                        contact_user_id=resolved_user_id,
+                        agent_session=agent_session,
+                        status=status,
+                        error_type=error_type,
+                        error_message=error_message
+                    )
+                except Exception as e:
+                    logger.warning(f"[AUTO-RESPONSE] Failed to log attempt: {e}")
+
         if not channel.auto_response_enabled or not channel.auto_response_template:
             logger.debug(f"[AUTO-RESPONSE] Skipped: auto_response not enabled for channel '{channel.name}'")
             return False
 
-        telegram_contact = contacts.get('telegram')
         if not telegram_contact:
             logger.info(f"[AUTO-RESPONSE] Skipped: no Telegram contact extracted")
+            await log_attempt('skipped', 'no_contact', 'No Telegram contact extracted from vacancy')
             return False
 
         if telegram_contact.lower() in contacted_users:
             logger.debug(f"[AUTO-RESPONSE] Skipped: {telegram_contact} already contacted")
+            await log_attempt('skipped', 'already_contacted', f'{telegram_contact} already contacted in this batch')
             return False
 
         # Construct InputPeerUser if we have both user_id and access_hash
@@ -665,10 +689,13 @@ class CRMHandler:
             if success:
                 contacted_users.add(telegram_contact.lower())
                 logger.info(f"[AUTO-RESPONSE] ✅ Successfully sent to {telegram_contact}")
+                await log_attempt('success')
                 return True
             else:
                 # All agents failed - queue for retry with resolved info
                 logger.warning(f"[AUTO-RESPONSE] ❌ Failed to send to {telegram_contact} (all agents failed)")
+                await log_attempt('failed', 'all_agents_failed', 'All agents failed (likely spam limit or invalid peer)')
+
                 await message_queue.add(
                     contact=telegram_contact,
                     text=channel.auto_response_template,
@@ -678,11 +705,25 @@ class CRMHandler:
                     resolved_access_hash=resolved_access_hash
                 )
                 logger.info(f"[AUTO-RESPONSE] 📥 Queued message for {telegram_contact} for later retry")
+                await log_attempt('queued', 'retry_scheduled', 'Added to message queue for later retry')
+
         except Exception as e:
             error_str = str(e)
             logger.error(f"[AUTO-RESPONSE] ❌ Error sending to {telegram_contact}: {e}")
+
+            # Determine error type
+            error_type = 'other'
+            if "invalid" in error_str.lower() and "peer" in error_str.lower():
+                error_type = 'invalid_peer'
+            elif "flood" in error_str.lower():
+                error_type = 'flood_wait'
+            elif "spam" in error_str.lower():
+                error_type = 'spam_limit'
+
+            await log_attempt('failed', error_type, error_str[:500])
+
             # Queue if it's a rate limit error
-            if "flood" in error_str.lower() or "spam" in error_str.lower():
+            if error_type in ('flood_wait', 'spam_limit'):
                 await message_queue.add(
                     contact=telegram_contact,
                     text=channel.auto_response_template,
@@ -692,6 +733,7 @@ class CRMHandler:
                     resolved_access_hash=resolved_access_hash
                 )
                 logger.info(f"[AUTO-RESPONSE] 📥 Queued message for {telegram_contact} for later retry")
+                await log_attempt('queued', 'retry_scheduled', 'Added to message queue for later retry')
 
         return False
 

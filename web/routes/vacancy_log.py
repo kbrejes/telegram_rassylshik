@@ -363,6 +363,77 @@ async def get_vacancy_conversation(vacancy_id: int):
         return {"success": False, "error": str(e), "messages": [], "contact_id": None}
 
 
+@router.get("/{vacancy_id}/auto-response-attempts")
+async def get_auto_response_attempts(vacancy_id: int):
+    """Get all auto-response attempts for a vacancy."""
+    try:
+        conn = await get_db_connection()
+
+        cursor = await conn.execute("""
+            SELECT id, contact_username, contact_user_id, agent_session, status,
+                   error_type, error_message, attempt_number, created_at
+            FROM auto_response_attempts
+            WHERE vacancy_id = ?
+            ORDER BY created_at ASC
+        """, (vacancy_id,))
+        rows = await cursor.fetchall()
+        await conn.close()
+
+        attempts = []
+        for r in rows:
+            attempts.append({
+                "id": r[0],
+                "contact_username": r[1],
+                "contact_user_id": r[2],
+                "agent_session": r[3],
+                "status": r[4],
+                "error_type": r[5],
+                "error_message": r[6],
+                "attempt_number": r[7],
+                "created_at": r[8]
+            })
+
+        # Compute summary status for UI
+        summary = None
+        if attempts:
+            last_attempt = attempts[-1]
+            if last_attempt["status"] == "success":
+                summary = {"status": "success", "message": "Message sent successfully"}
+            elif last_attempt["status"] == "queued":
+                summary = {"status": "queued", "message": "Queued for retry"}
+            elif last_attempt["status"] == "skipped":
+                error_type = last_attempt.get("error_type", "")
+                if error_type == "no_contact":
+                    summary = {"status": "skipped", "message": "No Telegram contact"}
+                elif error_type == "already_contacted":
+                    summary = {"status": "skipped", "message": "Already contacted"}
+                else:
+                    summary = {"status": "skipped", "message": last_attempt.get("error_message", "Skipped")}
+            elif last_attempt["status"] == "failed":
+                error_type = last_attempt.get("error_type", "")
+                if error_type == "invalid_peer":
+                    summary = {"status": "failed", "message": "User unreachable (privacy/bot/deleted)"}
+                elif error_type == "spam_limit":
+                    summary = {"status": "failed", "message": "Agent spam limited"}
+                elif error_type == "flood_wait":
+                    summary = {"status": "failed", "message": "Rate limited"}
+                elif error_type == "all_agents_failed":
+                    summary = {"status": "failed", "message": "All agents failed"}
+                else:
+                    summary = {"status": "failed", "message": last_attempt.get("error_message", "Send failed")[:100]}
+
+        return {
+            "success": True,
+            "attempts": attempts,
+            "summary": summary,
+            "total": len(attempts)
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting auto-response attempts: {e}")
+        return {"success": False, "error": str(e), "attempts": [], "summary": None}
+
+
 # NOTE: This route must be at the end to avoid catching other routes like /messages, /send-message, /conversation
 @router.get("/{vacancy_id}")
 async def get_vacancy(vacancy_id: int):
