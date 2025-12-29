@@ -162,6 +162,33 @@ class PhasePromptBuilder:
 
         return text
 
+    def _strip_introduction(self, text: str) -> str:
+        """Remove introduction instructions from text when already introduced."""
+        import re
+
+        # Remove "introduce yourself" instruction from base_context
+        text = re.sub(
+            r'- В ПЕРВОМ сообщении ОБЯЗАТЕЛЬНО представься[^\n]*\n',
+            '- ТЫ УЖЕ ПРЕДСТАВИЛСЯ. НЕ представляйся повторно!\n',
+            text
+        )
+
+        # Remove "present the agency" from discovery phase
+        text = re.sub(
+            r'- Кратко представить агентство[^\n]*\n',
+            '- ТЫ УЖЕ ПРЕДСТАВИЛСЯ. Продолжай разговор.\n',
+            text
+        )
+
+        # Change discovery task title if present
+        text = re.sub(
+            r'ТЕКУЩАЯ ЗАДАЧА: Представиться и понять запрос',
+            'ТЕКУЩАЯ ЗАДАЧА: Понять запрос (ты уже представился)',
+            text
+        )
+
+        return text
+
     def build_system_prompt(
         self,
         phase: str,
@@ -185,8 +212,9 @@ class PhasePromptBuilder:
         """
         parts = []
 
-        # Check if calendar was already sent
+        # Check milestone flags
         calendar_sent = state.calendar_sent if state else False
+        introduced = state.introduced if state else False
 
         # 0. Current date/time context
         now = datetime.now()
@@ -199,13 +227,9 @@ class PhasePromptBuilder:
         # 1. Base context (always included)
         base = self._load_prompt("base_context")
         if base:
-            # Modify base context based on milestones
-            if state and state.introduced:
-                # Remove the "introduce yourself" instruction if already introduced
-                base = base.replace(
-                    "- В ПЕРВОМ сообщении ОБЯЗАТЕЛЬНО представься: \"Привет, я Кирилл из агентства Лови Лидов\"",
-                    "- ТЫ УЖЕ ПРЕДСТАВИЛСЯ. НЕ представляйся повторно!"
-                )
+            # CRITICAL: Remove introduction instructions if already introduced
+            if introduced:
+                base = self._strip_introduction(base)
 
             # CRITICAL: Remove calendar link if already sent
             if calendar_sent:
@@ -222,9 +246,14 @@ class PhasePromptBuilder:
         # 3. Phase-specific instructions
         phase_prompt = self._load_prompt(phase, "phases")
         if phase_prompt:
+            # CRITICAL: Remove introduction instructions if already introduced
+            if introduced:
+                phase_prompt = self._strip_introduction(phase_prompt)
+
             # CRITICAL: Remove calendar link from phase prompt if already sent
             if calendar_sent:
                 phase_prompt = self._strip_calendar_link(phase_prompt)
+
             parts.append(phase_prompt)
 
         # 4. Answer question instruction (if needed)
