@@ -122,6 +122,39 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            position: relative;
+        }
+
+        /* Tooltip for text preview */
+        .text-preview[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 0;
+            top: 100%;
+            z-index: 100;
+            background: #333;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            max-width: 450px;
+            width: max-content;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            line-height: 1.4;
+            margin-top: 5px;
+            pointer-events: none;
+        }
+
+        .text-preview[data-tooltip]:hover::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 100%;
+            border: 6px solid transparent;
+            border-bottom-color: #333;
+            margin-top: -7px;
         }
 
         .ai-reason {
@@ -676,11 +709,16 @@
             emptyState.style.display = 'none';
             pagination.style.display = 'flex';
 
-            tbody.innerHTML = vacancies.map((v, idx) => `
+            tbody.innerHTML = vacancies.map((v, idx) => {
+                // Prepare tooltip text (first 300 chars of full text)
+                const tooltipText = (v.text_full || v.text_preview || '').substring(0, 300);
+                const tooltipSafe = tooltipText.replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
+
+                return `
                 <tr onclick="showDetails(${idx})">
                     <td>${formatDate(v.processed_at)}</td>
                     <td>${escapeHtml(v.chat_title || 'Unknown')}</td>
-                    <td class="text-preview">${escapeHtml(v.text_preview)}</td>
+                    <td class="text-preview" data-tooltip="${tooltipSafe}${tooltipText.length >= 300 ? '...' : ''}">${escapeHtml(v.text_preview)}</td>
                     <td>
                         <span class="status-badge ${v.is_relevant ? 'passed' : 'filtered'}">
                             ${v.is_relevant ? 'Passed' : 'Filtered'}
@@ -688,7 +726,8 @@
                     </td>
                     <td class="ai-reason">${escapeHtml(v.ai_reason || '-')}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
 
             // Update pagination
             const currentPage = Math.floor(currentOffset / limit) + 1;

@@ -54,14 +54,14 @@
         </div>
 
         <div id="chat-messages">
-            <div class="chat-welcome">
-                <p>I'm your AI supervisor. I can help you:</p>
-                <ul>
-                    <li>Analyze conversation performance</li>
-                    <li>Review and edit prompts</li>
-                    <li>Check vacancy filtering</li>
-                    <li>Suggest improvements</li>
-                </ul>
+            <div class="chat-empty-state">
+                <div class="empty-chat-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <p class="empty-chat-title">No messages yet</p>
+                <p class="empty-chat-subtitle">Ask me about conversations, prompts, or stats</p>
             </div>
         </div>
 
@@ -296,26 +296,33 @@
     gap: 12px;
 }
 
-.chat-welcome {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 14px;
-    font-size: 13px;
-    color: #555;
+/* Empty chat state */
+.chat-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    text-align: center;
+    padding: 40px 20px;
 }
 
-.chat-welcome p {
+.empty-chat-icon {
+    margin-bottom: 16px;
+    opacity: 0.6;
+}
+
+.empty-chat-title {
     margin: 0 0 8px 0;
-    font-weight: 500;
+    font-size: 15px;
+    font-weight: 600;
+    color: #666;
 }
 
-.chat-welcome ul {
+.empty-chat-subtitle {
     margin: 0;
-    padding-left: 18px;
-}
-
-.chat-welcome li {
-    margin: 4px 0;
+    font-size: 13px;
+    color: #999;
 }
 
 .chat-message {
@@ -598,9 +605,9 @@ async function loadChatHistory() {
 function addMessageToUI(role, content, toolCalls) {
     const container = document.getElementById('chat-messages');
 
-    // Remove welcome message if exists
-    const welcome = container.querySelector('.chat-welcome');
-    if (welcome) welcome.remove();
+    // Remove empty state if exists
+    const emptyState = container.querySelector('.chat-empty-state');
+    if (emptyState) emptyState.remove();
 
     const msgDiv = document.createElement('div');
     msgDiv.className = `chat-message ${role}`;
@@ -714,14 +721,14 @@ async function clearChatHistory() {
 
         const container = document.getElementById('chat-messages');
         container.innerHTML = `
-            <div class="chat-welcome">
-                <p>I'm your AI supervisor. I can help you:</p>
-                <ul>
-                    <li>Analyze conversation performance</li>
-                    <li>Review and edit prompts</li>
-                    <li>Check vacancy filtering</li>
-                    <li>Suggest improvements</li>
-                </ul>
+            <div class="chat-empty-state">
+                <div class="empty-chat-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <p class="empty-chat-title">No messages yet</p>
+                <p class="empty-chat-subtitle">Ask me about conversations, prompts, or stats</p>
             </div>
         `;
     } catch (error) {
