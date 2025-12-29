@@ -320,7 +320,7 @@ async def get_vacancy_conversation(vacancy_id: int):
         await conn.close()
 
         if not crm_contact:
-            return {"success": True, "messages": []}
+            return {"success": True, "messages": [], "contact_id": None}
 
         contact_id = str(crm_contact[0])
         contact_name = crm_contact[1] or f"User {contact_id}"
@@ -356,11 +356,11 @@ async def get_vacancy_conversation(vacancy_id: int):
                     "text": content
                 })
 
-        return {"success": True, "messages": messages}
+        return {"success": True, "messages": messages, "contact_id": contact_id}
 
     except Exception as e:
         logger.error(f"Error getting vacancy conversation: {e}")
-        return {"success": False, "error": str(e), "messages": []}
+        return {"success": False, "error": str(e), "messages": [], "contact_id": None}
 
 
 # NOTE: This route must be at the end to avoid catching other routes like /messages, /send-message, /conversation

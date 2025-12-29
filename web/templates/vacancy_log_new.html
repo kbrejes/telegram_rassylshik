@@ -305,15 +305,17 @@
                     <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Full Text</label><div class="mt-2 p-3 bg-gray-50 dark:bg-dark-800 rounded-lg text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-64 overflow-y-auto">${escapeHtml(v.text_full || v.text_preview)}</div></div>
                     <div>
                         <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Conversation</label>
-                        <div id="modal-conversation" class="mt-2 bg-gray-50 dark:bg-dark-800 rounded-lg overflow-hidden">
-                            <div class="p-4 max-h-64 overflow-y-auto" id="modal-chat-messages">
-                                <div class="flex items-center justify-center py-8 text-gray-400">
-                                    <svg class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                    </svg>
-                                    Loading...
-                                </div>
+                        <div id="modal-conversation" class="mt-2 bg-gray-100 dark:bg-dark-900 rounded-lg overflow-hidden border border-gray-200 dark:border-dark-700">
+                            <!-- Chat messages area -->
+                            <div class="h-48 overflow-y-auto p-3 bg-white dark:bg-dark-800" id="modal-chat-messages">
+                                <!-- Messages will be loaded here, or stays empty -->
+                            </div>
+                            <!-- Chat input area -->
+                            <div class="flex items-center gap-2 p-2 border-t border-gray-200 dark:border-dark-700 bg-gray-50 dark:bg-dark-800">
+                                <input type="text" id="modal-chat-input" placeholder="Type a message..." class="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white placeholder-gray-400" />
+                                <button onclick="sendModalMessage()" class="px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -324,10 +326,16 @@
         }
 
         async function loadConversation(vacancyId) {
+            currentVacancyId = vacancyId;
             const container = document.getElementById('modal-chat-messages');
             try {
                 const response = await fetch(`/api/vacancies/${vacancyId}/conversation`);
                 const data = await response.json();
+
+                // Store contact_id for sending messages
+                if (data.contact_id) {
+                    currentContactId = data.contact_id;
+                }
 
                 if (data.success && data.messages && data.messages.length > 0) {
                     container.innerHTML = data.messages.map(msg => `
@@ -343,32 +351,56 @@
                         </div>
                     `).join('');
                 } else {
-                    // Show empty chat state
-                    container.innerHTML = `
-                        <div class="flex flex-col items-center justify-center py-8 text-gray-400">
-                            <svg class="w-10 h-10 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                            </svg>
-                            <p class="text-sm">No conversation yet</p>
-                        </div>
-                    `;
+                    // Show empty chat window
+                    container.innerHTML = '';
                 }
             } catch (error) {
-                // Show empty chat state on error
-                container.innerHTML = `
-                    <div class="flex flex-col items-center justify-center py-8 text-gray-400">
-                        <svg class="w-10 h-10 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                        </svg>
-                        <p class="text-sm">No conversation yet</p>
-                    </div>
-                `;
+                // Show empty chat window on error
+                container.innerHTML = '';
             }
         }
+
+        let currentVacancyId = null;
+        let currentContactId = null;
 
         function closeModal(event) {
             if (event && event.target !== document.getElementById('modal-overlay')) return;
             document.getElementById('modal-overlay').classList.add('hidden');
+            currentVacancyId = null;
+            currentContactId = null;
+        }
+
+        async function sendModalMessage() {
+            const input = document.getElementById('modal-chat-input');
+            const message = input.value.trim();
+            if (!message || !currentContactId) return;
+
+            input.value = '';
+            input.disabled = true;
+
+            // Add message to UI immediately
+            const container = document.getElementById('modal-chat-messages');
+            container.innerHTML += `
+                <div class="mb-3 text-right">
+                    <div class="inline-block max-w-[85%] px-3 py-2 rounded-lg text-sm bg-violet-100 dark:bg-violet-900/30 text-violet-900 dark:text-violet-200">
+                        <div class="whitespace-pre-wrap">${escapeHtml(message)}</div>
+                    </div>
+                </div>
+            `;
+            container.scrollTop = container.scrollHeight;
+
+            try {
+                await fetch('/api/vacancies/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contact_id: currentContactId, message })
+                });
+            } catch (e) {
+                console.error('Error sending message:', e);
+            }
+
+            input.disabled = false;
+            input.focus();
         }
 
         function prevPage() { if (currentOffset > 0) { currentOffset -= limit; loadVacancies(); } }
