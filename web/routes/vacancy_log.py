@@ -304,7 +304,66 @@ async def send_crm_message(request: SendMessageRequest):
         return {"success": False, "error": str(e)}
 
 
-# NOTE: This route must be at the end to avoid catching other routes like /messages, /send-message
+@router.get("/{vacancy_id}/conversation")
+async def get_vacancy_conversation(vacancy_id: int):
+    """Get simplified conversation messages for a vacancy (for chat UI)."""
+    try:
+        conn = await get_db_connection()
+
+        # Find CRM topic contact linked to this vacancy
+        cursor = await conn.execute("""
+            SELECT contact_id, contact_name
+            FROM crm_topic_contacts
+            WHERE vacancy_id = ?
+        """, (vacancy_id,))
+        crm_contact = await cursor.fetchone()
+        await conn.close()
+
+        if not crm_contact:
+            return {"success": True, "messages": []}
+
+        contact_id = str(crm_contact[0])
+        contact_name = crm_contact[1] or f"User {contact_id}"
+
+        # Load message history from working memory
+        memory_file = WORKING_MEMORY_DIR / f"{contact_id}.json"
+        if not memory_file.exists():
+            return {"success": True, "messages": []}
+
+        try:
+            with open(memory_file, 'r') as f:
+                raw_messages = json.load(f)
+        except Exception as e:
+            logger.error(f"Error reading working memory: {e}")
+            return {"success": True, "messages": []}
+
+        # Format messages for chat UI
+        messages = []
+        for msg in raw_messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+
+            if role == "user":
+                messages.append({
+                    "is_agent": False,
+                    "sender_name": contact_name,
+                    "text": content
+                })
+            elif role == "assistant":
+                messages.append({
+                    "is_agent": True,
+                    "sender_name": "Agent",
+                    "text": content
+                })
+
+        return {"success": True, "messages": messages}
+
+    except Exception as e:
+        logger.error(f"Error getting vacancy conversation: {e}")
+        return {"success": False, "error": str(e), "messages": []}
+
+
+# NOTE: This route must be at the end to avoid catching other routes like /messages, /send-message, /conversation
 @router.get("/{vacancy_id}")
 async def get_vacancy(vacancy_id: int):
     """Get single vacancy by ID."""

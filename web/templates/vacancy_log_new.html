@@ -303,9 +303,67 @@
                     <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">AI Reason</label><p class="text-sm text-gray-900 dark:text-gray-200 mt-1">${escapeHtml(v.ai_reason || 'No reason provided')}</p></div>
                     <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Processed</label><p class="text-sm text-gray-900 dark:text-gray-200 mt-1">${v.processed_at || '-'}</p></div>
                     <div><label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Full Text</label><div class="mt-2 p-3 bg-gray-50 dark:bg-dark-800 rounded-lg text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-64 overflow-y-auto">${escapeHtml(v.text_full || v.text_preview)}</div></div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Conversation</label>
+                        <div id="modal-conversation" class="mt-2 bg-gray-50 dark:bg-dark-800 rounded-lg overflow-hidden">
+                            <div class="p-4 max-h-64 overflow-y-auto" id="modal-chat-messages">
+                                <div class="flex items-center justify-center py-8 text-gray-400">
+                                    <svg class="w-4 h-4 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                    </svg>
+                                    Loading...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             `;
             document.getElementById('modal-overlay').classList.remove('hidden');
+            loadConversation(v.id);
+        }
+
+        async function loadConversation(vacancyId) {
+            const container = document.getElementById('modal-chat-messages');
+            try {
+                const response = await fetch(`/api/vacancies/${vacancyId}/conversation`);
+                const data = await response.json();
+
+                if (data.success && data.messages && data.messages.length > 0) {
+                    container.innerHTML = data.messages.map(msg => `
+                        <div class="mb-3 ${msg.is_agent ? 'text-right' : ''}">
+                            <div class="inline-block max-w-[85%] px-3 py-2 rounded-lg text-sm ${
+                                msg.is_agent
+                                    ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-900 dark:text-violet-200'
+                                    : 'bg-white dark:bg-dark-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-dark-600'
+                            }">
+                                <div class="text-xs font-medium mb-1 ${msg.is_agent ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'}">${escapeHtml(msg.sender_name)}</div>
+                                <div class="whitespace-pre-wrap">${escapeHtml(msg.text)}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    // Show empty chat state
+                    container.innerHTML = `
+                        <div class="flex flex-col items-center justify-center py-8 text-gray-400">
+                            <svg class="w-10 h-10 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                            <p class="text-sm">No conversation yet</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                // Show empty chat state on error
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-8 text-gray-400">
+                        <svg class="w-10 h-10 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                        </svg>
+                        <p class="text-sm">No conversation yet</p>
+                    </div>
+                `;
+            }
         }
 
         function closeModal(event) {
