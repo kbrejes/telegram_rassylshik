@@ -311,19 +311,20 @@
         // Track agents that are currently connecting (for UI feedback)
         let connectingAgents = new Set();
 
-        // State to dot color mapping
-        const STATE_COLORS = {
-            connected: 'bg-green-500',
-            connecting: 'bg-blue-500 animate-pulse',
-            disconnected: 'bg-gray-400',
-            flood_wait: 'bg-amber-500 animate-pulse',
-            spam_limited: 'bg-orange-500',
-            auth_required: 'bg-yellow-500',
-            auth_expired: 'bg-red-500',
-            blocked: 'bg-red-600',
-            db_locked: 'bg-orange-500',
-            session_revoked: 'bg-red-500',
-            error: 'bg-red-500'
+        // State configuration: dot color and label
+        const STATE_CONFIG = {
+            connected:       { dot: 'bg-green-500', label: 'Connected', labelClass: 'text-green-600 dark:text-green-400' },
+            connecting:      { dot: 'bg-blue-500 animate-pulse', label: 'Connecting...', labelClass: 'text-blue-600 dark:text-blue-400' },
+            disconnected:    { dot: 'bg-gray-400', label: 'Disconnected', labelClass: 'text-gray-500 dark:text-gray-400' },
+            flood_wait:      { dot: 'bg-amber-500 animate-pulse', label: 'Rate Limited', labelClass: 'text-amber-600 dark:text-amber-400' },
+            spam_limited:    { dot: 'bg-orange-500', label: 'Spam Block', labelClass: 'text-orange-600 dark:text-orange-400' },
+            auth_required:   { dot: 'bg-yellow-500', label: 'Auth Required', labelClass: 'text-yellow-600 dark:text-yellow-400' },
+            code_rate_limit: { dot: 'bg-yellow-500', label: 'Code Rate Limited', labelClass: 'text-yellow-600 dark:text-yellow-400' },
+            auth_expired:    { dot: 'bg-red-500', label: 'Session Expired', labelClass: 'text-red-600 dark:text-red-400' },
+            blocked:         { dot: 'bg-red-600', label: 'Account Blocked', labelClass: 'text-red-600 dark:text-red-400' },
+            db_locked:       { dot: 'bg-orange-500', label: 'Session Locked', labelClass: 'text-orange-600 dark:text-orange-400' },
+            session_revoked: { dot: 'bg-red-500', label: 'Session Revoked', labelClass: 'text-red-600 dark:text-red-400' },
+            error:           { dot: 'bg-red-500', label: 'Error', labelClass: 'text-red-600 dark:text-red-400' }
         };
 
         function getAgentState(agent, sessionName) {
@@ -346,6 +347,8 @@
                 if (err.includes('authkeydup') || (err.includes('session') && err.includes('revoked'))) return 'session_revoked';
                 if (err.includes('blocked') || err.includes('banned') || err.includes('deactivated')) return 'blocked';
                 if (err.includes('auth') && (err.includes('expired') || err.includes('invalid'))) return 'auth_expired';
+                // Code rate limit - "all available options" error from Telegram
+                if (err.includes('all available options') || err.includes('resendcoderequest')) return 'code_rate_limit';
             }
 
             return status;
@@ -359,7 +362,7 @@
                 if (sessionName === 'bot_session') continue;
 
                 const state = getAgentState(agent, sessionName);
-                const statusDot = STATE_COLORS[state] || 'bg-gray-400';
+                const config = STATE_CONFIG[state] || STATE_CONFIG.disconnected;
                 const userInfo = agent.user_info;
 
                 let displayName = sessionName;
@@ -375,8 +378,16 @@
                 if (agent.flood_wait_until) {
                     const remaining = Math.max(0, Math.ceil((agent.flood_wait_until - Date.now()/1000) / 60));
                     if (remaining > 0) {
-                        floodBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">SPAM ${remaining}m</span>`;
+                        floodBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">${remaining}m</span>`;
                     }
+                }
+
+                // Error message (short)
+                let errorHint = '';
+                if (agent.error_message && ['error', 'code_rate_limit', 'db_locked', 'auth_expired', 'blocked', 'session_revoked'].includes(state)) {
+                    let hint = agent.error_message;
+                    if (hint.length > 60) hint = hint.substring(0, 57) + '...';
+                    errorHint = `<p class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate" title="${agent.error_message}">${hint}</p>`;
                 }
 
                 // Button based on state
@@ -388,6 +399,12 @@
                     </button>`;
                 } else if (state === 'connected') {
                     button = `<button onclick="disconnectAgent('${sessionName}')" class="w-full px-3 py-1.5 text-xs font-medium text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-colors">Disconnect</button>`;
+                } else if (state === 'code_rate_limit') {
+                    button = `<button onclick="connectAgent('${sessionName}')" class="w-full px-3 py-1.5 text-xs font-medium text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors">Retry (wait ~30m)</button>`;
+                } else if (state === 'blocked') {
+                    button = `<button disabled class="w-full px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg opacity-60 cursor-not-allowed">Account Blocked</button>`;
+                } else if (state === 'flood_wait' || state === 'spam_limited') {
+                    button = `<button disabled class="w-full px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg opacity-60 cursor-not-allowed">Wait for cooldown</button>`;
                 } else {
                     button = `<button onclick="connectAgent('${sessionName}')" class="w-full px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors">Connect</button>`;
                 }
@@ -400,12 +417,16 @@
                             </svg>
                         </button>
                         <div class="p-4">
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="w-3 h-3 rounded-full ${statusDot}"></span>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="w-2.5 h-2.5 rounded-full ${config.dot} flex-shrink-0"></span>
                                 <span class="font-semibold text-gray-900 dark:text-white truncate">${displayName}</span>
-                                ${username ? `<span class="text-sm text-gray-500 dark:text-gray-400">(${username})</span>` : ''}
+                                ${username ? `<span class="text-xs text-gray-500 dark:text-gray-400">${username}</span>` : ''}
+                            </div>
+                            <div class="flex items-center gap-2 mb-3 ml-4">
+                                <span class="text-xs font-medium ${config.labelClass}">${config.label}</span>
                                 ${floodBadge}
                             </div>
+                            ${errorHint}
                             ${button}
                         </div>
                     </div>
