@@ -290,8 +290,12 @@ async def create_channel_full(data: FullChannelCreateRequest):
             )
 
             # CRITICAL: Load existing channels first to avoid overwriting them!
+            print(f"[DEBUG] Before load: {len(config_manager.channels)} channels in memory", flush=True)
+            print(f"[DEBUG] Config path: {config_manager.config_path}", flush=True)
             config_manager.load()
+            print(f"[DEBUG] After load: {len(config_manager.channels)} channels from file: {[c.name for c in config_manager.channels]}", flush=True)
             if config_manager.add_channel(channel):
+                print(f"[DEBUG] After add: {len(config_manager.channels)} channels: {[c.name for c in config_manager.channels]}", flush=True)
                 logger.info(f"Канал {channel_id} сохранён в конфигурации")
 
             return {
