@@ -70,8 +70,10 @@
                     </button>
                     <h2 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">Edit Channel</h2>
                 </div>
-                <a href="/" class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-accent flex-shrink-0">
-                    &larr; Back
+                <a href="/" class="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-700 hover:text-gray-900 dark:hover:text-white transition flex-shrink-0" title="Close">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
                 </a>
             </header>
 
@@ -99,42 +101,16 @@
                             <!-- Source lists loaded dynamically -->
                         </div>
 
-                        <details class="bg-gray-100 dark:bg-dark-700 rounded-lg">
-                            <summary class="px-4 py-3 cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600 rounded-lg select-none">
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" onclick="openModal('custom-sources-modal')" class="px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600 transition">
                                 Custom sources
-                            </summary>
-                            <div class="p-4 bg-gray-50 dark:bg-dark-600 rounded-b-lg">
-                                <textarea id="input_sources" rows="4" placeholder="@channel1&#10;@channel2&#10;@channel3"
-                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-none">{% if channel %}{{ channel.input_sources|join('\n') }}{% endif %}</textarea>
-                                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">One channel per line (@username or ID)</p>
-                                <div class="flex gap-2 mt-3">
-                                    <input type="text" id="new_source_list_name" placeholder="List name"
-                                        class="flex-1 px-4 py-2 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none">
-                                    <button type="button" onclick="saveSourceList()" class="px-4 py-2 rounded-lg bg-accent text-white hover:bg-violet-600 transition">
-                                        Save
-                                    </button>
-                                </div>
-                            </div>
-                        </details>
-
-                        <details class="bg-gray-100 dark:bg-dark-700 rounded-lg mt-4">
-                            <summary class="px-4 py-3 cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600 rounded-lg select-none">
+                            </button>
+                            <button type="button" onclick="openModal('ai-filter-modal')" class="px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600 transition">
                                 AI Filter Prompt
-                            </summary>
-                            <div class="p-4 bg-gray-50 dark:bg-dark-600 rounded-b-lg space-y-4">
-                                <textarea id="ai-filter-prompt" rows="10" placeholder="Loading..."
-                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm"></textarea>
-                                <div class="flex items-center gap-3">
-                                    <button type="button" onclick="saveFilterPrompt()" class="px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition">
-                                        Save Prompt
-                                    </button>
-                                    <button type="button" onclick="resetFilterPrompt()" class="px-4 py-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">
-                                        Reset to Default
-                                    </button>
-                                    <span id="filter-prompt-status" class="ml-auto text-sm text-gray-500">Loading...</span>
-                                </div>
-                            </div>
-                        </details>
+                                <span id="filter-prompt-badge" class="ml-1 text-xs text-accent hidden">(custom)</span>
+                            </button>
+                        </div>
+                        <textarea id="input_sources" class="hidden">{% if channel %}{{ channel.input_sources|join('\n') }}{% endif %}</textarea>
                     </div>
 
                     <!-- Conversation AI Prompts with Tabs -->
@@ -159,18 +135,18 @@
 
                             <!-- Textarea -->
                             <div class="flex-1">
-                                <textarea x-show="activeTab === 'base_context'" id="prompt_base_context" rows="10" placeholder="Base context prompt..."
-                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts.base_context }}{% endif %}</textarea>
-                                <textarea x-show="activeTab === 'discovery'" id="prompt_discovery" rows="10" placeholder="Discovery prompt..."
-                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts.discovery }}{% endif %}</textarea>
-                                <textarea x-show="activeTab === 'engagement'" id="prompt_engagement" rows="10" placeholder="Engagement prompt..."
-                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts.engagement }}{% endif %}</textarea>
-                                <textarea x-show="activeTab === 'call_ready'" id="prompt_call_ready" rows="10" placeholder="Call ready prompt..."
-                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts.call_ready }}{% endif %}</textarea>
-                                <textarea x-show="activeTab === 'call_pending'" id="prompt_call_pending" rows="10" placeholder="Call pending prompt..."
-                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts.call_pending }}{% endif %}</textarea>
-                                <textarea x-show="activeTab === 'call_declined'" id="prompt_call_declined" rows="10" placeholder="Call declined prompt..."
-                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-sm">{% if channel and channel.prompts %}{{ channel.prompts.call_declined }}{% endif %}</textarea>
+                                <textarea x-show="activeTab === 'base_context'" id="prompt_base_context" rows="14" placeholder="Base context prompt..."
+                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-xs">{% if channel and channel.prompts %}{{ channel.prompts.base_context }}{% endif %}</textarea>
+                                <textarea x-show="activeTab === 'discovery'" id="prompt_discovery" rows="14" placeholder="Discovery prompt..."
+                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-xs">{% if channel and channel.prompts %}{{ channel.prompts.discovery }}{% endif %}</textarea>
+                                <textarea x-show="activeTab === 'engagement'" id="prompt_engagement" rows="14" placeholder="Engagement prompt..."
+                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-xs">{% if channel and channel.prompts %}{{ channel.prompts.engagement }}{% endif %}</textarea>
+                                <textarea x-show="activeTab === 'call_ready'" id="prompt_call_ready" rows="14" placeholder="Call ready prompt..."
+                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-xs">{% if channel and channel.prompts %}{{ channel.prompts.call_ready }}{% endif %}</textarea>
+                                <textarea x-show="activeTab === 'call_pending'" id="prompt_call_pending" rows="14" placeholder="Call pending prompt..."
+                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-xs">{% if channel and channel.prompts %}{{ channel.prompts.call_pending }}{% endif %}</textarea>
+                                <textarea x-show="activeTab === 'call_declined'" id="prompt_call_declined" rows="14" placeholder="Call declined prompt..."
+                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-xs">{% if channel and channel.prompts %}{{ channel.prompts.call_declined }}{% endif %}</textarea>
                             </div>
                         </div>
                     </div>
@@ -179,7 +155,10 @@
                     <div class="bg-white dark:bg-dark-800 rounded-xl  p-6 ">
                         <div class="flex items-center justify-between mb-4">
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Agents</h3>
-                            <a href="/agents" class="text-sm text-accent hover:underline">+ Add new agent</a>
+                            <a href="/agents" class="text-sm text-accent hover:underline flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                Manage Agents
+                            </a>
                         </div>
 
                         <div id="all-agents-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -199,22 +178,10 @@
                             <!-- Templates loaded dynamically -->
                         </div>
 
-                        <details class="bg-gray-100 dark:bg-dark-700 rounded-lg">
-                            <summary class="px-4 py-3 cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600 rounded-lg select-none">
-                                Custom template
-                            </summary>
-                            <div class="p-4 bg-gray-50 dark:bg-dark-600 rounded-b-lg">
-                                <textarea id="auto_response_template" rows="3" placeholder="Hello! I'm interested in your vacancy..."
-                                    class="w-full px-4 py-3 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-none">{% if channel %}{{ channel.auto_response_template }}{% endif %}</textarea>
-                                <div class="flex gap-2 mt-3">
-                                    <input type="text" id="new_template_name" placeholder="Template name"
-                                        class="flex-1 px-4 py-2 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none">
-                                    <button type="button" onclick="saveTemplate()" class="px-4 py-2 rounded-lg bg-accent text-white hover:bg-violet-600 transition">
-                                        Save
-                                    </button>
-                                </div>
-                            </div>
-                        </details>
+                        <button type="button" onclick="openModal('custom-template-modal')" class="px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600 transition">
+                            Custom template
+                        </button>
+                        <textarea id="auto_response_template" class="hidden">{% if channel %}{{ channel.auto_response_template }}{% endif %}</textarea>
                     </div>
 
                     <!-- Submit -->
@@ -236,6 +203,92 @@
         <div class="bg-white dark:bg-dark-800 rounded-xl p-8 flex flex-col items-center">
             <div class="animate-spin w-8 h-8 border-4 border-accent border-t-transparent rounded-full"></div>
             <p class="mt-4 text-gray-700 dark:text-gray-300">Saving...</p>
+        </div>
+    </div>
+
+    <!-- Custom Sources Modal -->
+    <div id="custom-sources-modal" class="fixed inset-0 z-50 hidden" onclick="closeModal('custom-sources-modal', event)">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        <div class="flex items-center justify-center min-h-full p-4">
+            <div class="relative bg-white dark:bg-dark-800 rounded-xl shadow-xl max-w-lg w-full overflow-hidden dark:border dark:border-dark-700" onclick="event.stopPropagation()">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-dark-700">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Custom Sources</h3>
+                    <button onclick="closeModal('custom-sources-modal')" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div class="p-5 space-y-4">
+                    <textarea id="modal_input_sources" rows="6" placeholder="@channel1&#10;@channel2&#10;@channel3"
+                        class="w-full px-4 py-3 rounded-lg bg-gray-50 dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-none text-sm"></textarea>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">One channel per line (@username or ID)</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="new_source_list_name" placeholder="List name"
+                            class="flex-1 px-3 py-2 rounded-lg bg-gray-50 dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none text-sm">
+                        <button type="button" onclick="saveSourceList()" class="px-4 py-2 rounded-lg bg-accent text-white hover:bg-violet-600 transition text-sm">Save List</button>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 px-5 py-4 bg-gray-50 dark:bg-dark-850 border-t border-gray-200 dark:border-dark-700">
+                    <button onclick="closeModal('custom-sources-modal')" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition">Cancel</button>
+                    <button onclick="applyCustomSources()" class="px-4 py-2 text-sm font-medium text-white bg-accent rounded-lg hover:bg-violet-600 transition">Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Filter Prompt Modal -->
+    <div id="ai-filter-modal" class="fixed inset-0 z-50 hidden" onclick="closeModal('ai-filter-modal', event)">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        <div class="flex items-center justify-center min-h-full p-4">
+            <div class="relative bg-white dark:bg-dark-800 rounded-xl shadow-xl max-w-2xl w-full overflow-hidden dark:border dark:border-dark-700" onclick="event.stopPropagation()">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-dark-700">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">AI Filter Prompt</h3>
+                    <button onclick="closeModal('ai-filter-modal')" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div class="p-5 space-y-4">
+                    <textarea id="ai-filter-prompt" rows="12" placeholder="Loading..."
+                        class="w-full px-4 py-3 rounded-lg bg-gray-50 dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-y font-mono text-xs"></textarea>
+                    <div class="flex items-center justify-between">
+                        <span id="filter-prompt-status" class="text-sm text-gray-500">Loading...</span>
+                    </div>
+                </div>
+                <div class="flex justify-between gap-3 px-5 py-4 bg-gray-50 dark:bg-dark-850 border-t border-gray-200 dark:border-dark-700">
+                    <button type="button" onclick="resetFilterPrompt()" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition">Reset to Default</button>
+                    <div class="flex gap-3">
+                        <button onclick="closeModal('ai-filter-modal')" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition">Cancel</button>
+                        <button onclick="saveFilterPrompt(); closeModal('ai-filter-modal')" class="px-4 py-2 text-sm font-medium text-white bg-green-500 rounded-lg hover:bg-green-600 transition">Save Prompt</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Template Modal -->
+    <div id="custom-template-modal" class="fixed inset-0 z-50 hidden" onclick="closeModal('custom-template-modal', event)">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        <div class="flex items-center justify-center min-h-full p-4">
+            <div class="relative bg-white dark:bg-dark-800 rounded-xl shadow-xl max-w-lg w-full overflow-hidden dark:border dark:border-dark-700" onclick="event.stopPropagation()">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-dark-700">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Custom Template</h3>
+                    <button onclick="closeModal('custom-template-modal')" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div class="p-5 space-y-4">
+                    <textarea id="modal_auto_response_template" rows="4" placeholder="Hello! I'm interested in your vacancy..."
+                        class="w-full px-4 py-3 rounded-lg bg-gray-50 dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none resize-none text-sm"></textarea>
+                    <div class="flex gap-2">
+                        <input type="text" id="new_template_name" placeholder="Template name"
+                            class="flex-1 px-3 py-2 rounded-lg bg-gray-50 dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none text-sm">
+                        <button type="button" onclick="saveTemplate()" class="px-4 py-2 rounded-lg bg-accent text-white hover:bg-violet-600 transition text-sm">Save as Template</button>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 px-5 py-4 bg-gray-50 dark:bg-dark-850 border-t border-gray-200 dark:border-dark-700">
+                    <button onclick="closeModal('custom-template-modal')" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-lg transition">Cancel</button>
+                    <button onclick="applyCustomTemplate()" class="px-4 py-2 text-sm font-medium text-white bg-accent rounded-lg hover:bg-violet-600 transition">Apply</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -271,6 +324,44 @@
             overlay.classList.toggle('hidden');
         }
 
+        // Modal functions
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.remove('hidden');
+            // Sync data to modal
+            if (modalId === 'custom-sources-modal') {
+                document.getElementById('modal_input_sources').value = document.getElementById('input_sources').value;
+            } else if (modalId === 'custom-template-modal') {
+                document.getElementById('modal_auto_response_template').value = document.getElementById('auto_response_template').value;
+            }
+        }
+
+        function closeModal(modalId, event) {
+            if (event && event.target !== document.getElementById(modalId)) return;
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        function applyCustomSources() {
+            document.getElementById('input_sources').value = document.getElementById('modal_input_sources').value;
+            closeModal('custom-sources-modal');
+            selectedSourceListId = null;
+            renderSourceLists();
+        }
+
+        function applyCustomTemplate() {
+            document.getElementById('auto_response_template').value = document.getElementById('modal_auto_response_template').value;
+            closeModal('custom-template-modal');
+            selectedTemplateId = null;
+            renderTemplates();
+        }
+
+        // Escape key to close modals
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('[id$="-modal"]').forEach(m => m.classList.add('hidden'));
+            }
+        });
+
         // Filter prompt
         async function loadFilterPrompt() {
             try {
@@ -289,8 +380,10 @@
 
         function updateFilterPromptStatus() {
             const status = document.getElementById('filter-prompt-status');
+            const badge = document.getElementById('filter-prompt-badge');
             status.textContent = isCustomFilterPrompt ? 'Custom prompt' : 'Default prompt';
             status.classList.toggle('text-accent', isCustomFilterPrompt);
+            if (badge) badge.classList.toggle('hidden', !isCustomFilterPrompt);
         }
 
         async function saveFilterPrompt() {
@@ -352,27 +445,26 @@
             const list = document.getElementById('template_list');
             const currentText = document.getElementById('auto_response_template').value.trim();
 
-            let html = '';
+            let html = '<div class="flex flex-wrap gap-2">';
             savedTemplates.forEach(t => {
                 const isSelected = selectedTemplateId === t.id || (selectedTemplateId === null && currentText === t.text);
                 if (isSelected && selectedTemplateId === null) selectedTemplateId = t.id;
 
                 html += `
-                    <div class="flex items-center gap-2">
-                        <div class="flex-1 min-w-0 p-3 rounded-lg cursor-pointer transition-all ${isSelected
-                            ? 'bg-violet-100 dark:bg-violet-900/30'
-                            : 'bg-gray-100 dark:bg-dark-700 hover:bg-gray-200 dark:hover:bg-dark-600'}"
-                             onclick="selectTemplate('${t.id}')">
-                            <div class="font-medium text-gray-900 dark:text-white text-sm truncate">${isSelected ? '&#10003; ' : ''}${t.name}</div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400 truncate">${t.text.substring(0, 60)}${t.text.length > 60 ? '...' : ''}</div>
-                        </div>
-                        <button type="button" onclick="deleteTemplate('${t.id}')" class="flex-shrink-0 p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Delete">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    <div class="inline-flex items-center gap-1 px-3 py-2 rounded-lg cursor-pointer transition-all ${isSelected
+                        ? 'bg-violet-100 dark:bg-violet-900/30 ring-2 ring-violet-500'
+                        : 'bg-gray-100 dark:bg-dark-700 hover:bg-gray-200 dark:hover:bg-dark-600'}"
+                         onclick="selectTemplate('${t.id}')" title="${t.text.substring(0, 100)}${t.text.length > 100 ? '...' : ''}">
+                        ${isSelected ? '<svg class="w-4 h-4 text-violet-600 dark:text-violet-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' : ''}
+                        <span class="font-medium text-gray-900 dark:text-white text-sm">${t.name}</span>
+                        <button type="button" onclick="event.stopPropagation(); deleteTemplate('${t.id}')" class="ml-1 p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Delete">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                     </div>
                 `;
             });
-            list.innerHTML = html;
+            html += '</div>';
+            list.innerHTML = savedTemplates.length > 0 ? html : '';
         }
 
         function selectTemplate(id) {
@@ -386,7 +478,8 @@
 
         async function saveTemplate() {
             const name = document.getElementById('new_template_name').value.trim();
-            const text = document.getElementById('auto_response_template').value.trim();
+            const modalTemplate = document.getElementById('modal_auto_response_template');
+            const text = modalTemplate ? modalTemplate.value.trim() : document.getElementById('auto_response_template').value.trim();
             if (!name || !text) {
                 alert('Enter template name and text');
                 return;
@@ -451,28 +544,28 @@
             const list = document.getElementById('source_list');
             const currentSources = document.getElementById('input_sources').value.trim().split('\n').filter(s => s.trim()).sort().join('\n');
 
-            let html = '';
+            let html = '<div class="flex flex-wrap gap-2">';
             savedSourceLists.forEach(l => {
                 const listSources = (l.sources || []).sort().join('\n');
                 const isSelected = selectedSourceListId === l.id || (selectedSourceListId === null && currentSources === listSources);
                 if (isSelected && selectedSourceListId === null) selectedSourceListId = l.id;
 
                 html += `
-                    <div class="flex items-center gap-2">
-                        <div class="flex-1 p-3 rounded-lg cursor-pointer transition-all ${isSelected
-                            ? 'bg-violet-100 dark:bg-violet-900/30'
-                            : 'bg-gray-100 dark:bg-dark-700 hover:bg-gray-200 dark:hover:bg-dark-600'}"
-                             onclick="selectSourceList('${l.id}')">
-                            <div class="font-medium text-gray-900 dark:text-white text-sm">${isSelected ? '&check; ' : ''}${l.name}</div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400">${(l.sources || []).length} sources: ${(l.sources || []).slice(0, 3).join(', ')}${(l.sources || []).length > 3 ? '...' : ''}</div>
-                        </div>
-                        <button type="button" onclick="deleteSourceList('${l.id}')" class="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Delete">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    <div class="inline-flex items-center gap-1 px-3 py-2 rounded-lg cursor-pointer transition-all ${isSelected
+                        ? 'bg-violet-100 dark:bg-violet-900/30 ring-2 ring-violet-500'
+                        : 'bg-gray-100 dark:bg-dark-700 hover:bg-gray-200 dark:hover:bg-dark-600'}"
+                         onclick="selectSourceList('${l.id}')" title="${(l.sources || []).join(', ')}">
+                        ${isSelected ? '<svg class="w-4 h-4 text-violet-600 dark:text-violet-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' : ''}
+                        <span class="font-medium text-gray-900 dark:text-white text-sm">${l.name}</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">(${(l.sources || []).length})</span>
+                        <button type="button" onclick="event.stopPropagation(); deleteSourceList('${l.id}')" class="ml-1 p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition" title="Delete">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                     </div>
                 `;
             });
-            list.innerHTML = html;
+            html += '</div>';
+            list.innerHTML = savedSourceLists.length > 0 ? html : '';
         }
 
         function selectSourceList(id) {
@@ -486,7 +579,9 @@
 
         async function saveSourceList() {
             const name = document.getElementById('new_source_list_name').value.trim();
-            const sources = document.getElementById('input_sources').value.trim().split('\n').map(s => s.trim()).filter(s => s);
+            const modalSources = document.getElementById('modal_input_sources');
+            const sourcesText = modalSources ? modalSources.value.trim() : document.getElementById('input_sources').value.trim();
+            const sources = sourcesText.split('\n').map(s => s.trim()).filter(s => s);
             if (!name || sources.length === 0) {
                 alert('Enter list name and at least one source');
                 return;
@@ -561,12 +656,32 @@
             }
         }
 
+        // Agent state configuration (same as /agents page)
+        const AGENT_STATE_CONFIG = {
+            connected: { dot: 'bg-green-500', label: 'Connected', labelClass: 'text-green-600 dark:text-green-400' },
+            disconnected: { dot: 'bg-gray-400', label: 'Disconnected', labelClass: 'text-gray-500 dark:text-gray-400' },
+            flood_wait: { dot: 'bg-amber-500 animate-pulse', label: 'Rate Limited', labelClass: 'text-amber-600 dark:text-amber-400' },
+            spam_limited: { dot: 'bg-orange-500', label: 'Spam Block', labelClass: 'text-orange-600 dark:text-orange-400' },
+            error: { dot: 'bg-red-500', label: 'Error', labelClass: 'text-red-600 dark:text-red-400' }
+        };
+
+        function getAgentState(agent) {
+            const status = agent.status || 'disconnected';
+            if (status === 'flood_wait' && agent.flood_wait_until) {
+                const remaining = agent.flood_wait_until - Date.now()/1000;
+                if (remaining > 1800) return 'spam_limited';
+                if (remaining > 0) return 'flood_wait';
+                return 'disconnected';
+            }
+            return status;
+        }
+
         function renderAgents() {
             const grid = document.getElementById('all-agents-grid');
             const warning = document.getElementById('no-agents-warning');
 
             if (allAgents.length === 0) {
-                grid.innerHTML = '<div class="col-span-full text-gray-500 dark:text-gray-400 italic">No agents available</div>';
+                grid.innerHTML = '<div class="col-span-full text-gray-500 dark:text-gray-400 italic">No agents available. <a href="/agents" class="text-accent hover:underline">Add agents</a></div>';
                 warning.classList.remove('hidden');
                 return;
             }
@@ -577,17 +692,30 @@
             grid.innerHTML = allAgents.map(agent => {
                 const displayName = agent.name || agent.session_name;
                 const username = agent.username ? `@${agent.username}` : '';
-                const isConnected = agent.status === 'connected';
                 const isLinked = linkedAgentNames.includes(agent.session_name);
-                const statusDot = isConnected ? 'bg-green-500' : 'bg-gray-400';
+                const state = getAgentState(agent);
+                const config = AGENT_STATE_CONFIG[state] || AGENT_STATE_CONFIG.disconnected;
+
+                // Flood wait badge
+                let floodBadge = '';
+                if (agent.flood_wait_until) {
+                    const remaining = Math.max(0, Math.ceil((agent.flood_wait_until - Date.now()/1000) / 60));
+                    if (remaining > 0) {
+                        floodBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">${remaining}m</span>`;
+                    }
+                }
 
                 return `
-                    <div class="bg-gray-50 dark:bg-dark-700 rounded-xl shadow-sm hover:shadow-md transition-all">
+                    <div class="bg-white dark:bg-dark-800 rounded-xl shadow-sm hover:shadow-md transition-all border border-gray-100 dark:border-dark-700">
                         <div class="p-4">
-                            <div class="flex items-center gap-3 mb-4">
-                                <span class="w-3 h-3 rounded-full ${statusDot}"></span>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="w-2.5 h-2.5 rounded-full ${config.dot} flex-shrink-0"></span>
                                 <span class="font-semibold text-gray-900 dark:text-white truncate">${displayName}</span>
-                                ${username ? `<span class="text-sm text-gray-500 dark:text-gray-400">(${username})</span>` : ''}
+                                ${username ? `<span class="text-xs text-gray-500 dark:text-gray-400">${username}</span>` : ''}
+                            </div>
+                            <div class="flex items-center gap-2 mb-3 ml-4">
+                                <span class="text-xs font-medium ${config.labelClass}">${config.label}</span>
+                                ${floodBadge}
                             </div>
                             ${isLinked
                                 ? `<button type="button" onclick="unlinkAgent('${agent.session_name}')" class="w-full px-3 py-1.5 text-xs font-medium text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-colors">Unlink</button>`
