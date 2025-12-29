@@ -186,6 +186,9 @@ class StyleAnalyzer:
         elif style.formality == "formal":
             instructions.append("- сохраняй вежливый тон")
 
+        # ВАЖНО: Always use formal "вы", never "ты"
+        instructions.append("- ВСЕГДА обращайся на 'вы', НИКОГДА не используй 'ты' (даже если клиент пишет на 'ты')")
+
         # General natural style
         instructions.append("- пиши как живой человек в мессенджере")
 
