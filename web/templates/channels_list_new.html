@@ -73,39 +73,32 @@
     </style>
     <style>
         /* Tooltip for vacancy peek */
-        .vacancy-row {
-            position: relative;
+        .peek-icon {
+            opacity: 0.4;
+            transition: opacity 0.15s;
+            flex-shrink: 0;
         }
-        .vacancy-row:hover .vacancy-tooltip {
-            display: block;
+        .peek-icon:hover, .peek-icon.active {
+            opacity: 1;
         }
         .vacancy-tooltip {
             display: none;
-            position: absolute;
-            left: 0;
-            top: 100%;
-            z-index: 100;
+            position: fixed;
+            z-index: 200;
             background: #1f2937;
             color: white;
             padding: 12px 16px;
             border-radius: 8px;
             font-size: 13px;
-            max-width: 350px;
-            width: max-content;
+            max-width: min(350px, 90vw);
             white-space: pre-wrap;
             word-break: break-word;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
             line-height: 1.5;
-            margin-top: 4px;
             pointer-events: none;
         }
-        .vacancy-tooltip::before {
-            content: '';
-            position: absolute;
-            left: 20px;
-            top: -6px;
-            border: 6px solid transparent;
-            border-bottom-color: #1f2937;
+        .vacancy-tooltip.show {
+            display: block;
         }
     </style>
     <script>
@@ -327,6 +320,9 @@
         </main>
     </div>
 
+    <!-- Global tooltip element -->
+    <div id="vacancy-tooltip" class="vacancy-tooltip"></div>
+
     <script>
         // Sidebar toggle
         function toggleSidebar() {
@@ -339,6 +335,80 @@
         let peekVacancies = [];
         let currentSort = 'latest';
         let allVacancies = [];
+        let activeTooltipIdx = null;
+        let tooltipTimeout = null;
+
+        // Show tooltip on hover (desktop)
+        function showTooltip(event, idx) {
+            if (window.innerWidth < 768) return; // Skip on mobile, use tap instead
+
+            clearTimeout(tooltipTimeout);
+            const v = peekVacancies[idx];
+            if (!v) return;
+
+            const tooltip = document.getElementById('vacancy-tooltip');
+            const text = (v.text_full || v.text_preview || '').substring(0, 250);
+            const truncated = text.length >= 250 ? '...' : '';
+            tooltip.textContent = text + truncated;
+
+            // Position near the icon
+            const rect = event.target.closest('.peek-icon').getBoundingClientRect();
+            tooltip.style.left = Math.max(8, rect.left) + 'px';
+            tooltip.style.top = (rect.bottom + 8) + 'px';
+            tooltip.classList.add('show');
+        }
+
+        // Hide tooltip
+        function hideTooltip() {
+            tooltipTimeout = setTimeout(() => {
+                const tooltip = document.getElementById('vacancy-tooltip');
+                tooltip.classList.remove('show');
+                activeTooltipIdx = null;
+                document.querySelectorAll('.peek-icon').forEach(el => el.classList.remove('active'));
+            }, 100);
+        }
+
+        // Toggle tooltip on tap (mobile)
+        function toggleTooltip(event, idx) {
+            const tooltip = document.getElementById('vacancy-tooltip');
+
+            // If same tooltip is open, close it
+            if (activeTooltipIdx === idx && tooltip.classList.contains('show')) {
+                hideTooltip();
+                return;
+            }
+
+            // Close any open tooltip first
+            document.querySelectorAll('.peek-icon').forEach(el => el.classList.remove('active'));
+
+            const v = peekVacancies[idx];
+            if (!v) return;
+
+            const text = (v.text_full || v.text_preview || '').substring(0, 250);
+            const truncated = text.length >= 250 ? '...' : '';
+            tooltip.textContent = text + truncated;
+
+            // Position near the icon
+            const rect = event.target.closest('.peek-icon').getBoundingClientRect();
+            const tooltipWidth = Math.min(350, window.innerWidth * 0.9);
+            let left = rect.left;
+            if (left + tooltipWidth > window.innerWidth - 8) {
+                left = window.innerWidth - tooltipWidth - 8;
+            }
+            tooltip.style.left = Math.max(8, left) + 'px';
+            tooltip.style.top = (rect.bottom + 8) + 'px';
+            tooltip.classList.add('show');
+
+            event.target.closest('.peek-icon').classList.add('active');
+            activeTooltipIdx = idx;
+        }
+
+        // Close tooltip when clicking elsewhere
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.peek-icon') && !e.target.closest('.vacancy-tooltip')) {
+                hideTooltip();
+            }
+        });
 
         // Load status and update UI (uses cached fetch from cache.js)
         async function loadStatus() {
@@ -517,10 +587,17 @@
                         const truncated = tooltipText.length >= 250 ? '...' : '';
 
                         html += `
-                            <tr class="vacancy-row hover:bg-gray-100 dark:hover:bg-dark-700 active:bg-gray-200 dark:active:bg-dark-600 cursor-pointer transition-colors" onclick="openVacancyPage(${v.id})">
-                                <td class="px-3 py-2 text-gray-700 dark:text-gray-300 truncate max-w-[150px]">
-                                    ${escapeHtml(displayName)}
-                                    <div class="vacancy-tooltip">${escapeHtml(tooltipText)}${truncated}</div>
+                            <tr class="hover:bg-gray-100 dark:hover:bg-dark-700 active:bg-gray-200 dark:active:bg-dark-600 cursor-pointer transition-colors" onclick="openVacancyPage(${v.id})">
+                                <td class="px-3 py-2">
+                                    <div class="flex items-center gap-2">
+                                        <button class="peek-icon text-gray-400 dark:text-gray-500" onclick="event.stopPropagation(); toggleTooltip(event, ${idx})" onmouseenter="showTooltip(event, ${idx})" onmouseleave="hideTooltip()">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                        </button>
+                                        <span class="text-gray-700 dark:text-gray-300 truncate max-w-[120px]">${escapeHtml(displayName)}</span>
+                                    </div>
                                 </td>
                                 <td class="px-3 py-2 text-right">
                                     <div class="flex items-center justify-end gap-1.5">
@@ -528,7 +605,7 @@
                                         <span class="w-1.5 h-1.5 rounded-full ${ledClass}"></span>
                                     </div>
                                 </td>
-                                <td class="px-3 py-2 text-right text-gray-500 dark:text-gray-400 text-xs">${time}</td>
+                                <td class="px-3 py-2 text-right text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">${time}</td>
                             </tr>
                         `;
                     });
