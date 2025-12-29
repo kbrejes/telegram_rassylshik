@@ -442,12 +442,10 @@
                     }
                 }
 
-                // Error message (short)
-                let errorHint = '';
-                if (agent.error_message && ['error', 'code_rate_limit', 'db_locked', 'auth_expired', 'blocked', 'session_revoked'].includes(state)) {
-                    let hint = agent.error_message;
-                    if (hint.length > 60) hint = hint.substring(0, 57) + '...';
-                    errorHint = `<p class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate" title="${agent.error_message}">${hint}</p>`;
+                // Build tooltip with actual error message if present
+                let tooltipText = config.tooltip;
+                if (agent.error_message && state !== 'connected') {
+                    tooltipText = `${config.tooltip}\n\nError: ${agent.error_message}`;
                 }
 
                 // Button based on state
@@ -483,10 +481,9 @@
                                 ${username ? `<span class="text-xs text-gray-500 dark:text-gray-400">${username}</span>` : ''}
                             </div>
                             <div class="flex items-center gap-2 mb-3 ml-4">
-                                <span class="text-xs font-medium ${config.labelClass} cursor-pointer hover:underline tooltip-trigger" data-tooltip="${config.tooltip}" onclick="showTooltip(this)">${config.label}</span>
+                                <span class="text-xs font-medium ${config.labelClass} cursor-pointer hover:underline tooltip-trigger" data-tooltip="${tooltipText}" onclick="showTooltip(this)">${config.label}</span>
                                 ${floodBadge}
                             </div>
-                            ${errorHint}
                             ${button}
                         </div>
                     </div>
@@ -821,7 +818,9 @@
 
             if (!text) return;
 
-            tooltipText.textContent = text;
+            // Convert newlines to <br> and escape HTML
+            const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            tooltipText.innerHTML = escaped.replace(/\n/g, '<br>');
             tooltip.style.display = 'block';
 
             // Position tooltip above the element
@@ -854,9 +853,9 @@
                 tooltip.style.opacity = '1';
             });
 
-            // Auto-hide after 4 seconds
+            // Auto-hide after 6 seconds (longer for error messages)
             clearTimeout(tooltipTimeout);
-            tooltipTimeout = setTimeout(hideTooltip, 4000);
+            tooltipTimeout = setTimeout(hideTooltip, 6000);
         }
 
         function hideTooltip() {

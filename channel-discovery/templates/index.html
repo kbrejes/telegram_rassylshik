@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Channel Discovery</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
+        .score-excellent { background: #22c55e; }
+        .score-good { background: #84cc16; }
+        .score-moderate { background: #eab308; }
+        .score-low { background: #94a3b8; }
+        .loading { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .status-healthy { background: #22c55e; }
+        .status-degraded { background: #eab308; }
+        .status-blocked { background: #ef4444; }
+        .status-disconnected { background: #94a3b8; }
+        .status-unauthorized { background: #f97316; }
+        .status-rate_limited { background: #8b5cf6; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Account Status Banner (shown when issues detected) -->
+    <div id="account-alert" class="hidden bg-red-600 text-white px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                <span id="account-alert-message">Account issue detected</span>
+            </div>
+            <button onclick="hideAccountAlert()" class="text-white hover:text-red-200">&times;</button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold text-gray-800">Channel Discovery</h1>
+            <div id="account-status" class="flex items-center space-x-3">
+                <!-- Account status will be injected here -->
+            </div>
+        </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="bg-white border-b">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex space-x-8">
+                <button onclick="showTab('search')" id="tab-search" class="py-3 px-1 tab-active font-medium">
+                    Search
+                </button>
+                <button onclick="showTab('channels')" id="tab-channels" class="py-3 px-1 text-gray-500 hover:text-gray-700 font-medium">
+                    Channels
+                </button>
+                <button onclick="showTab('seeds')" id="tab-seeds" class="py-3 px-1 text-gray-500 hover:text-gray-700 font-medium">
+                    Seeds
+                </button>
+                <button onclick="showTab('jobs')" id="tab-jobs" class="py-3 px-1 text-gray-500 hover:text-gray-700 font-medium">
+                    Jobs
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Content -->
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        <!-- Search Tab -->
+        <div id="content-search" class="tab-content">
+            <!-- Session Limits Warning -->
+            <div id="session-limits" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-yellow-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <div>
+                        <p class="font-medium text-yellow-800">Session Limits Active</p>
+                        <p id="session-limits-text" class="text-sm text-yellow-700 mt-1"></p>
+                        <button onclick="resetSession()" class="mt-2 text-sm text-yellow-800 underline hover:no-underline">Reset Session Counters</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-lg font-semibold mb-4">New Discovery Search</h2>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Keywords (one per line)</label>
+                        <textarea id="search-keywords" rows="4" class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="вакансии маркетинг&#10;smm jobs&#10;remote developer"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Min Subscribers</label>
+                            <input type="number" id="search-min-subs" value="1000" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Max Subscribers</label>
+                            <input type="number" id="search-max-subs" value="100000" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Min Posts/Week</label>
+                            <input type="number" id="search-min-posts" value="1" step="0.5" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="search-use-seeds" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <span class="ml-2 text-sm text-gray-700">Analyze seed channels (forwards & mentions)</span>
+                        </label>
+                    </div>
+
+                    <div class="flex space-x-3">
+                        <button onclick="startSearch()" id="btn-start-search" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-medium">
+                            Start Search
+                        </button>
+                        <button onclick="quickSearch()" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 font-medium">
+                            Quick Preview
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Preview Results -->
+            <div id="quick-results" class="hidden bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold mb-4">Quick Preview Results</h3>
+                <div id="quick-results-content"></div>
+            </div>
+        </div>
+
+        <!-- Channels Tab -->
+        <div id="content-channels" class="tab-content hidden">
+            <!-- Stats -->
+            <div id="channels-stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+
+            <!-- Filters -->
+            <div class="bg-white rounded-lg shadow p-4 mb-6">
+                <div class="flex flex-wrap gap-4 items-end">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Min Score</label>
+                        <input type="number" id="filter-min-score" value="5" class="w-24 border rounded px-2 py-1 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Min Subs</label>
+                        <input type="number" id="filter-min-subs" value="1000" class="w-24 border rounded px-2 py-1 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Search</label>
+                        <input type="text" id="filter-search" placeholder="username or title" class="w-40 border rounded px-2 py-1 text-sm">
+                    </div>
+                    <div>
+                        <label class="flex items-center text-sm">
+                            <input type="checkbox" id="filter-active-only" checked class="rounded border-gray-300 mr-1">
+                            Active only
+                        </label>
+                    </div>
+                    <button onclick="loadChannels()" class="bg-blue-600 text-white px-4 py-1 rounded text-sm hover:bg-blue-700">
+                        Apply
+                    </button>
+                </div>
+            </div>
+
+            <!-- Channels List -->
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Channel</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subs</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Posts/wk</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="channels-list" class="divide-y divide-gray-200"></tbody>
+                </table>
+                <div id="channels-pagination" class="px-4 py-3 border-t flex justify-between items-center"></div>
+            </div>
+        </div>
+
+        <!-- Seeds Tab -->
+        <div id="content-seeds" class="tab-content hidden">
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-lg font-semibold mb-4">Add Seed Channels</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Usernames (one per line)</label>
+                        <textarea id="seeds-input" rows="4" class="w-full border rounded-lg px-3 py-2" placeholder="@channel1&#10;@channel2&#10;@channel3"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                        <input type="text" id="seeds-category" class="w-full md:w-64 border rounded-lg px-3 py-2" placeholder="e.g., jobs, marketing">
+                    </div>
+                    <button onclick="addSeeds()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-medium">
+                        Add Seeds
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <div class="px-6 py-4 border-b">
+                    <h3 class="font-semibold">Seed Channels</h3>
+                </div>
+                <div id="seeds-list" class="divide-y divide-gray-200"></div>
+            </div>
+        </div>
+
+        <!-- Jobs Tab -->
+        <div id="content-jobs" class="tab-content hidden">
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <div class="px-6 py-4 border-b">
+                    <h3 class="font-semibold">Recent Search Jobs</h3>
+                </div>
+                <div id="jobs-list" class="divide-y divide-gray-200"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // State
+        let currentTab = 'search';
+        let channelsPage = 0;
+        const channelsLimit = 50;
+        let accountStatus = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAccountStatus();
+            // Refresh account status every 30 seconds
+            setInterval(loadAccountStatus, 30000);
+        });
+
+        // Account Status
+        async function loadAccountStatus() {
+            try {
+                const result = await api('/account/status');
+                accountStatus = result;
+                renderAccountStatus(result);
+            } catch (e) {
+                console.error('Failed to load account status:', e);
+            }
+        }
+
+        function renderAccountStatus(data) {
+            const container = document.getElementById('account-status');
+            const alert = document.getElementById('account-alert');
+            const alertMsg = document.getElementById('account-alert-message');
+            const limitsDiv = document.getElementById('session-limits');
+            const limitsText = document.getElementById('session-limits-text');
+            const searchBtn = document.getElementById('btn-start-search');
+
+            const account = data.account || {};
+            const session = data.session || {};
+            const health = account.health || 'unknown';
+
+            // Status badge
+            const statusColors = {
+                healthy: 'bg-green-500',
+                degraded: 'bg-yellow-500',
+                blocked: 'bg-red-500',
+                disconnected: 'bg-gray-400',
+                unauthorized: 'bg-orange-500',
+                rate_limited: 'bg-purple-500',
+                error: 'bg-red-500'
+            };
+
+            const statusLabels = {
+                healthy: 'Healthy',
+                degraded: 'Degraded',
+                blocked: 'BLOCKED',
+                disconnected: 'Disconnected',
+                unauthorized: 'Not Authorized',
+                rate_limited: 'Rate Limited',
+                error: 'Error'
+            };
+
+            container.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    ${account.username ? `<span class="text-sm text-gray-600">@${account.username}</span>` : ''}
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium text-white ${statusColors[health] || 'bg-gray-400'}">
+                        ${statusLabels[health] || health}
+                    </span>
+                    ${session ? `
+                        <span class="text-xs text-gray-500">
+                            ${session.searches || 0}/${session.searches_limit || '?'} searches
+                        </span>
+                    ` : ''}
+                </div>
+            `;
+
+            // Show alert banner for issues
+            if (health === 'blocked') {
+                alert.classList.remove('hidden');
+                alert.className = 'bg-red-600 text-white px-4 py-3';
+                alertMsg.textContent = `Account BLOCKED: ${account.block_reason || 'Unknown reason'}`;
+                searchBtn.disabled = true;
+                searchBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else if (health === 'unauthorized') {
+                alert.classList.remove('hidden');
+                alert.className = 'bg-orange-500 text-white px-4 py-3';
+                alertMsg.textContent = 'Session not authorized. Please run auth.py';
+                searchBtn.disabled = true;
+                searchBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else if (health === 'rate_limited') {
+                alert.classList.remove('hidden');
+                alert.className = 'bg-purple-600 text-white px-4 py-3';
+                const remaining = account.flood_wait_remaining || 0;
+                alertMsg.textContent = `Rate limited. Wait ${Math.ceil(remaining / 60)} minutes.`;
+            } else if (account.last_error && health === 'degraded') {
+                alert.classList.remove('hidden');
+                alert.className = 'bg-yellow-500 text-white px-4 py-3';
+                alertMsg.textContent = `Warning: ${account.last_error}`;
+            } else {
+                alert.classList.add('hidden');
+                searchBtn.disabled = false;
+                searchBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+
+            // Show session limits warning
+            if (session && (session.searches >= session.searches_limit * 0.8 || session.channels >= session.channels_limit * 0.8)) {
+                limitsDiv.classList.remove('hidden');
+                limitsText.textContent = `Searches: ${session.searches}/${session.searches_limit} | Channels: ${session.channels}/${session.channels_limit}`;
+            } else {
+                limitsDiv.classList.add('hidden');
+            }
+        }
+
+        async function resetSession() {
+            try {
+                await api('/account/reset-session', { method: 'POST' });
+                await loadAccountStatus();
+                alert('Session counters reset successfully');
+            } catch (e) {
+                alert('Failed to reset session: ' + e.message);
+            }
+        }
+
+        function hideAccountAlert() {
+            document.getElementById('account-alert').classList.add('hidden');
+        }
+
+        // Tab switching
+        function showTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('nav button').forEach(el => {
+                el.classList.remove('tab-active');
+                el.classList.add('text-gray-500');
+            });
+
+            document.getElementById(`content-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).classList.add('tab-active');
+            document.getElementById(`tab-${tab}`).classList.remove('text-gray-500');
+
+            currentTab = tab;
+
+            if (tab === 'channels') loadChannels();
+            if (tab === 'seeds') loadSeeds();
+            if (tab === 'jobs') loadJobs();
+        }
+
+        // API helpers
+        async function api(endpoint, options = {}) {
+            const res = await fetch(`/api${endpoint}`, {
+                headers: { 'Content-Type': 'application/json' },
+                ...options
+            });
+            return res.json();
+        }
+
+        // Search
+        async function startSearch() {
+            // Check if account is blocked
+            if (accountStatus?.account?.is_blocked) {
+                alert('Cannot search: Account is blocked');
+                return;
+            }
+
+            const keywords = document.getElementById('search-keywords').value
+                .split('\n')
+                .map(k => k.trim())
+                .filter(k => k);
+
+            if (keywords.length === 0) {
+                alert('Please enter at least one keyword');
+                return;
+            }
+
+            const data = {
+                keywords,
+                min_subscribers: parseInt(document.getElementById('search-min-subs').value),
+                max_subscribers: parseInt(document.getElementById('search-max-subs').value),
+                min_posts_per_week: parseFloat(document.getElementById('search-min-posts').value),
+                use_seed_channels: document.getElementById('search-use-seeds').checked
+            };
+
+            const result = await api('/search', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+
+            alert(`Search started! Job ID: ${result.job_id}`);
+            showTab('jobs');
+        }
+
+        async function quickSearch() {
+            const keywords = document.getElementById('search-keywords').value
+                .split('\n')
+                .map(k => k.trim())
+                .filter(k => k);
+
+            if (keywords.length === 0) {
+                alert('Please enter at least one keyword');
+                return;
+            }
+
+            const container = document.getElementById('quick-results');
+            const content = document.getElementById('quick-results-content');
+            container.classList.remove('hidden');
+            content.innerHTML = '<p class="loading text-gray-500">Searching...</p>';
+
+            const result = await api('/search/quick', {
+                method: 'POST',
+                body: JSON.stringify({
+                    keywords,
+                    min_subscribers: parseInt(document.getElementById('search-min-subs').value),
+                    max_subscribers: parseInt(document.getElementById('search-max-subs').value),
+                    limit_per_keyword: 30
+                })
+            });
+
+            content.innerHTML = `
+                <p class="text-sm text-gray-600 mb-4">Found ${result.count} channels</p>
+                <div class="space-y-2">
+                    ${result.channels.slice(0, 20).map(ch => `
+                        <div class="flex justify-between items-center py-2 border-b">
+                            <div>
+                                <a href="https://t.me/${ch.username}" target="_blank" class="text-blue-600 hover:underline font-medium">@${ch.username}</a>
+                                <span class="text-gray-500 text-sm ml-2">${ch.title || ''}</span>
+                            </div>
+                            <span class="text-gray-600">${formatNumber(ch.subscribers)} subs</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            // Refresh account status after search
+            loadAccountStatus();
+        }
+
+        // Channels
+        async function loadChannels() {
+            const stats = await api('/channels/stats');
+            document.getElementById('channels-stats').innerHTML = `
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="text-2xl font-bold">${stats.total}</div>
+                    <div class="text-sm text-gray-500">Total</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="text-2xl font-bold text-green-600">${stats.active}</div>
+                    <div class="text-sm text-gray-500">Active</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="text-2xl font-bold text-blue-600">${stats.monitored}</div>
+                    <div class="text-sm text-gray-500">Monitored</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="text-2xl font-bold text-gray-400">${stats.ignored}</div>
+                    <div class="text-sm text-gray-500">Ignored</div>
+                </div>
+            `;
+
+            const params = new URLSearchParams({
+                limit: channelsLimit,
+                offset: channelsPage * channelsLimit,
+                min_score: document.getElementById('filter-min-score').value,
+                min_subscribers: document.getElementById('filter-min-subs').value,
+                is_active: document.getElementById('filter-active-only').checked,
+                search: document.getElementById('filter-search').value
+            });
+
+            const result = await api(`/channels?${params}`);
+
+            document.getElementById('channels-list').innerHTML = result.channels.map(ch => `
+                <tr class="${ch.ignored ? 'opacity-50' : ''}">
+                    <td class="px-4 py-3">
+                        <span class="inline-block w-8 h-8 rounded-full text-white text-sm font-bold flex items-center justify-center ${getScoreClass(ch.relevance_score)}">
+                            ${Math.round(ch.relevance_score)}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3">
+                        <a href="https://t.me/${ch.username}" target="_blank" class="text-blue-600 hover:underline font-medium">@${ch.username}</a>
+                        <div class="text-sm text-gray-500 truncate max-w-xs">${ch.title || ''}</div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600">${formatNumber(ch.subscribers)}</td>
+                    <td class="px-4 py-3 text-gray-600">${ch.posts_per_week.toFixed(1)}</td>
+                    <td class="px-4 py-3">
+                        <span class="text-xs px-2 py-1 rounded-full ${ch.discovery_source === 'forward' ? 'bg-green-100 text-green-700' : ch.discovery_source === 'mention' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}">
+                            ${ch.discovery_source}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="flex space-x-2">
+                            ${!ch.added_to_monitoring ? `
+                                <button onclick="monitorChannel(${ch.id})" class="text-blue-600 hover:text-blue-800 text-sm">Monitor</button>
+                            ` : `
+                                <span class="text-green-600 text-sm">Monitored</span>
+                            `}
+                            ${!ch.ignored ? `
+                                <button onclick="ignoreChannel(${ch.id})" class="text-gray-400 hover:text-gray-600 text-sm">Ignore</button>
+                            ` : ''}
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+
+            // Pagination
+            const totalPages = Math.ceil(result.total / channelsLimit);
+            document.getElementById('channels-pagination').innerHTML = `
+                <span class="text-sm text-gray-600">
+                    Showing ${result.offset + 1}-${Math.min(result.offset + result.limit, result.total)} of ${result.total}
+                </span>
+                <div class="flex space-x-2">
+                    <button onclick="prevPage()" ${channelsPage === 0 ? 'disabled' : ''} class="px-3 py-1 border rounded text-sm ${channelsPage === 0 ? 'opacity-50' : 'hover:bg-gray-100'}">Prev</button>
+                    <button onclick="nextPage()" ${channelsPage >= totalPages - 1 ? 'disabled' : ''} class="px-3 py-1 border rounded text-sm ${channelsPage >= totalPages - 1 ? 'opacity-50' : 'hover:bg-gray-100'}">Next</button>
+                </div>
+            `;
+        }
+
+        function prevPage() { channelsPage--; loadChannels(); }
+        function nextPage() { channelsPage++; loadChannels(); }
+
+        async function monitorChannel(id) {
+            await api(`/channels/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ added_to_monitoring: true })
+            });
+            loadChannels();
+        }
+
+        async function ignoreChannel(id) {
+            await api(`/channels/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ ignored: true })
+            });
+            loadChannels();
+        }
+
+        // Seeds
+        async function loadSeeds() {
+            const result = await api('/seeds');
+
+            let html = '';
+            for (const [category, seeds] of Object.entries(result.by_category)) {
+                html += `
+                    <div class="px-6 py-3 bg-gray-50 font-medium text-sm text-gray-700">
+                        ${category} (${seeds.length})
+                    </div>
+                `;
+                for (const seed of seeds) {
+                    html += `
+                        <div class="px-6 py-3 flex justify-between items-center">
+                            <div>
+                                <a href="https://t.me/${seed.username}" target="_blank" class="text-blue-600 hover:underline">@${seed.username}</a>
+                                ${seed.title ? `<span class="text-gray-500 text-sm ml-2">${seed.title}</span>` : ''}
+                            </div>
+                            <button onclick="deleteSeed(${seed.id})" class="text-red-500 hover:text-red-700 text-sm">Delete</button>
+                        </div>
+                    `;
+                }
+            }
+
+            document.getElementById('seeds-list').innerHTML = html || '<p class="px-6 py-4 text-gray-500">No seed channels yet</p>';
+        }
+
+        async function addSeeds() {
+            const usernames = document.getElementById('seeds-input').value
+                .split('\n')
+                .map(u => u.trim().replace('@', ''))
+                .filter(u => u);
+
+            if (usernames.length === 0) {
+                alert('Please enter at least one username');
+                return;
+            }
+
+            const result = await api('/seeds/bulk', {
+                method: 'POST',
+                body: JSON.stringify({
+                    usernames,
+                    category: document.getElementById('seeds-category').value || null
+                })
+            });
+
+            alert(`Created: ${result.created}, Skipped: ${result.skipped}`);
+            document.getElementById('seeds-input').value = '';
+            loadSeeds();
+        }
+
+        async function deleteSeed(id) {
+            if (!confirm('Delete this seed channel?')) return;
+            await api(`/seeds/${id}`, { method: 'DELETE' });
+            loadSeeds();
+        }
+
+        // Jobs
+        async function loadJobs() {
+            const result = await api('/search?limit=20');
+
+            document.getElementById('jobs-list').innerHTML = result.jobs.map(job => `
+                <div class="px-6 py-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="font-medium">${job.keywords?.slice(0, 3).join(', ') || 'Search'}${job.keywords?.length > 3 ? '...' : ''}</div>
+                            <div class="text-sm text-gray-500">${new Date(job.created_at).toLocaleString()}</div>
+                        </div>
+                        <div class="text-right">
+                            <span class="inline-block px-2 py-1 rounded text-xs font-medium ${
+                                job.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                job.status === 'running' ? 'bg-blue-100 text-blue-700' :
+                                job.status === 'failed' ? 'bg-red-100 text-red-700' :
+                                'bg-gray-100 text-gray-700'
+                            }">${job.status}</span>
+                            ${job.status === 'completed' ? `
+                                <div class="text-sm text-gray-600 mt-1">${job.channels_found} found, ${job.channels_new} new</div>
+                            ` : ''}
+                            ${job.status === 'running' && job.live_progress ? `
+                                <div class="text-sm text-blue-600 mt-1">${job.live_progress}% - ${job.live_step}</div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('') || '<p class="px-6 py-4 text-gray-500">No search jobs yet</p>';
+        }
+
+        // Helpers
+        function formatNumber(n) {
+            if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+            return n.toString();
+        }
+
+        function getScoreClass(score) {
+            if (score >= 15) return 'score-excellent';
+            if (score >= 10) return 'score-good';
+            if (score >= 5) return 'score-moderate';
+            return 'score-low';
+        }
+
+        // Auto-refresh jobs if on jobs tab
+        setInterval(() => {
+            if (currentTab === 'jobs') loadJobs();
+        }, 5000);
+    </script>
+</body>
+</html>
