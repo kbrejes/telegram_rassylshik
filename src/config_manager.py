@@ -14,6 +14,7 @@ from src.config_models import (
     PromptsConfig,
     FilterConfig,
     ChannelConfig,
+    JobAnalyzerConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ __all__ = [
     'PromptsConfig',
     'FilterConfig',
     'ChannelConfig',
+    'JobAnalyzerConfig',
     'ConfigManager',
     'config_manager',
 ]
@@ -57,6 +59,7 @@ class ConfigManager:
         self.config_path = Path(config_path)
         self.channels: List[ChannelConfig] = []
         self.llm_providers: Dict[str, dict] = self.DEFAULT_LLM_PROVIDERS.copy()
+        self.job_analyzer: JobAnalyzerConfig = JobAnalyzerConfig()
 
         # Создаем директорию если не существует
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -80,6 +83,13 @@ class ConfigManager:
             # Load LLM providers (merge with defaults)
             if 'llm_providers' in data:
                 self.llm_providers = {**self.DEFAULT_LLM_PROVIDERS, **data['llm_providers']}
+
+            # Load job analyzer config
+            if 'job_analyzer' in data:
+                self.job_analyzer = JobAnalyzerConfig.from_dict(data['job_analyzer'])
+                logger.info(f"  Job analyzer config: require_tg_contact={self.job_analyzer.require_tg_contact}")
+            else:
+                self.job_analyzer = JobAnalyzerConfig()
 
             self.channels = []
             for channel_data in data.get('output_channels', []):
@@ -123,6 +133,7 @@ class ConfigManager:
             data = {
                 'output_channels': [channel.to_dict() for channel in self.channels],
                 'llm_providers': self.llm_providers,
+                'job_analyzer': self.job_analyzer.to_dict(),
             }
 
             # Debug: log what we're saving

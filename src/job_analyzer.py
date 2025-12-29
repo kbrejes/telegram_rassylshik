@@ -60,11 +60,13 @@ class JobAnalyzer:
         min_salary_rub: int = 70_000,
         provider_name: str = "groq",
         model: Optional[str] = None,
+        require_tg_contact: bool = False,
     ):
         self.providers_config = providers_config
         self.min_salary_rub = min_salary_rub
         self.provider_name = provider_name
         self.model = model
+        self.require_tg_contact = require_tg_contact
         self.llm: Optional[UnifiedLLMClient] = None
         self._initialized = False
 
@@ -234,6 +236,22 @@ Respond in JSON format:
                 used_fallback=False,
             )
 
+            # Check if TG contact is required but not found
+            if self.require_tg_contact and not result.contact_username and result.contact_type != "bot":
+                logger.info(f"[JobAnalyzer] Rejecting vacancy: require_tg_contact=True but no TG contact found")
+                result = JobAnalysisResult(
+                    is_real_job=result.is_real_job,
+                    is_salary_ok=result.is_salary_ok,
+                    is_relevant=False,  # Mark as not relevant
+                    contact_username=result.contact_username,
+                    contact_type=result.contact_type,
+                    bot_username=result.bot_username,
+                    salary_monthly_rub=result.salary_monthly_rub,
+                    rejection_reason="No Telegram contact found (required by config)",
+                    analysis_summary=result.analysis_summary,
+                    used_fallback=result.used_fallback,
+                )
+
             # Log when vacancy passes but has no TG contact
             if result.is_relevant and not result.contact_username:
                 logger.warning(f"[JobAnalyzer] Vacancy PASSED but NO TG contact extracted. Type={contact_type}, Bot={bot_username}")
@@ -284,10 +302,19 @@ Respond in JSON format:
         elif salary and not is_salary_ok:
             rejection_reason = f"Salary too low: {salary} RUB/month (min: {self.min_salary_rub})"
 
+        # Check if TG contact is required but not found
+        has_valid_contact = contact is not None or contact_type == "bot"
+        is_relevant = not is_paid_ad and is_salary_ok
+
+        if self.require_tg_contact and not has_valid_contact and is_relevant:
+            logger.info(f"[JobAnalyzer] Rejecting vacancy (regex): require_tg_contact=True but no TG contact found")
+            is_relevant = False
+            rejection_reason = "No Telegram contact found (required by config)"
+
         return JobAnalysisResult(
             is_real_job=not is_paid_ad,
             is_salary_ok=is_salary_ok,
-            is_relevant=not is_paid_ad and is_salary_ok,
+            is_relevant=is_relevant,
             contact_username=contact,
             contact_type=contact_type,
             bot_username=bot_username,

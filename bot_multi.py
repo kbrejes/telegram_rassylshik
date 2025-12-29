@@ -278,13 +278,19 @@ class MultiChannelJobMonitorBot:
     async def _init_job_analyzer(self):
         """Initialize LLM-based job analyzer."""
         try:
+            job_config = self.config_manager.job_analyzer
             self.job_analyzer = JobAnalyzer(
                 providers_config=self.config_manager.llm_providers,
-                min_salary_rub=70_000,
-                provider_name="groq",
+                min_salary_rub=job_config.min_salary_rub,
+                provider_name=job_config.llm_provider,
+                model=job_config.llm_model if job_config.llm_model else None,
+                require_tg_contact=job_config.require_tg_contact,
             )
             await self.job_analyzer.initialize()
-            logger.info("Job analyzer initialized (LLM-based filtering enabled)")
+            logger.info(
+                f"Job analyzer initialized (LLM-based filtering enabled, "
+                f"require_tg_contact={job_config.require_tg_contact})"
+            )
         except Exception as e:
             logger.warning(f"Job analyzer init failed, will use regex only: {e}")
             self.job_analyzer = None

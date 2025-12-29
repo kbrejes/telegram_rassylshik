@@ -79,6 +79,7 @@ class JobAnalyzerConfig:
     min_salary_rub: int = 70_000
     llm_provider: str = "groq"
     llm_model: str = "llama-3.3-70b-versatile"
+    require_tg_contact: bool = False  # Reject vacancies without extractable TG contact
 
     def to_dict(self) -> dict:
         return {
@@ -86,6 +87,7 @@ class JobAnalyzerConfig:
             'min_salary_rub': self.min_salary_rub,
             'llm_provider': self.llm_provider,
             'llm_model': self.llm_model,
+            'require_tg_contact': self.require_tg_contact,
         }
 
     @classmethod
@@ -95,6 +97,7 @@ class JobAnalyzerConfig:
             min_salary_rub=data.get('min_salary_rub', 70_000),
             llm_provider=data.get('llm_provider', 'groq'),
             llm_model=data.get('llm_model', 'llama-3.3-70b-versatile'),
+            require_tg_contact=data.get('require_tg_contact', False),
         )
 
 

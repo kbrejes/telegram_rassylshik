@@ -16,6 +16,7 @@ from src.conversation_manager import ConversationManager, FrozenAccountError
 from src.connection_status import status_manager
 from src.database import db
 from src.human_behavior import human_behavior
+from src.message_queue import message_queue
 from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig as AIHandlerConfig
 from src.config_manager import ChannelConfig
 
@@ -102,6 +103,9 @@ class CRMHandler:
         self.ai_handler_pool = new_ai_handler_pool
 
         logger.info(f"CRM инициализирован для {len(self.agent_pools)} каналов")
+
+        # Setup message queue for retry of failed auto-responses
+        self._setup_message_queue()
 
     async def _setup_channel_crm(self, channel: ChannelConfig):
         """Настройка CRM для одного канала (legacy wrapper)"""
@@ -236,6 +240,37 @@ class CRMHandler:
                 provider_name = channel.ai_config.provider
             status_manager.update_llm_status(provider_name, False, error=str(ai_error))
             logger.warning(f"  Не удалось инициализировать AI: {ai_error}")
+
+    def _setup_message_queue(self):
+        """Setup the message queue for retrying failed auto-responses."""
+
+        async def send_callback(contact: str, text: str, channel_id: str) -> bool:
+            """Callback for message queue to send messages."""
+            agent_pool = self.agent_pools.get(channel_id)
+            if not agent_pool:
+                logger.warning(f"[QUEUE] No agent pool for channel {channel_id}")
+                return False
+
+            # Check if any agent is available
+            available_agent = agent_pool.get_available_agent()
+            if not available_agent:
+                logger.debug(f"[QUEUE] No available agents for channel {channel_id}")
+                return False
+
+            try:
+                success = await agent_pool.send_message(
+                    contact,
+                    text,
+                    max_retries=len(agent_pool.agents) if agent_pool.agents else 1
+                )
+                return success
+            except Exception as e:
+                logger.error(f"[QUEUE] Error sending queued message: {e}")
+                return False
+
+        message_queue.set_send_callback(send_callback)
+        message_queue.start_retry_task()
+        logger.info("[CRM] Message queue initialized for auto-response retries")
 
     def _register_contact_message_handler(self, agent_client: TelegramClient, channel_id: str):
         """Регистрация обработчика входящих сообщений от контактов"""
@@ -581,9 +616,27 @@ class CRMHandler:
                 logger.info(f"[AUTO-RESPONSE] ✅ Successfully sent to {telegram_contact}")
                 return True
             else:
+                # All agents failed - queue for retry
                 logger.warning(f"[AUTO-RESPONSE] ❌ Failed to send to {telegram_contact} (all agents failed)")
+                await message_queue.add(
+                    contact=telegram_contact,
+                    text=channel.auto_response_template,
+                    channel_id=channel.id,
+                    error="All agents failed (likely spam limit)"
+                )
+                logger.info(f"[AUTO-RESPONSE] 📥 Queued message for {telegram_contact} for later retry")
         except Exception as e:
+            error_str = str(e)
             logger.error(f"[AUTO-RESPONSE] ❌ Error sending to {telegram_contact}: {e}")
+            # Queue if it's a rate limit error
+            if "flood" in error_str.lower() or "spam" in error_str.lower():
+                await message_queue.add(
+                    contact=telegram_contact,
+                    text=channel.auto_response_template,
+                    channel_id=channel.id,
+                    error=error_str
+                )
+                logger.info(f"[AUTO-RESPONSE] 📥 Queued message for {telegram_contact} for later retry")
 
         return False
 
@@ -959,6 +1012,9 @@ class CRMHandler:
 
     async def cleanup(self):
         """Очистка ресурсов CRM"""
+        # Stop message queue retry task
+        message_queue.stop_retry_task()
+
         # Закрываем AI handlers
         if self.ai_handler_pool:
             self.ai_handler_pool.close_all()
