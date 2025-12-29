@@ -6,6 +6,7 @@ import logging
 import threading
 import time
 from typing import List, Optional, Dict, Union, Any
+from telethon.tl.types import InputPeerUser
 from src.agent_account import AgentAccount
 from src.config_manager import AgentConfig
 from src.connection_status import status_manager
@@ -235,7 +236,7 @@ class AgentPool:
     
     async def send_message(
         self,
-        user: Union[str, int],
+        user: Union[str, int, InputPeerUser, Any],
         text: str,
         max_retries: int = 3,
         contact_id: Optional[int] = None,
@@ -245,7 +246,7 @@ class AgentPool:
         Отправка сообщения через доступного агента с автоматическим переключением.
 
         Args:
-            user: Username (с или без @), user ID, или User объект
+            user: Username (с или без @), user ID, User object, or InputPeerUser
             text: Текст сообщения
             max_retries: Максимальное количество попыток с разными агентами
             contact_id: ID контакта для отслеживания поведения (опционально)

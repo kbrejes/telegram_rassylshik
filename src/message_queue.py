@@ -22,6 +22,8 @@ class QueuedMessage:
     created_at: float = field(default_factory=time.time)
     retry_count: int = 0
     last_error: Optional[str] = None
+    resolved_user_id: Optional[int] = None  # Pre-resolved user ID
+    resolved_access_hash: Optional[int] = None  # Access hash for InputPeerUser
 
     # Unique key for deduplication
     @property
@@ -46,17 +48,18 @@ class MessageQueue:
         self._queue: Dict[str, QueuedMessage] = {}  # key -> message
         self._lock = asyncio.Lock()
         self._retry_task: Optional[asyncio.Task] = None
-        self._send_callback: Optional[Callable[[str, str, str], Awaitable[bool]]] = None
+        # Callback signature: (contact, text, channel_id, user_id, access_hash) -> bool
+        self._send_callback: Optional[Callable[[str, str, str, Optional[int], Optional[int]], Awaitable[bool]]] = None
 
     def set_send_callback(
         self,
-        callback: Callable[[str, str, str], Awaitable[bool]]
+        callback: Callable[[str, str, str, Optional[int], Optional[int]], Awaitable[bool]]
     ):
         """
         Set the callback for sending messages.
 
         Args:
-            callback: async function(contact, text, channel_id) -> bool
+            callback: async function(contact, text, channel_id, user_id, access_hash) -> bool
         """
         self._send_callback = callback
 
@@ -65,7 +68,9 @@ class MessageQueue:
         contact: str,
         text: str,
         channel_id: str,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        resolved_user_id: Optional[int] = None,
+        resolved_access_hash: Optional[int] = None
     ) -> bool:
         """
         Add a message to the queue.
@@ -75,6 +80,8 @@ class MessageQueue:
             text: Message text
             channel_id: Channel ID for routing
             error: Error message from failed attempt
+            resolved_user_id: Pre-resolved user ID (if available)
+            resolved_access_hash: Access hash for InputPeerUser (if available)
 
         Returns:
             True if message was added (not duplicate)
@@ -83,7 +90,9 @@ class MessageQueue:
             contact=contact,
             text=text,
             channel_id=channel_id,
-            last_error=error
+            last_error=error,
+            resolved_user_id=resolved_user_id,
+            resolved_access_hash=resolved_access_hash
         )
 
         async with self._lock:
@@ -175,11 +184,13 @@ class MessageQueue:
                 continue
 
             try:
-                # Attempt to send
+                # Attempt to send (with resolved user info if available)
                 success = await self._send_callback(
                     msg.contact,
                     msg.text,
-                    msg.channel_id
+                    msg.channel_id,
+                    msg.resolved_user_id,
+                    msg.resolved_access_hash
                 )
 
                 if success:

@@ -5,10 +5,10 @@ Agent account management for Telegram user accounts
 import asyncio
 import logging
 import time
-from typing import Optional, Union
+from typing import Any, Optional, Union
 from pathlib import Path
 from telethon import TelegramClient, errors
-from telethon.tl.types import User
+from telethon.tl.types import User, InputPeerUser
 from src.config import config
 from utils.retry import FloodWaitTracker, format_wait_time
 from src.session_config import get_agent_session_path, delete_session_file
@@ -151,14 +151,14 @@ class AgentAccount:
 
     async def send_message(
         self,
-        user: Union[str, int, User],
+        user: Union[str, int, User, InputPeerUser, Any],
         text: str
     ) -> bool:
         """
         Отправка сообщения пользователю
 
         Args:
-            user: Username (с или без @), user ID, или User объект
+            user: Username (с или без @), user ID, User объект, or InputPeerUser
             text: Текст сообщения
 
         Returns:
@@ -177,11 +177,16 @@ class AgentAccount:
             return False
 
         try:
-            # Нормализуем username
+            # Normalize username only for strings (not for InputPeerUser or int)
+            target = user
             if isinstance(user, str) and not user.startswith('@'):
-                user = f"@{user}"
+                target = f"@{user}"
 
-            await self.client.send_message(user, text)
+            # Log what we're sending to
+            if isinstance(user, InputPeerUser):
+                logger.debug(f"Агент {self.session_name}: Отправка через InputPeerUser(id={user.user_id})")
+
+            await self.client.send_message(target, text)
             logger.info(f"Агент {self.session_name}: Сообщение отправлено {user}")
             return True
 

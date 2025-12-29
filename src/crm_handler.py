@@ -5,7 +5,7 @@ CRM Handler - логика автоответов, топиков и транс�
 import asyncio
 import logging
 import time
-from typing import Dict, List, Optional, Set, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 
 from telethon import TelegramClient, events
 from telethon.tl.types import User, Chat, Channel
@@ -244,7 +244,13 @@ class CRMHandler:
     def _setup_message_queue(self):
         """Setup the message queue for retrying failed auto-responses."""
 
-        async def send_callback(contact: str, text: str, channel_id: str) -> bool:
+        async def send_callback(
+            contact: str,
+            text: str,
+            channel_id: str,
+            resolved_user_id: Optional[int] = None,
+            resolved_access_hash: Optional[int] = None
+        ) -> bool:
             """Callback for message queue to send messages."""
             agent_pool = self.agent_pools.get(channel_id)
             if not agent_pool:
@@ -257,9 +263,18 @@ class CRMHandler:
                 logger.debug(f"[QUEUE] No available agents for channel {channel_id}")
                 return False
 
+            # Construct target using InputPeerUser if we have resolved info
+            target: Any = contact
+            if resolved_user_id and resolved_access_hash:
+                from telethon.tl.types import InputPeerUser
+                target = InputPeerUser(user_id=resolved_user_id, access_hash=resolved_access_hash)
+                logger.info(f"[QUEUE] Using InputPeerUser for {contact} (id={resolved_user_id})")
+            elif resolved_user_id:
+                target = resolved_user_id
+
             try:
                 success = await agent_pool.send_message(
-                    contact,
+                    target,
                     text,
                     max_retries=len(agent_pool.agents) if agent_pool.agents else 1
                 )
@@ -547,16 +562,25 @@ class CRMHandler:
 
             contacted_users: Set[str] = set()
 
-            # Pre-resolve telegram contact to user_id using bot client
-            # This helps when agents don't have the user in their entity cache
+            # Pre-resolve telegram contact to user_id + access_hash using bot client
+            # This allows agents to send using InputPeerUser even if they haven't "seen" the user
             resolved_user_id: Optional[int] = None
+            resolved_access_hash: Optional[int] = None
             telegram_contact = contacts.get('telegram')
             if telegram_contact:
                 try:
                     user = await self.bot.client.get_entity(telegram_contact)
                     if hasattr(user, 'id'):
                         resolved_user_id = user.id
-                        logger.info(f"[CRM] Resolved {telegram_contact} to user_id={resolved_user_id}")
+                        # Get access_hash for InputPeerUser construction
+                        if hasattr(user, 'access_hash') and user.access_hash:
+                            resolved_access_hash = user.access_hash
+                            logger.info(
+                                f"[CRM] Resolved {telegram_contact} to user_id={resolved_user_id}, "
+                                f"access_hash={resolved_access_hash}"
+                            )
+                        else:
+                            logger.info(f"[CRM] Resolved {telegram_contact} to user_id={resolved_user_id} (no access_hash)")
                 except Exception as e:
                     logger.warning(f"[CRM] Could not resolve {telegram_contact}: {e}")
 
@@ -581,9 +605,10 @@ class CRMHandler:
                     continue
 
                 # Auto-response uses pool's send_message with fallback
-                # Pass resolved_user_id to avoid username resolution issues
+                # Pass resolved user info to avoid username resolution issues
                 auto_response_sent = await self._send_auto_response(
-                    channel, agent_pool, contacts, contacted_users, resolved_user_id
+                    channel, agent_pool, contacts, contacted_users,
+                    resolved_user_id, resolved_access_hash
                 )
 
                 await self._create_crm_topic(
@@ -601,7 +626,8 @@ class CRMHandler:
         agent_pool: AgentPool,
         contacts: Dict[str, Optional[str]],
         contacted_users: Set[str],
-        resolved_user_id: Optional[int] = None
+        resolved_user_id: Optional[int] = None,
+        resolved_access_hash: Optional[int] = None
     ) -> bool:
         """Отправка автоответа контакту с fallback через пул агентов"""
         if not channel.auto_response_enabled or not channel.auto_response_template:
@@ -617,9 +643,17 @@ class CRMHandler:
             logger.debug(f"[AUTO-RESPONSE] Skipped: {telegram_contact} already contacted")
             return False
 
-        # Use resolved user_id if available (more reliable than username)
-        target = resolved_user_id if resolved_user_id else telegram_contact
-        logger.info(f"[AUTO-RESPONSE] Attempting to send to {telegram_contact} (target={target})...")
+        # Construct InputPeerUser if we have both user_id and access_hash
+        target: Any = telegram_contact
+        if resolved_user_id and resolved_access_hash:
+            from telethon.tl.types import InputPeerUser
+            target = InputPeerUser(user_id=resolved_user_id, access_hash=resolved_access_hash)
+            logger.info(f"[AUTO-RESPONSE] Using InputPeerUser for {telegram_contact} (id={resolved_user_id})")
+        elif resolved_user_id:
+            target = resolved_user_id
+            logger.info(f"[AUTO-RESPONSE] Using user_id={resolved_user_id} for {telegram_contact}")
+        else:
+            logger.info(f"[AUTO-RESPONSE] Using username {telegram_contact}")
 
         try:
             # Use pool's send_message which has built-in agent rotation/fallback
@@ -633,13 +667,15 @@ class CRMHandler:
                 logger.info(f"[AUTO-RESPONSE] ✅ Successfully sent to {telegram_contact}")
                 return True
             else:
-                # All agents failed - queue for retry
+                # All agents failed - queue for retry with resolved info
                 logger.warning(f"[AUTO-RESPONSE] ❌ Failed to send to {telegram_contact} (all agents failed)")
                 await message_queue.add(
                     contact=telegram_contact,
                     text=channel.auto_response_template,
                     channel_id=channel.id,
-                    error="All agents failed (likely spam limit)"
+                    error="All agents failed (likely spam limit)",
+                    resolved_user_id=resolved_user_id,
+                    resolved_access_hash=resolved_access_hash
                 )
                 logger.info(f"[AUTO-RESPONSE] 📥 Queued message for {telegram_contact} for later retry")
         except Exception as e:
@@ -651,7 +687,9 @@ class CRMHandler:
                     contact=telegram_contact,
                     text=channel.auto_response_template,
                     channel_id=channel.id,
-                    error=error_str
+                    error=error_str,
+                    resolved_user_id=resolved_user_id,
+                    resolved_access_hash=resolved_access_hash
                 )
                 logger.info(f"[AUTO-RESPONSE] 📥 Queued message for {telegram_contact} for later retry")
 
