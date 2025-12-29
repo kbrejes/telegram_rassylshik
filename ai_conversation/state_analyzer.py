@@ -248,11 +248,17 @@ STATE_ANALYZER_PROMPT = """Ты анализатор состояния разг
 4. "call_pending" - Созвон уже предложен, ждём ответа. НЕ повторять предложение.
 5. "call_declined" - Клиент отказался от созвона. Работаем в переписке, НЕ предлагаем созвон снова.
 
+🚨 КРИТИЧЕСКОЕ ПРАВИЛО - ОБЯЗАТЕЛЬНО СОБЛЮДАЙ:
+Смотри в "ТЕКУЩЕЕ СОСТОЯНИЕ" ниже. Если там написано:
+- "Созвон предлагали: да" → НЕЛЬЗЯ возвращать "call_ready", только "call_pending" или "call_declined"
+- "⚠️ ТЫ УЖЕ ОТПРАВИЛ ССЫЛКУ НА КАЛЕНДАРЬ" → НЕЛЬЗЯ возвращать "call_ready"
+Это НЕ рекомендация, это ЖЁСТКОЕ ПРАВИЛО. Если созвон/календарь уже были - фаза минимум "call_pending".
+
 ПРАВИЛА ОПРЕДЕЛЕНИЯ ФАЗЫ:
 - Если сообщений мало (1-2) → обычно "discovery"
 - Если клиент только спрашивает базовые вопросы → "discovery" или "engagement"
 - Если клиент говорит "интересно", "хочу узнать больше", обсуждает детали проекта → можно "call_ready"
-- Если созвон УЖЕ предлагали и не получили ответ → "call_pending"
+- Если созвон УЖЕ предлагали (см. состояние!) → ТОЛЬКО "call_pending" или "call_declined"
 - Если клиент сказал "не хочу звонить", "давайте в переписке" → "call_declined"
 - Если прошло много времени (дни) с момента предложения созвона без ответа → можно вернуться к "engagement"
 
@@ -282,6 +288,7 @@ STATE_ANALYZER_PROMPT = """Ты анализатор состояния разг
 - "call_offered_in_history": true если в истории видишь что мы уже предлагали созвон
 - "call_declined_in_history": true если клиент явно отказывался от созвона
 - Будь консервативен: лучше остаться в "engagement" чем преждевременно перейти в "call_ready"
+- ПОМНИ: если в состоянии "Созвон предлагали: да" - НИКОГДА не возвращай "call_ready"!
 
 Верни ТОЛЬКО JSON, без пояснений."""
 
@@ -400,6 +407,23 @@ class StateAnalyzer:
             result = AnalysisResult.from_dict(data)
 
             logger.info(f"[ANALYZER] Contact {contact_id}: {result.phase} (conf={result.confidence:.2f}) - {result.reasoning}")
+
+            # CRITICAL: Enforce milestone rules - if call/calendar already sent, never go back to call_ready
+            if result.phase == "call_ready" and (state.call_offered or state.calendar_sent):
+                logger.warning(
+                    f"[ANALYZER] OVERRIDE: LLM said 'call_ready' but state has "
+                    f"call_offered={state.call_offered}, calendar_sent={state.calendar_sent}. "
+                    f"Forcing 'call_pending'."
+                )
+                result = AnalysisResult(
+                    phase="call_pending",
+                    confidence=result.confidence,
+                    answer_question_first=result.answer_question_first,
+                    mention_founders=result.mention_founders,
+                    call_offered_in_history=True,  # We know it was offered
+                    call_declined_in_history=result.call_declined_in_history,
+                    reasoning=f"[OVERRIDE] {result.reasoning} - но созвон уже предлагали",
+                )
 
             # Update state based on analysis
             if result.call_offered_in_history and not state.call_offered:
