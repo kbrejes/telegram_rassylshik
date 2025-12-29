@@ -483,7 +483,7 @@
                                 ${username ? `<span class="text-xs text-gray-500 dark:text-gray-400">${username}</span>` : ''}
                             </div>
                             <div class="flex items-center gap-2 mb-3 ml-4">
-                                <span class="text-xs font-medium ${config.labelClass} cursor-help border-b border-dotted border-current" title="${config.tooltip}">${config.label}</span>
+                                <span class="text-xs font-medium ${config.labelClass} cursor-pointer hover:underline tooltip-trigger" data-tooltip="${config.tooltip}" onclick="showTooltip(this)">${config.label}</span>
                                 ${floodBadge}
                             </div>
                             ${errorHint}
@@ -802,6 +802,77 @@
         })();
 
         startPolling();
+    </script>
+
+    <!-- Custom Tooltip -->
+    <div id="custom-tooltip" class="fixed z-[100] max-w-xs px-3 py-2 text-sm text-white bg-gray-900 dark:bg-gray-700 rounded-lg shadow-lg pointer-events-none opacity-0 transition-opacity duration-200" style="display: none;">
+        <span id="tooltip-text"></span>
+        <div id="tooltip-arrow" class="absolute w-2 h-2 bg-gray-900 dark:bg-gray-700 rotate-45"></div>
+    </div>
+
+    <script>
+        let tooltipTimeout = null;
+
+        function showTooltip(element) {
+            const tooltip = document.getElementById('custom-tooltip');
+            const tooltipText = document.getElementById('tooltip-text');
+            const tooltipArrow = document.getElementById('tooltip-arrow');
+            const text = element.dataset.tooltip;
+
+            if (!text) return;
+
+            tooltipText.textContent = text;
+            tooltip.style.display = 'block';
+
+            // Position tooltip above the element
+            const rect = element.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
+
+            let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            let top = rect.top - tooltipRect.height - 8;
+
+            // Keep within viewport
+            if (left < 8) left = 8;
+            if (left + tooltipRect.width > window.innerWidth - 8) {
+                left = window.innerWidth - tooltipRect.width - 8;
+            }
+            if (top < 8) {
+                top = rect.bottom + 8;
+                tooltipArrow.style.top = '-4px';
+                tooltipArrow.style.bottom = 'auto';
+            } else {
+                tooltipArrow.style.bottom = '-4px';
+                tooltipArrow.style.top = 'auto';
+            }
+
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+            tooltipArrow.style.left = (rect.left + rect.width/2 - left - 4) + 'px';
+
+            // Show with fade
+            requestAnimationFrame(() => {
+                tooltip.style.opacity = '1';
+            });
+
+            // Auto-hide after 4 seconds
+            clearTimeout(tooltipTimeout);
+            tooltipTimeout = setTimeout(hideTooltip, 4000);
+        }
+
+        function hideTooltip() {
+            const tooltip = document.getElementById('custom-tooltip');
+            tooltip.style.opacity = '0';
+            setTimeout(() => {
+                tooltip.style.display = 'none';
+            }, 200);
+        }
+
+        // Hide on click outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('tooltip-trigger')) {
+                hideTooltip();
+            }
+        });
     </script>
 
     <style>
