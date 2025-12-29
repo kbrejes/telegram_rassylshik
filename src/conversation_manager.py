@@ -24,6 +24,11 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+class FrozenAccountError(Exception):
+    """Raised when an agent account is frozen and cannot perform operations."""
+    pass
+
+
 class ConversationManager:
     """Управление форум-топиками и трансляцией сообщений"""
     
@@ -149,8 +154,16 @@ class ConversationManager:
         except errors.ChannelPrivateError:
             logger.error("Группа приватная или агент не имеет доступа (ChannelPrivateError)")
             return None
-            
+
+        except errors.FrozenMethodInvalidError:
+            logger.error("Аккаунт заморожен (FrozenMethodInvalidError)")
+            raise FrozenAccountError("Account is frozen and cannot create forum topics")
+
         except Exception as e:
+            # Check for frozen error in exception message
+            if "frozen" in str(e).lower():
+                logger.error(f"Аккаунт заморожен: {e}")
+                raise FrozenAccountError(f"Account is frozen: {e}")
             logger.error(f"Ошибка создания топика: {e}", exc_info=True)
             return None
     

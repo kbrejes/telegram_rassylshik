@@ -12,7 +12,7 @@ from telethon.tl.types import User, Chat, Channel
 
 from src.agent_account import AgentAccount
 from src.agent_pool import AgentPool
-from src.conversation_manager import ConversationManager
+from src.conversation_manager import ConversationManager, FrozenAccountError
 from src.connection_status import status_manager
 from src.database import db
 from src.human_behavior import human_behavior
@@ -506,6 +506,107 @@ class CRMHandler:
 
         return False
 
+    async def _create_topic_with_fallback(
+        self,
+        channel: ChannelConfig,
+        conv_manager: ConversationManager,
+        title: str,
+        contact_id: int,
+        vacancy_id: Optional[int],
+        primary_agent: AgentAccount
+    ) -> Optional[int]:
+        """
+        Try to create a topic, falling back to other agents if the primary is frozen.
+        """
+        from pathlib import Path
+
+        # First try with the primary agent (conv_manager's client)
+        try:
+            topic_id = await conv_manager.create_topic(
+                title=title,
+                contact_id=contact_id,
+                vacancy_id=vacancy_id
+            )
+            if topic_id:
+                return topic_id
+        except FrozenAccountError as e:
+            agent_name = Path(primary_agent.session_name).stem
+            logger.warning(f"Agent {agent_name} is frozen, trying other agents...")
+            # Update status to show agent is frozen
+            status_manager.update_agent_status(
+                session_name=agent_name,
+                status="frozen",
+                phone=primary_agent.phone if hasattr(primary_agent, 'phone') else "",
+                error="Account is frozen for forum operations"
+            )
+
+        # Try other agents from the pool
+        agent_pool = self.agent_pools.get(channel.id)
+        if not agent_pool:
+            logger.error("No agent pool found for channel")
+            return None
+
+        for agent in agent_pool.agents:
+            if agent == primary_agent:
+                continue  # Skip the primary agent we already tried
+
+            if not agent.client or not agent.client.is_connected():
+                continue
+
+            agent_name = Path(agent.session_name).stem
+            logger.info(f"Trying to create topic with agent {agent_name}...")
+
+            try:
+                # Create a temporary ConversationManager with this agent's client
+                from telethon.tl.functions.messages import CreateForumTopicRequest
+                import random
+
+                group_entity = await agent.client.get_entity(conv_manager.group_id)
+                result = await agent.client(CreateForumTopicRequest(
+                    peer=group_entity,
+                    title=title[:128],
+                    random_id=random.randint(1, 2**31)
+                ))
+
+                topic_id = result.updates[0].id
+
+                # Cache in conv_manager
+                conv_manager._topic_cache[contact_id] = topic_id
+                conv_manager._reverse_topic_cache[topic_id] = contact_id
+
+                # Save to DB
+                await db.save_topic_contact(
+                    group_id=conv_manager.group_id,
+                    topic_id=topic_id,
+                    contact_id=contact_id,
+                    contact_name=title,
+                    vacancy_id=vacancy_id
+                )
+
+                logger.info(f"Topic created successfully with agent {agent_name}")
+                return topic_id
+
+            except FrozenAccountError:
+                logger.warning(f"Agent {agent_name} is also frozen")
+                status_manager.update_agent_status(
+                    session_name=agent_name,
+                    status="frozen",
+                    error="Account is frozen for forum operations"
+                )
+            except Exception as e:
+                if "frozen" in str(e).lower():
+                    logger.warning(f"Agent {agent_name} is frozen: {e}")
+                    status_manager.update_agent_status(
+                        session_name=agent_name,
+                        status="frozen",
+                        error=str(e)
+                    )
+                else:
+                    logger.error(f"Error creating topic with agent {agent_name}: {e}")
+
+        logger.error("All agents failed to create topic (frozen or error)")
+        return None
+
     async def _create_crm_topic(
         self,
         channel: ChannelConfig,
@@ -553,16 +654,20 @@ class CRMHandler:
                 # Look up vacancy_id for linking
                 vacancy_id = await db.get_vacancy_id(message.id, chat.id)
 
-                topic_id = await conv_manager.create_topic(
+                # Try to create topic, with fallback to other agents if frozen
+                topic_id = await self._create_topic_with_fallback(
+                    channel=channel,
+                    conv_manager=conv_manager,
                     title=full_name[:128],
                     contact_id=contact_user.id,
-                    vacancy_id=vacancy_id
+                    vacancy_id=vacancy_id,
+                    primary_agent=agent
                 )
 
                 if topic_id:
                     self.contact_to_channel[contact_user.id] = channel.id
                 else:
-                    logger.error("Не удалось создать топик")
+                    logger.error("Не удалось создать топик (все агенты заморожены или ошибка)")
                     return
 
             # Привязываем агента к теме
