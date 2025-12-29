@@ -179,16 +179,19 @@ class CRMHandler:
 
     def _register_contact_message_handler(self, agent_client: TelegramClient, channel_id: str):
         """Регистрация обработчика входящих сообщений от контактов"""
+        logger.info(f"[HANDLER] Registering contact message handler for channel {channel_id}")
 
         @agent_client.on(events.NewMessage(incoming=True))
         async def handle_contact_message(event):
             """Трансляция сообщения от контакта в топик"""
             try:
                 message = event.message
+                logger.info(f"[HANDLER] Incoming message from chat_id={event.chat_id}")
 
                 # Игнорируем сообщения из групп
                 chat = await event.get_chat()
                 if isinstance(chat, (Chat, Channel)):
+                    logger.debug(f"[HANDLER] Ignored: message from group/channel")
                     return
 
                 # Игнорируем собственные сообщения
@@ -219,15 +222,20 @@ class CRMHandler:
                 # Ищем канал и conv_manager для этого контакта
                 channel_id_found = None
                 conv_manager = None
+                sender_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip() or sender.username or str(sender.id)
+                logger.info(f"[HANDLER] Looking for topic for sender {sender_name} (id={sender.id})")
 
                 for ch_id, cm in self.conversation_managers.items():
-                    if cm.get_topic_id(sender.id):
+                    topic_id = cm.get_topic_id(sender.id)
+                    logger.debug(f"[HANDLER] Channel {ch_id}: topic_id={topic_id} for sender {sender.id}")
+                    if topic_id:
                         channel_id_found = ch_id
                         conv_manager = cm
                         self.contact_to_channel[sender.id] = ch_id
                         break
 
                 if not channel_id_found or not conv_manager:
+                    logger.info(f"[HANDLER] No topic found for sender {sender.id}, ignoring message")
                     return
 
                 # Проверяем, не было ли это сообщение отправлено агентом
