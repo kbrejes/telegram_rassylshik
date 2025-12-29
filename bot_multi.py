@@ -682,15 +682,31 @@ class MultiChannelJobMonitorBot:
                         else:
                             entity = await self.client.get_entity(source)
                             channel_id = entity.id
-                        
+
                         channel_title = self._get_chat_title(entity)
                         self.monitored_sources.add(channel_id)
                         self.channel_names[channel_id] = channel_title
-                        
+
+                        # Update connection_status.json so web UI knows about new sources
+                        status_manager.update_source_status(
+                            source,
+                            channel_id=channel_id,
+                            accessible=True,
+                            is_member=True,
+                            title=channel_title
+                        )
+
                         logger.info(f"  ➕ Добавлен новый источник: {source} → {channel_title}")
-                    
+
                     except Exception as e:
                         logger.error(f"  ✗ Ошибка загрузки нового источника '{source}': {e}")
+                        # Update source status as inaccessible
+                        status_manager.update_source_status(
+                            source,
+                            accessible=False,
+                            is_member=False,
+                            error=str(e)
+                        )
             
             # Удаляем источники, которых больше нет в конфигурации
             sources_to_remove = []
