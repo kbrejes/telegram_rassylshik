@@ -549,3 +549,39 @@ async def get_channel_agents(channel_id: str):
             for a in channel.agents
         ]
     }
+
+
+from pydantic import BaseModel
+
+class ReorderRequest(BaseModel):
+    order: List[str]
+
+
+@router.post("/reorder")
+async def reorder_channels(data: ReorderRequest):
+    """Reorder channels based on provided order list"""
+    try:
+        config_manager.load()
+
+        # Validate all channel IDs exist
+        existing_ids = {ch.id for ch in config_manager.channels}
+        for channel_id in data.order:
+            if channel_id not in existing_ids:
+                return {"success": False, "message": f"Channel {channel_id} not found"}
+
+        # Reorder channels
+        channel_map = {ch.id: ch for ch in config_manager.channels}
+        config_manager.channels = [channel_map[cid] for cid in data.order if cid in channel_map]
+
+        # Add any channels not in the order list at the end (shouldn't happen, but safety)
+        for ch in channel_map.values():
+            if ch not in config_manager.channels:
+                config_manager.channels.append(ch)
+
+        config_manager.save()
+        logger.info(f"Channels reordered: {data.order}")
+
+        return {"success": True, "message": "Channels reordered"}
+    except Exception as e:
+        logger.error(f"Error reordering channels: {e}")
+        return {"success": False, "message": str(e)}

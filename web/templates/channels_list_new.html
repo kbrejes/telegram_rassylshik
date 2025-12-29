@@ -243,12 +243,18 @@
 
                 <!-- Channels List -->
                 {% if channels %}
-                <div class="space-y-4">
+                <div id="channels-container" class="space-y-4">
                     {% for channel in channels %}
-                    <div class="bg-white dark:bg-dark-800 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden" data-channel-id="{{ channel.id }}" data-source-titles="{{ channel.source_titles | join('|||') if channel.source_titles else '' }}">
+                    <div class="channel-card bg-white dark:bg-dark-800 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden" data-channel-id="{{ channel.id }}" data-source-titles="{{ channel.source_titles | join('|||') if channel.source_titles else '' }}" draggable="true">
                         <!-- Channel Header -->
                         <div class="flex items-center justify-between p-4 gap-3 border-b border-gray-100 dark:border-dark-700">
                             <div class="flex items-center gap-3 min-w-0">
+                                <!-- Drag Handle -->
+                                <div class="drag-handle flex-shrink-0 cursor-grab active:cursor-grabbing p-1 -ml-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+                                    </svg>
+                                </div>
                                 <div class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg {% if channel.enabled %}bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400{% else %}bg-gray-100 dark:bg-dark-700 text-gray-400{% endif %}">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
@@ -828,6 +834,110 @@
                 renderVacancies();
             }
         })();
+
+        // ===== Drag and Drop for Channel Cards =====
+        let draggedCard = null;
+        let draggedCardRect = null;
+
+        function initDragAndDrop() {
+            const container = document.getElementById('channels-container');
+            if (!container) return;
+
+            const cards = container.querySelectorAll('.channel-card');
+
+            cards.forEach(card => {
+                // Drag start
+                card.addEventListener('dragstart', (e) => {
+                    draggedCard = card;
+                    draggedCardRect = card.getBoundingClientRect();
+                    card.classList.add('opacity-50', 'scale-[0.98]');
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', card.dataset.channelId);
+                });
+
+                // Drag end
+                card.addEventListener('dragend', () => {
+                    draggedCard.classList.remove('opacity-50', 'scale-[0.98]');
+                    draggedCard = null;
+                    // Remove all drop indicators
+                    container.querySelectorAll('.channel-card').forEach(c => {
+                        c.classList.remove('border-t-2', 'border-b-2', 'border-accent');
+                    });
+                });
+
+                // Drag over
+                card.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+
+                    if (draggedCard === card) return;
+
+                    // Determine if dropping above or below
+                    const rect = card.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+
+                    // Remove previous indicators
+                    container.querySelectorAll('.channel-card').forEach(c => {
+                        c.classList.remove('border-t-2', 'border-b-2', 'border-accent');
+                    });
+
+                    // Add indicator
+                    if (e.clientY < midY) {
+                        card.classList.add('border-t-2', 'border-accent');
+                    } else {
+                        card.classList.add('border-b-2', 'border-accent');
+                    }
+                });
+
+                // Drag leave
+                card.addEventListener('dragleave', () => {
+                    card.classList.remove('border-t-2', 'border-b-2', 'border-accent');
+                });
+
+                // Drop
+                card.addEventListener('drop', (e) => {
+                    e.preventDefault();
+
+                    if (draggedCard === card) return;
+
+                    const rect = card.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+
+                    // Insert before or after based on drop position
+                    if (e.clientY < midY) {
+                        container.insertBefore(draggedCard, card);
+                    } else {
+                        container.insertBefore(draggedCard, card.nextSibling);
+                    }
+
+                    // Save new order
+                    saveChannelOrder();
+                });
+            });
+        }
+
+        async function saveChannelOrder() {
+            const container = document.getElementById('channels-container');
+            const cards = container.querySelectorAll('.channel-card');
+            const order = Array.from(cards).map(card => card.dataset.channelId);
+
+            try {
+                const response = await fetch('/api/channels/reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    console.error('Failed to save order:', data.message);
+                }
+            } catch (error) {
+                console.error('Error saving channel order:', error);
+            }
+        }
+
+        // Initialize drag and drop
+        initDragAndDrop();
 
         // Load fresh data
         loadStatus();
