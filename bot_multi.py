@@ -216,6 +216,9 @@ class MultiChannelJobMonitorBot:
             
             logger.info(f"Загрузка {len(all_sources)} input источников...")
             
+            from telethon.tl.functions.channels import JoinChannelRequest
+            from telethon.errors import UserAlreadyParticipantError, ChannelPrivateError
+
             for source in all_sources:
                 try:
                     # Если это ID (число), преобразуем в int
@@ -230,9 +233,22 @@ class MultiChannelJobMonitorBot:
                     # Получаем название канала
                     channel_title = self._get_chat_title(entity)
 
+                    # Ensure bot is subscribed to the channel
+                    try:
+                        await self.client(JoinChannelRequest(entity))
+                        logger.info(f"  ✓ Joined '{source}' → ID={channel_id}, title='{channel_title}'")
+                    except UserAlreadyParticipantError:
+                        logger.info(f"  ✓ Already member of '{source}' → ID={channel_id}")
+                    except ChannelPrivateError:
+                        logger.warning(f"  ⚠ Private channel '{source}', need invite link")
+                    except Exception as join_err:
+                        if "USER_ALREADY_PARTICIPANT" in str(join_err):
+                            logger.info(f"  ✓ Already member of '{source}' → ID={channel_id}")
+                        else:
+                            logger.warning(f"  ⚠ Could not join '{source}': {join_err}")
+
                     self.monitored_sources.add(channel_id)
                     self.channel_names[channel_id] = channel_title
-                    logger.info(f"  ✓ Loaded source '{source}' → ID={channel_id}, title='{channel_title}'")
 
                     # Update source status
                     status_manager.update_source_status(
