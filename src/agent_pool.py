@@ -109,7 +109,8 @@ async def get_or_create_agent(session_name: str, phone: str, allow_create: bool 
 
                 return agent
             else:
-                status_manager.update_agent_status(session_name, "error", phone, error="Failed to connect")
+                error_msg = agent.last_connect_error or "Failed to connect"
+                status_manager.update_agent_status(session_name, "error", phone, error=error_msg)
                 return None
         except Exception as e:
             # Если ошибка "database is locked" - возможно другой процесс уже подключил

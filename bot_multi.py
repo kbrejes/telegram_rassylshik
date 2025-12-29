@@ -477,8 +477,9 @@ class MultiChannelJobMonitorBot:
             status_manager.update_agent_status(session_name, "connected", phone or "", user_info=user_info)
             logger.info(f"Agent {session_name} connected successfully")
         else:
-            status_manager.update_agent_status(session_name, "error", phone or "", error="Failed to connect")
-            raise Exception(f"Failed to connect agent {session_name}")
+            error_msg = agent.last_connect_error if agent else "Failed to connect"
+            status_manager.update_agent_status(session_name, "error", phone or "", error=error_msg)
+            raise Exception(f"Failed to connect agent {session_name}: {error_msg}")
 
     async def _cmd_disconnect_agent(self, session_name: str):
         """Disconnect a specific agent"""

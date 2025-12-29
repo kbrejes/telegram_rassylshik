@@ -41,6 +41,8 @@ class AgentAccount:
         self._flood_tracker = FloodWaitTracker()
         # Храним event loop в котором был подключен клиент
         self._connected_loop: Optional[asyncio.AbstractEventLoop] = None
+        # Last connection error for status reporting
+        self.last_connect_error: Optional[str] = None
     
     async def connect(self) -> bool:
         """
@@ -93,14 +95,21 @@ class AgentAccount:
             logger.error(f"Агент {self.session_name}: AuthKeyDuplicatedError - сессия повреждена, удаляем")
             delete_session_file(self.session_name)
             self._is_connected = False
+            self.last_connect_error = "Session corrupted (AuthKeyDuplicated). Re-add the agent."
             return False
 
         except Exception as e:
-            error_str = str(e).lower()
-            if "database is locked" in error_str:
+            error_str = str(e)
+            error_lower = error_str.lower()
+            if "database is locked" in error_lower:
                 logger.warning(f"Агент {self.session_name}: Сессия заблокирована другим процессом")
+                self.last_connect_error = "Session file locked by another process"
+            elif "all available options" in error_lower or "resendcoderequest" in error_lower:
+                logger.error(f"Агент {self.session_name}: Ошибка подключения: {e}")
+                self.last_connect_error = "Telegram rate-limited code requests. Wait 30-60 minutes."
             else:
                 logger.error(f"Агент {self.session_name}: Ошибка подключения: {e}")
+                self.last_connect_error = error_str
             self._is_connected = False
             return False
     
