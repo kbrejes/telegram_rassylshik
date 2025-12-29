@@ -202,11 +202,18 @@ gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through
 
 ## Stable Version
 
-**Current stable:** `stable-2025-12-25`
-- Commit: `de35244`
+**Current stable:** `stable-2025-12-30`
+- Commit: `b2a3b49`
 - Branch: `feature/self-correcting-prompts`
 
 **Features:**
+- Per-channel vacancy filtering by source titles
+- Per-channel sort buttons (Latest/Has msgs)
+- Drag and drop channel reordering
+- Auto-reload updates connection_status.json for web UI
+- Status indicators on all channel cards (Live, agents count)
+- Empty chat placeholder with input field
+- Fixed channel overwrite bug on creation
 - Navigation menu on all pages (Channels, Agents, AI Stats, Bot Auth)
 - Agent spam limitation handling with automatic fallback/rotation
 - Spam limit UI on agents page (badge + summary)
@@ -219,10 +226,10 @@ gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through
 
 **Rollback to stable:**
 ```bash
-git checkout stable-2025-12-25
+git checkout stable-2025-12-30
 ```
 
 **Deploy stable to server:**
 ```bash
-gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap --command="cd /home/brejestovski_kirill/telegram_rassylshik && sudo git fetch --tags && sudo git checkout stable-2025-12-25"
+gcloud compute ssh telegram-rassylshik-bot --zone=us-central1-a --tunnel-through-iap --command="cd /home/brejestovski_kirill/telegram_rassylshik && sudo git fetch --tags && sudo git checkout stable-2025-12-30"
 ```
