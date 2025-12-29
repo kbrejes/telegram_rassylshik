@@ -232,6 +232,7 @@ class MultiChannelJobMonitorBot:
 
                     self.monitored_sources.add(channel_id)
                     self.channel_names[channel_id] = channel_title
+                    logger.info(f"  ✓ Loaded source '{source}' → ID={channel_id}, title='{channel_title}'")
 
                     # Update source status
                     status_manager.update_source_status(
@@ -253,6 +254,7 @@ class MultiChannelJobMonitorBot:
                     )
             
             logger.info(f"Всего загружено {len(self.monitored_sources)} источников для мониторинга")
+            logger.info(f"[DEBUG] monitored_sources IDs: {sorted(self.monitored_sources)[:10]}...")
 
         except Exception as e:
             logger.error(f"Ошибка при загрузке input источников: {e}")
