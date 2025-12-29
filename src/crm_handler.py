@@ -41,6 +41,9 @@ class CRMHandler:
         self.ai_handler_pool: Optional[AIHandlerPool] = None
         self.ai_handlers: Dict[str, AIConversationHandler] = {}
 
+        # Channel configs for accessing settings like instant_response
+        self.channel_configs: Dict[str, ChannelConfig] = {}
+
         # Трекинг зарегистрированных обработчиков
         self._registered_agent_handlers: Set[int] = set()
 
@@ -54,6 +57,7 @@ class CRMHandler:
         self.conversation_managers.clear()
         self.contact_to_channel.clear()
         self.ai_handlers.clear()
+        self.channel_configs.clear()
 
         # Инициализация AI handler pool (with database for self-correction)
         self.ai_handler_pool = AIHandlerPool(config_manager.llm_providers, database=db)
@@ -92,6 +96,7 @@ class CRMHandler:
                 return
 
             self.agent_pools[channel.id] = agent_pool
+            self.channel_configs[channel.id] = channel
 
             # Получаем первого доступного агента
             primary_agent = agent_pool.get_available_agent()
@@ -277,7 +282,7 @@ class CRMHandler:
         if ai_handler and message.text:
             await self._handle_ai_response(
                 agent_client, conv_manager, sender.id, sender_name,
-                message.text, topic_id, ai_handler
+                message.text, topic_id, ai_handler, channel_id
             )
 
     async def _handle_ai_response(
@@ -288,18 +293,23 @@ class CRMHandler:
         contact_name: str,
         message_text: str,
         topic_id: int,
-        ai_handler: AIConversationHandler
+        ai_handler: AIConversationHandler,
+        channel_id: str
     ):
         """Обработка AI ответа на сообщение контакта"""
+        # Check if instant response is enabled for this channel
+        channel_config = self.channel_configs.get(channel_id)
+        instant_response = channel_config.instant_response if channel_config else False
 
         async def send_to_contact(cid: int, text: str) -> bool:
             try:
-                # Show typing indicator before sending
-                await human_behavior.simulate_typing(
-                    client=agent_client,
-                    contact=cid,
-                    message_length=len(text)
-                )
+                # Show typing indicator before sending (skip if instant_response)
+                if not instant_response:
+                    await human_behavior.simulate_typing(
+                        client=agent_client,
+                        contact=cid,
+                        message_length=len(text)
+                    )
                 sent = await agent_client.send_message(cid, text)
                 if sent:
                     conv_manager.mark_agent_sent_message(sent.id)

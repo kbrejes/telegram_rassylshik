@@ -192,6 +192,7 @@ class ChannelConfig:
     agents: List[AgentConfig] = field(default_factory=list)  # Список агентов для автоответов
     auto_response_enabled: bool = False
     auto_response_template: str = "Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?"
+    instant_response: bool = False  # Skip human-like delays for instant responses
 
     # AI Conversation (включено по умолчанию)
     ai_conversation_enabled: bool = True
@@ -214,6 +215,7 @@ class ChannelConfig:
             'agents': [agent.to_dict() for agent in self.agents],
             'auto_response_enabled': self.auto_response_enabled,
             'auto_response_template': self.auto_response_template,
+            'instant_response': self.instant_response,
             'ai_conversation_enabled': self.ai_conversation_enabled,
             'ai_config': self.ai_config.to_dict(),
             'prompts': self.prompts.to_dict(),
@@ -250,6 +252,7 @@ class ChannelConfig:
             agents=agents,
             auto_response_enabled=data.get('auto_response_enabled', False),
             auto_response_template=data.get('auto_response_template', 'Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?'),
+            instant_response=data.get('instant_response', False),
             ai_conversation_enabled=data.get('ai_conversation_enabled', True),
             ai_config=ai_config,
             prompts=prompts,

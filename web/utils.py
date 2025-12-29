@@ -278,6 +278,7 @@ class ChannelCreateRequest(BaseModel):
     agents: List[AgentRequest] = []
     auto_response_enabled: bool = False
     auto_response_template: str = ""
+    instant_response: bool = False
     prompts: Optional[PromptsRequest] = None
 
 
@@ -293,6 +294,7 @@ class ChannelUpdateRequest(BaseModel):
     agents: Optional[List[AgentRequest]] = None
     auto_response_enabled: Optional[bool] = None
     auto_response_template: Optional[str] = None
+    instant_response: Optional[bool] = None
     ai_conversation_enabled: Optional[bool] = None
     prompts: Optional[PromptsRequest] = None
 
