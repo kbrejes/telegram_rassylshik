@@ -582,7 +582,7 @@
             {% if channels %}
                 <div class="channels-list">
                     {% for channel in channels %}
-                    <div class="channel-card{% if not channel.enabled %} disabled{% endif %}" data-channel-id="{{ channel.id }}">
+                    <div class="channel-card{% if not channel.enabled %} disabled{% endif %}" data-channel-id="{{ channel.id }}" data-input-sources="{{ channel.input_sources | join(',') if channel.input_sources else '' }}">
                         <div class="channel-card-header">
                             <h3>{{ channel.name }}</h3>
                             <div class="channel-card-actions">
@@ -836,23 +836,40 @@
 
             peekVacancies = sorted;  // Store for modal
 
-            // Update all channel cards with the same global data
+            // Update each channel card with filtered data based on input sources
             document.querySelectorAll('.vacancy-peek').forEach(peek => {
                 const channelId = peek.id.replace('vacancy-peek-', '');
+                const card = document.querySelector(`.channel-card[data-channel-id="${channelId}"]`);
+                const inputSourcesStr = card ? card.dataset.inputSources : '';
+                const inputSources = inputSourcesStr ? inputSourcesStr.split(',').map(s => s.replace('@', '').toLowerCase()) : [];
+
                 const statsContainer = document.getElementById(`vacancy-stats-${channelId}`);
                 const contentContainer = document.getElementById(`vacancy-content-${channelId}`);
 
+                // Filter vacancies by this channel's input sources
+                const channelVacancies = inputSources.length > 0
+                    ? sorted.filter(v => {
+                        const sourceTitle = (v.chat_title || '').toLowerCase();
+                        return inputSources.some(src => sourceTitle.includes(src.replace('_', ' ')) || sourceTitle.includes(src));
+                    })
+                    : sorted;
+
+                // Calculate stats for this channel
+                const channelStats = {
+                    total: channelVacancies.length,
+                    passed: channelVacancies.filter(v => v.is_relevant).length,
+                    filtered: channelVacancies.filter(v => !v.is_relevant).length
+                };
+
                 // Update stats
-                if (vacancyStats) {
-                    statsContainer.innerHTML = `
-                        <span class="vacancy-peek-stat">Total: <span class="num">${vacancyStats.total}</span></span>
-                        <span class="vacancy-peek-stat passed">Passed: <span class="num">${vacancyStats.passed}</span></span>
-                        <span class="vacancy-peek-stat filtered">Filtered: <span class="num">${vacancyStats.filtered}</span></span>
-                    `;
-                }
+                statsContainer.innerHTML = `
+                    <span class="vacancy-peek-stat">Total: <span class="num">${channelStats.total}</span></span>
+                    <span class="vacancy-peek-stat passed">Passed: <span class="num">${channelStats.passed}</span></span>
+                    <span class="vacancy-peek-stat filtered">Filtered: <span class="num">${channelStats.filtered}</span></span>
+                `;
 
                 // Update table
-                if (sorted.length === 0) {
+                if (channelVacancies.length === 0) {
                     contentContainer.innerHTML = '<div class="vacancy-peek-empty">No vacancies yet</div>';
                 } else {
                     let html = `
@@ -867,7 +884,7 @@
                             <tbody>
                     `;
 
-                    sorted.forEach((v, idx) => {
+                    channelVacancies.slice(0, 10).forEach((v) => {
                         const status = v.is_relevant ? 'passed' : 'filtered';
                         const statusLabel = v.is_relevant ? 'Passed' : 'Filtered';
                         const time = formatTime(v.processed_at);
@@ -875,7 +892,7 @@
                         const ledClass = v.has_messages ? 'has-messages' : 'no-messages';
 
                         html += `
-                            <tr onclick="showVacancyDetails(${idx})">
+                            <tr onclick="showVacancyDetailsById(${v.id})">
                                 <td title="${source}">${source}</td>
                                 <td><div class="status-cell"><span class="status-badge ${status}">${statusLabel}</span><div class="msg-led ${ledClass}"></div></div></td>
                                 <td>${time}</td>
@@ -889,8 +906,13 @@
             });
         }
 
-        async function showVacancyDetails(idx) {
-            const v = peekVacancies[idx];
+        async function showVacancyDetailsById(vacancyId) {
+            const v = peekVacancies.find(v => v.id === vacancyId);
+            if (!v) return;
+            showVacancyDetails(v);
+        }
+
+        async function showVacancyDetails(v) {
             if (!v) return;
 
             const modal = document.getElementById('modal-overlay');
