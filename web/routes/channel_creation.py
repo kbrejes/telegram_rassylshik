@@ -289,6 +289,8 @@ async def create_channel_full(data: FullChannelCreateRequest):
                 prompts=prompts
             )
 
+            # CRITICAL: Load existing channels first to avoid overwriting them!
+            config_manager.load()
             if config_manager.add_channel(channel):
                 logger.info(f"Канал {channel_id} сохранён в конфигурации")
 

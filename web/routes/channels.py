@@ -265,6 +265,8 @@ async def create_channel(data: ChannelCreateRequest):
             prompts=prompts
         )
 
+        # CRITICAL: Load existing channels first to avoid overwriting them!
+        config_manager.load()
         if config_manager.add_channel(channel):
             agents_added = []
             agents_errors = []
