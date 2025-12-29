@@ -2,7 +2,7 @@
 import uuid
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Set, Tuple
 from fastapi import APIRouter, HTTPException
 
 import sys
@@ -19,6 +19,112 @@ config_manager = ConfigManager()
 
 # Очередь отложенных удалений (импортируется из app.py)
 pending_telegram_deletions: List = []
+
+
+async def _manage_source_subscriptions(
+    sources_to_join: List[str],
+    sources_to_leave: List[str]
+) -> dict:
+    """
+    Subscribe/unsubscribe bot from source channels.
+
+    Args:
+        sources_to_join: List of channel usernames/IDs to join
+        sources_to_leave: List of channel usernames/IDs to leave
+
+    Returns:
+        dict with joined, left, and errors lists
+    """
+    from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
+    from telethon.errors import (
+        ChannelPrivateError, InviteHashExpiredError,
+        UserAlreadyParticipantError, UserNotParticipantError
+    )
+
+    joined = []
+    left = []
+    errors = []
+
+    if not sources_to_join and not sources_to_leave:
+        return {"joined": joined, "left": left, "errors": errors}
+
+    session_status = await bot_auth_manager.check_session_status(quick_check=True)
+    if not session_status.get("authenticated"):
+        return {"joined": [], "left": [], "errors": ["Bot not authenticated"]}
+
+    client = await create_new_bot_client()
+
+    if not await client.is_user_authorized():
+        await client.disconnect()
+        return {"joined": [], "left": [], "errors": ["Bot session invalid"]}
+
+    try:
+        # Join new sources
+        for source in sources_to_join:
+            try:
+                # Get entity first to check if accessible
+                if source.lstrip('-').isdigit():
+                    entity = await client.get_entity(int(source))
+                else:
+                    entity = await client.get_entity(source)
+
+                try:
+                    await client(JoinChannelRequest(entity))
+                    joined.append(source)
+                    logger.info(f"Bot joined source channel: {source}")
+                except UserAlreadyParticipantError:
+                    joined.append(f"{source} (already member)")
+                except Exception as join_err:
+                    if "USER_ALREADY_PARTICIPANT" in str(join_err):
+                        joined.append(f"{source} (already member)")
+                    else:
+                        errors.append(f"{source}: {str(join_err)}")
+                        logger.warning(f"Failed to join {source}: {join_err}")
+
+            except ChannelPrivateError:
+                errors.append(f"{source}: private channel, need invite link")
+            except Exception as e:
+                errors.append(f"{source}: {str(e)}")
+                logger.warning(f"Failed to access {source}: {e}")
+
+        # Leave removed sources (only if not used by other channels)
+        for source in sources_to_leave:
+            try:
+                if source.lstrip('-').isdigit():
+                    entity = await client.get_entity(int(source))
+                else:
+                    entity = await client.get_entity(source)
+
+                try:
+                    await client(LeaveChannelRequest(entity))
+                    left.append(source)
+                    logger.info(f"Bot left source channel: {source}")
+                except UserNotParticipantError:
+                    left.append(f"{source} (wasn't member)")
+                except Exception as leave_err:
+                    if "USER_NOT_PARTICIPANT" in str(leave_err):
+                        left.append(f"{source} (wasn't member)")
+                    else:
+                        # Don't treat leave errors as critical
+                        logger.warning(f"Failed to leave {source}: {leave_err}")
+
+            except Exception as e:
+                # Don't treat leave errors as critical
+                logger.warning(f"Failed to leave {source}: {e}")
+
+    finally:
+        await client.disconnect()
+
+    return {"joined": joined, "left": left, "errors": errors}
+
+
+def _get_sources_used_by_other_channels(exclude_channel_id: str) -> Set[str]:
+    """Get all input sources used by channels other than the specified one."""
+    all_sources = set()
+    for channel in config_manager.channels:
+        if channel.id != exclude_channel_id:
+            all_sources.update(channel.input_sources)
+    return all_sources
 
 
 async def _add_agents_to_crm_group(crm_group_id: int, agents: list) -> dict:
@@ -161,6 +267,22 @@ async def create_channel(data: ChannelCreateRequest):
         if config_manager.add_channel(channel):
             agents_added = []
             agents_errors = []
+            sources_joined = []
+            sources_errors = []
+
+            # Auto-subscribe bot to input sources
+            if channel.input_sources:
+                try:
+                    sub_result = await _manage_source_subscriptions(
+                        sources_to_join=channel.input_sources,
+                        sources_to_leave=[]
+                    )
+                    sources_joined = sub_result.get('joined', [])
+                    sources_errors = sub_result.get('errors', [])
+                except Exception as e:
+                    logger.warning(f"Failed to subscribe to sources: {e}")
+                    sources_errors.append(str(e))
+
             if channel.crm_enabled and channel.crm_group_id and channel.agents:
                 try:
                     add_result = await _add_agents_to_crm_group(channel.crm_group_id, channel.agents)
@@ -174,6 +296,10 @@ async def create_channel(data: ChannelCreateRequest):
                 response["agents_added"] = agents_added
             if agents_errors:
                 response["agents_errors"] = agents_errors
+            if sources_joined:
+                response["sources_joined"] = sources_joined
+            if sources_errors:
+                response["sources_errors"] = sources_errors
             return response
         else:
             raise HTTPException(400, "Ошибка создания канала")
@@ -194,6 +320,9 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
         channel = config_manager.get_channel(channel_id)
         if not channel:
             raise HTTPException(404, "Канал не найден")
+
+        # Track old sources for subscription management
+        old_sources = set(channel.input_sources) if channel.input_sources else set()
 
         # Debug: log current state
         logger.info(f"  Before update: channel.enabled={channel.enabled}")
@@ -248,6 +377,33 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
         if config_manager.update_channel(channel_id, channel):
             agents_added = []
             agents_errors = []
+            sources_joined = []
+            sources_left = []
+            sources_errors = []
+
+            # Handle source subscription changes
+            if data.input_sources is not None:
+                new_sources = set(data.input_sources)
+                sources_to_join = list(new_sources - old_sources)
+                sources_to_leave_candidates = list(old_sources - new_sources)
+
+                # Only leave sources not used by other channels
+                sources_used_elsewhere = _get_sources_used_by_other_channels(channel_id)
+                sources_to_leave = [s for s in sources_to_leave_candidates if s not in sources_used_elsewhere]
+
+                if sources_to_join or sources_to_leave:
+                    try:
+                        sub_result = await _manage_source_subscriptions(
+                            sources_to_join=sources_to_join,
+                            sources_to_leave=sources_to_leave
+                        )
+                        sources_joined = sub_result.get('joined', [])
+                        sources_left = sub_result.get('left', [])
+                        sources_errors = sub_result.get('errors', [])
+                    except Exception as e:
+                        logger.warning(f"Failed to manage source subscriptions: {e}")
+                        sources_errors.append(str(e))
+
             if channel.crm_enabled and channel.crm_group_id and channel.agents:
                 try:
                     add_result = await _add_agents_to_crm_group(channel.crm_group_id, channel.agents)
@@ -261,6 +417,12 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
                 response["agents_added"] = agents_added
             if agents_errors:
                 response["agents_errors"] = agents_errors
+            if sources_joined:
+                response["sources_joined"] = sources_joined
+            if sources_left:
+                response["sources_left"] = sources_left
+            if sources_errors:
+                response["sources_errors"] = sources_errors
             return response
         else:
             raise HTTPException(400, "Ошибка обновления канала")
@@ -322,6 +484,22 @@ async def delete_channel(channel_id: str, delete_telegram: bool = True):
                         deleted_entities.append(f"{cursor.rowcount} записей из БД")
             except Exception as e:
                 errors.append(f"Ошибка очистки БД: {e}")
+
+        # Unsubscribe from sources not used by other channels
+        if channel.input_sources:
+            sources_used_elsewhere = _get_sources_used_by_other_channels(channel_id)
+            sources_to_leave = [s for s in channel.input_sources if s not in sources_used_elsewhere]
+            if sources_to_leave:
+                try:
+                    sub_result = await _manage_source_subscriptions(
+                        sources_to_join=[],
+                        sources_to_leave=sources_to_leave
+                    )
+                    left = sub_result.get('left', [])
+                    if left:
+                        deleted_entities.append(f"unsubscribed from {len(left)} sources")
+                except Exception as e:
+                    logger.warning(f"Failed to unsubscribe from sources: {e}")
 
         if config_manager.delete_channel(channel_id):
             deleted_entities.append("конфигурация канала")
