@@ -19,10 +19,42 @@ config_manager = ConfigManager()
 @router.get("/")
 async def index(request: Request):
     """Main page with channels list"""
+    import json
+
     channels = config_manager.load()
+
+    # Load source_channels mapping to get titles for input sources
+    source_titles_map = {}
+    connection_status_path = Path(__file__).parent.parent.parent / "configs" / "connection_status.json"
+    if connection_status_path.exists():
+        try:
+            with open(connection_status_path) as f:
+                conn_status = json.load(f)
+            for username, info in conn_status.get("source_channels", {}).items():
+                if info and info.get("title"):
+                    # Store both with and without @ for matching
+                    source_titles_map[username.lower()] = info["title"]
+                    source_titles_map[username.lower().lstrip("@")] = info["title"]
+        except Exception:
+            pass
+
+    # Add source_titles to each channel for frontend filtering
+    channels_with_titles = []
+    for ch in channels:
+        ch_dict = ch.to_dict()
+        source_titles = []
+        for src in ch_dict.get("input_sources", []):
+            src_lower = src.lower().lstrip("@")
+            if src_lower in source_titles_map:
+                source_titles.append(source_titles_map[src_lower])
+            elif f"@{src_lower}" in source_titles_map:
+                source_titles.append(source_titles_map[f"@{src_lower}"])
+        ch_dict["source_titles"] = source_titles
+        channels_with_titles.append(ch_dict)
+
     return templates.TemplateResponse(
         "channels_list_new.html",
-        {"request": request, "channels": channels}
+        {"request": request, "channels": channels_with_titles}
     )
 
 

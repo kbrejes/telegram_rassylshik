@@ -245,7 +245,7 @@
                 {% if channels %}
                 <div class="space-y-4">
                     {% for channel in channels %}
-                    <div class="bg-white dark:bg-dark-800 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden" data-channel-id="{{ channel.id }}">
+                    <div class="bg-white dark:bg-dark-800 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden" data-channel-id="{{ channel.id }}" data-source-titles="{{ channel.source_titles | join('|||') if channel.source_titles else '' }}">
                         <!-- Channel Header -->
                         <div class="flex items-center justify-between p-4 gap-3 border-b border-gray-100 dark:border-dark-700">
                             <div class="flex items-center gap-3 min-w-0">
@@ -657,15 +657,26 @@
 
             document.querySelectorAll('[id^="vacancy-peek-"]').forEach(peek => {
                 const channelId = peek.id.replace('vacancy-peek-', '');
+                const card = document.querySelector(`[data-channel-id="${channelId}"]`);
+                const sourceTitlesStr = card ? card.dataset.sourceTitles : '';
+                const sourceTitles = sourceTitlesStr ? sourceTitlesStr.split('|||').map(t => t.toLowerCase()) : [];
                 const contentContainer = document.getElementById(`vacancy-content-${channelId}`);
 
-                if (sorted.length === 0) {
+                // Filter vacancies by this channel's source titles
+                const channelVacancies = sourceTitles.length > 0
+                    ? sorted.filter(v => {
+                        const chatTitle = (v.chat_title || '').toLowerCase();
+                        return sourceTitles.some(title => chatTitle === title.toLowerCase());
+                    })
+                    : sorted;
+
+                if (channelVacancies.length === 0) {
                     contentContainer.innerHTML = '<div class="flex items-center justify-center py-6 text-sm text-gray-400 dark:text-gray-500">No vacancies yet</div>';
                 } else {
                     let html = `<table class="w-full text-sm">
                         <tbody class="divide-y divide-gray-100 dark:divide-dark-700">`;
 
-                    sorted.slice(0, 50).forEach((v, idx) => {
+                    channelVacancies.slice(0, 50).forEach((v, idx) => {
                         const statusClass = v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
                         const statusLabel = v.is_relevant ? 'Passed' : getFilteredLabel(v.ai_reason);
                         const time = formatTime(v.processed_at);
