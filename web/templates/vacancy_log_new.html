@@ -28,6 +28,43 @@
             .scrollbar-thin::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
         }
     </style>
+    <style>
+        /* Tooltip for text preview */
+        .text-tooltip {
+            position: relative;
+        }
+        .text-tooltip:hover .tooltip-content {
+            display: block;
+        }
+        .tooltip-content {
+            display: none;
+            position: absolute;
+            left: 0;
+            top: 100%;
+            z-index: 50;
+            background: #1f2937;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            max-width: 400px;
+            width: max-content;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            line-height: 1.5;
+            margin-top: 8px;
+            pointer-events: none;
+        }
+        .tooltip-content::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: -6px;
+            border: 6px solid transparent;
+            border-bottom-color: #1f2937;
+        }
+    </style>
     <script>
         if (localStorage.getItem('darkMode') === 'true') document.documentElement.classList.add('dark');
     </script>
@@ -227,11 +264,19 @@
             emptyState.classList.add('hidden');
             pagination.classList.remove('hidden');
 
-            tbody.innerHTML = vacancies.map((v, idx) => `
+            tbody.innerHTML = vacancies.map((v, idx) => {
+                // Prepare tooltip text (first 300 chars)
+                const tooltipText = (v.text_full || v.text_preview || '').substring(0, 300);
+                const truncated = tooltipText.length >= 300 ? '...' : '';
+
+                return `
                 <tr class="hover:bg-gray-50 dark:hover:bg-dark-800 cursor-pointer" onclick="showDetails(${idx})">
                     <td class="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">${formatDate(v.processed_at)}</td>
                     <td class="px-4 py-3 text-gray-900 dark:text-white">${escapeHtml(v.chat_title || 'Unknown')}</td>
-                    <td class="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-xs truncate">${escapeHtml(v.text_preview)}</td>
+                    <td class="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-xs truncate text-tooltip">
+                        ${escapeHtml(v.text_preview)}
+                        <div class="tooltip-content">${escapeHtml(tooltipText)}${truncated}</div>
+                    </td>
                     <td class="px-4 py-3">
                         <span class="px-2.5 py-1 text-xs font-medium rounded-full ${v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}">
                             ${v.is_relevant ? 'Passed' : 'Filtered'}
@@ -239,7 +284,8 @@
                     </td>
                     <td class="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs max-w-[200px] truncate">${escapeHtml(v.ai_reason || '-')}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
 
             const currentPage = Math.floor(currentOffset / limit) + 1;
             const totalPages = Math.ceil(totalCount / limit);
