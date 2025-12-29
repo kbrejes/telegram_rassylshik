@@ -293,8 +293,8 @@
                         <div class="p-3 sm:p-4" id="vacancy-peek-{{ channel.id }}">
                             <div class="flex items-center gap-2 mb-3">
                                 <div class="flex rounded-lg bg-gray-100 dark:bg-dark-700 p-0.5 gap-0.5">
-                                    <button class="px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md sort-btn sort-btn-active" onclick="sortVacancies('latest')" id="sort-latest">Latest</button>
-                                    <button class="px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md sort-btn sort-btn-inactive" onclick="sortVacancies('messages')" id="sort-messages">Has msgs</button>
+                                    <button class="px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md sort-btn sort-btn-active" onclick="sortVacancies('latest', '{{ channel.id }}')" id="sort-latest-{{ channel.id }}">Latest</button>
+                                    <button class="px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md sort-btn sort-btn-inactive" onclick="sortVacancies('messages', '{{ channel.id }}')" id="sort-messages-{{ channel.id }}">Has msgs</button>
                                 </div>
                             </div>
 
@@ -626,23 +626,46 @@
             }, 50);
         }
 
-        function sortVacancies(sortBy) {
-            currentSort = sortBy;
+        // Per-channel sort state
+        const channelSortState = {};
 
-            document.querySelectorAll('.sort-btn').forEach(btn => {
-                btn.classList.remove('sort-btn-active');
-                btn.classList.add('sort-btn-inactive');
-            });
-            const activeBtn = document.getElementById(`sort-${sortBy}`);
-            activeBtn.classList.remove('sort-btn-inactive');
-            activeBtn.classList.add('sort-btn-active');
+        function sortVacancies(sortBy, channelId) {
+            // Update state for this channel
+            channelSortState[channelId] = sortBy;
 
-            renderVacancies();
+            // Update button styles for this channel only
+            const latestBtn = document.getElementById(`sort-latest-${channelId}`);
+            const messagesBtn = document.getElementById(`sort-messages-${channelId}`);
+
+            if (sortBy === 'latest') {
+                latestBtn.classList.remove('sort-btn-inactive');
+                latestBtn.classList.add('sort-btn-active');
+                messagesBtn.classList.remove('sort-btn-active');
+                messagesBtn.classList.add('sort-btn-inactive');
+            } else {
+                messagesBtn.classList.remove('sort-btn-inactive');
+                messagesBtn.classList.add('sort-btn-active');
+                latestBtn.classList.remove('sort-btn-active');
+                latestBtn.classList.add('sort-btn-inactive');
+            }
+
+            // Re-render only this channel
+            renderChannelVacancies(channelId);
         }
 
         function renderVacancies() {
+            // Render all channels
+            document.querySelectorAll('[id^="vacancy-peek-"]').forEach(peek => {
+                const channelId = peek.id.replace('vacancy-peek-', '');
+                renderChannelVacancies(channelId);
+            });
+        }
+
+        function renderChannelVacancies(channelId) {
+            const sortBy = channelSortState[channelId] || 'latest';
+
             let sorted = [...allVacancies];
-            if (currentSort === 'messages') {
+            if (sortBy === 'messages') {
                 sorted.sort((a, b) => {
                     if (a.has_messages === b.has_messages) {
                         return new Date(b.processed_at) - new Date(a.processed_at);
@@ -655,12 +678,11 @@
 
             peekVacancies = sorted;
 
-            document.querySelectorAll('[id^="vacancy-peek-"]').forEach(peek => {
-                const channelId = peek.id.replace('vacancy-peek-', '');
-                const card = document.querySelector(`[data-channel-id="${channelId}"]`);
-                const sourceTitlesStr = card ? card.dataset.sourceTitles : '';
-                const sourceTitles = sourceTitlesStr ? sourceTitlesStr.split('|||').map(t => t.toLowerCase()) : [];
-                const contentContainer = document.getElementById(`vacancy-content-${channelId}`);
+            // Render only this specific channel
+            const card = document.querySelector(`[data-channel-id="${channelId}"]`);
+            const sourceTitlesStr = card ? card.dataset.sourceTitles : '';
+            const sourceTitles = sourceTitlesStr ? sourceTitlesStr.split('|||').map(t => t.toLowerCase()) : [];
+            const contentContainer = document.getElementById(`vacancy-content-${channelId}`);
 
                 // Filter vacancies by this channel's source titles
                 // If no source titles mapped, show message instead of all vacancies
@@ -716,10 +738,9 @@
                         `;
                     });
 
-                    html += '</tbody></table>';
-                    contentContainer.innerHTML = html;
-                }
-            });
+                html += '</tbody></table>';
+                contentContainer.innerHTML = html;
+            }
         }
 
         // Get short status label for filtered vacancies based on AI reason
