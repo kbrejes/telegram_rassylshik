@@ -391,12 +391,17 @@ async def update_channel(channel_id: str, data: ChannelUpdateRequest):
                 sources_used_elsewhere = _get_sources_used_by_other_channels(channel_id)
                 sources_to_leave = [s for s in sources_to_leave_candidates if s not in sources_used_elsewhere]
 
+                logger.info(f"Source subscription changes: +{len(sources_to_join)} -{len(sources_to_leave)} (old={len(old_sources)}, new={len(new_sources)})")
+
                 if sources_to_join or sources_to_leave:
+                    logger.info(f"  To join: {sources_to_join[:5]}{'...' if len(sources_to_join) > 5 else ''}")
+                    logger.info(f"  To leave: {sources_to_leave[:5]}{'...' if len(sources_to_leave) > 5 else ''}")
                     try:
                         sub_result = await _manage_source_subscriptions(
                             sources_to_join=sources_to_join,
                             sources_to_leave=sources_to_leave
                         )
+                        logger.info(f"  Subscription result: joined={sub_result.get('joined')}, left={sub_result.get('left')}, errors={sub_result.get('errors')}")
                         sources_joined = sub_result.get('joined', [])
                         sources_left = sub_result.get('left', [])
                         sources_errors = sub_result.get('errors', [])
