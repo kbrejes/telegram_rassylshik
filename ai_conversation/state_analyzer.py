@@ -47,9 +47,42 @@ class ConversationState:
     last_interaction: Optional[str] = None  # ISO format datetime
     created_at: Optional[str] = None
 
+    # === Milestones (what's been done) ===
+    introduced: bool = False              # AI introduced itself
+    calendar_sent: bool = False           # Calendar link was sent
+    pricing_mentioned: bool = False       # Pricing was discussed
+
+    # === Mentioned cases (to avoid repetition) ===
+    mentioned_cases: List[str] = field(default_factory=list)
+    # e.g., ["edtech", "b2b_saas", "infobiz", "it_school"]
+
+    # === User style tracking ===
+    user_style: Dict[str, Any] = field(default_factory=lambda: {
+        "uses_periods": True,
+        "uses_caps": True,
+        "avg_length": 50,
+        "formality": "neutral",
+        "message_count": 0,
+    })
+
+    # === Edge case tracking ===
+    probe_count: int = 0  # Count of ".", "?" messages
+
     def __post_init__(self):
         if self.created_at is None:
             self.created_at = datetime.now().isoformat()
+        # Ensure mentioned_cases is a list
+        if self.mentioned_cases is None:
+            self.mentioned_cases = []
+        # Ensure user_style is a dict
+        if self.user_style is None:
+            self.user_style = {
+                "uses_periods": True,
+                "uses_caps": True,
+                "avg_length": 50,
+                "formality": "neutral",
+                "message_count": 0,
+            }
 
     def update_interaction(self):
         """Update last interaction time."""
@@ -102,6 +135,22 @@ class ConversationState:
                 days = int(hours / 24)
                 time_info = f"Последнее сообщение: {days} дн. назад"
 
+        # Build milestone warnings
+        milestone_warnings = []
+        if self.introduced:
+            milestone_warnings.append("⚠️ ТЫ УЖЕ ПРЕДСТАВИЛСЯ. НЕ представляйся снова!")
+        if self.calendar_sent:
+            milestone_warnings.append("⚠️ ТЫ УЖЕ ОТПРАВИЛ ССЫЛКУ НА КАЛЕНДАРЬ. НЕ повторяй её!")
+        if self.call_offered:
+            milestone_warnings.append("⚠️ ТЫ УЖЕ ПРЕДЛОЖИЛ СОЗВОН. НЕ предлагай снова, пока клиент не ответит!")
+
+        warnings_str = "\n".join(milestone_warnings) if milestone_warnings else ""
+
+        # Build mentioned cases warning
+        cases_str = ""
+        if self.mentioned_cases:
+            cases_str = f"\n\nУЖЕ УПОМЯНУТЫЕ КЕЙСЫ (НЕ повторяй их):\n- " + "\n- ".join(self.mentioned_cases)
+
         return f"""ТЕКУЩЕЕ СОСТОЯНИЕ РАЗГОВОРА:
 - Текущая фаза: {self.current_phase}
 - Всего сообщений: {self.total_messages}
@@ -109,7 +158,9 @@ class ConversationState:
 - Созвон предлагали: {"да" if self.call_offered else "нет"}
 - Отказался от созвона: {"да" if self.call_declined else "нет"}
 - Созвон назначен: {"да" if self.call_scheduled else "нет"}
-{time_info}"""
+{time_info}
+
+{warnings_str}{cases_str}"""
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for persistence."""
@@ -385,28 +436,73 @@ class StateAnalyzer:
         """
         Update state after bot response.
 
-        Detects if call was offered in the response.
+        Detects milestones: introduction, call offer, calendar link, cases mentioned.
         """
         state = self.storage.load(contact_id)
+        response_lower = bot_response.lower()
+        changed = False
 
-        # Simple detection of call offer
+        # 1. Detect introduction
+        intro_indicators = [
+            "привет, я кирилл",
+            "я кирилл из",
+            "меня зовут кирилл",
+            "кирилл из агентства",
+            "кирилл из лови",
+        ]
+        if not state.introduced:
+            if any(ind in response_lower for ind in intro_indicators):
+                state.introduced = True
+                changed = True
+                logger.info(f"[MILESTONE] Introduction detected for {contact_id}")
+
+        # 2. Detect calendar link
+        calendar_indicators = ["cal.com", "calendly", "ссылк на календар"]
+        if not state.calendar_sent:
+            if any(ind in response_lower for ind in calendar_indicators):
+                state.calendar_sent = True
+                changed = True
+                logger.info(f"[MILESTONE] Calendar link detected for {contact_id}")
+
+        # 3. Detect call offer
         call_indicators = [
             "созвониться",
-            "календар",
-            "встреч",
+            "созвонимся",
+            "созвон",
             "звонок",
-            "call",
-            "meet",
-            "calendly",
-            "cal.com",
+            "давайте встретимся",
         ]
-
-        response_lower = bot_response.lower()
-        if any(ind in response_lower for ind in call_indicators):
-            if not state.call_offered:
-                logger.info(f"[ANALYZER] Detected call offer in response for {contact_id}")
+        if not state.call_offered:
+            if any(ind in response_lower for ind in call_indicators):
                 state.mark_call_offered()
-                self.storage.save(state)
+                changed = True
+                logger.info(f"[MILESTONE] Call offer detected for {contact_id}")
+
+        # 4. Detect pricing mentioned
+        pricing_indicators = ["50 тыс", "50к", "50k", "от 50", "минимум 50"]
+        if not state.pricing_mentioned:
+            if any(ind in response_lower for ind in pricing_indicators):
+                state.pricing_mentioned = True
+                changed = True
+                logger.info(f"[MILESTONE] Pricing mentioned for {contact_id}")
+
+        # 5. Detect cases mentioned
+        case_patterns = {
+            "edtech": ["edtech", "5000 подписчик", "образовательн", "telegram-канал"],
+            "b2b_saas": ["b2b", "saas", "300 лид", "facebook"],
+            "infobiz": ["инфобизнес", "roi 300", "500к бюджет", "масштабировал"],
+            "it_school": ["it-школ", "вебинар", "180₽", "180 рубл", "регистрац"],
+        }
+
+        for case_id, patterns in case_patterns.items():
+            if case_id not in state.mentioned_cases:
+                if any(p in response_lower for p in patterns):
+                    state.mentioned_cases.append(case_id)
+                    changed = True
+                    logger.info(f"[MILESTONE] Case '{case_id}' mentioned for {contact_id}")
+
+        if changed:
+            self.storage.save(state)
 
     def reset_state(self, contact_id: int):
         """Reset state for contact."""

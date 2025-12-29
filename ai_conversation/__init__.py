@@ -21,6 +21,8 @@ from .memory import ConversationMemory
 from .handler import AIConversationHandler, AIHandlerPool, AIConfig
 from .state_analyzer import StateAnalyzer, StateStorage, ConversationState, AnalysisResult
 from .phase_prompts import PhasePromptBuilder, ensure_prompts_directory
+from .edge_cases import edge_case_handler, EdgeCaseHandler, EdgeCaseResult
+from .style_analyzer import style_analyzer, StyleAnalyzer, UserStyle
 
 __all__ = [
     # LLM Client
@@ -40,4 +42,12 @@ __all__ = [
     # Phase Prompts
     "PhasePromptBuilder",
     "ensure_prompts_directory",
+    # Edge Cases
+    "edge_case_handler",
+    "EdgeCaseHandler",
+    "EdgeCaseResult",
+    # Style Analyzer
+    "style_analyzer",
+    "StyleAnalyzer",
+    "UserStyle",
 ]

@@ -26,6 +26,8 @@ from .memory import ConversationMemory
 from .state_analyzer import StateAnalyzer, StateStorage, ConversationState, AnalysisResult
 from .phase_prompts import PhasePromptBuilder, ensure_prompts_directory
 from .correction_applier import CorrectionApplier
+from .edge_cases import edge_case_handler, EdgeCaseResult
+from .style_analyzer import style_analyzer
 
 if TYPE_CHECKING:
     from src.database import Database
@@ -296,17 +298,44 @@ class AIConversationHandler:
         """
         Generate response using two-level state analyzer system.
 
-        1. Analyze conversation to determine phase
-        2. Get A/B variant if experiment is active
-        3. Build phase-specific system prompt
-        4. Add contact-type-specific additions
-        5. Generate response
-        6. Update state and track outcome
+        0. Check edge cases (probes, bot tests, gibberish)
+        1. Analyze user's texting style
+        2. Analyze conversation to determine phase
+        3. Get A/B variant if experiment is active
+        4. Build phase-specific system prompt with style mirroring
+        5. Add contact-type-specific additions
+        6. Generate response
+        7. Update state and track outcome
         """
+        # 0. Check edge cases FIRST (before LLM call)
+        edge_result = edge_case_handler.analyze(contact_id, message)
+
+        if edge_result.is_probe or edge_result.is_bot_test or edge_result.is_gibberish:
+            logger.info(
+                f"[AI] Edge case for {contact_id}: "
+                f"probe={edge_result.is_probe}, bot_test={edge_result.is_bot_test}, "
+                f"gibberish={edge_result.is_gibberish}"
+            )
+
+            # Always store user message in memory
+            self.memory.add_message(contact_id, "user", message)
+
+            if edge_result.hardcoded_response:
+                # Return hardcoded response without LLM
+                self.memory.add_message(contact_id, "assistant", edge_result.hardcoded_response)
+                return edge_result.hardcoded_response
+
+            if not edge_result.should_respond:
+                # Don't respond at all
+                return None
+
+        # 1. Analyze user's texting style (for style mirroring)
+        style_analyzer.analyze_message(contact_id, message)
+
         # Get working memory
         working_memory = self.memory.get_working_memory(contact_id)
 
-        # 1. Analyze conversation state
+        # 2. Analyze conversation state
         analysis = await self.state_analyzer.analyze(
             contact_id=contact_id,
             messages=working_memory,
@@ -333,7 +362,7 @@ class AIConversationHandler:
                     f"{variant_info['variant']} in experiment {variant_info['experiment_id']}"
                 )
 
-        # 4. Build phase-specific system prompt
+        # 4. Build phase-specific system prompt with style mirroring
         # Use variant content if available, otherwise use default
         if variant_info and variant_info.get("content"):
             system_prompt = variant_info["content"]
@@ -343,6 +372,7 @@ class AIConversationHandler:
                 analysis=analysis,
                 state=state,
                 include_founders=analysis.mention_founders,
+                contact_id=contact_id,  # For style mirroring
             )
 
         # 5. Add contact-type-specific prompt additions

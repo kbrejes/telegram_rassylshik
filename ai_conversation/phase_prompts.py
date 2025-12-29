@@ -12,6 +12,7 @@ from typing import Dict, Optional
 from pathlib import Path
 
 from .state_analyzer import AnalysisResult, ConversationState
+from .style_analyzer import style_analyzer, UserStyle
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,7 @@ class PhasePromptBuilder:
         analysis: Optional[AnalysisResult] = None,
         state: Optional[ConversationState] = None,
         include_founders: bool = False,
+        contact_id: Optional[int] = None,
     ) -> str:
         """
         Build complete system prompt for the given phase.
@@ -159,6 +161,7 @@ class PhasePromptBuilder:
             analysis: Analysis result (optional)
             state: Conversation state (optional)
             include_founders: Whether to include founders context
+            contact_id: Contact ID for style lookup (optional)
 
         Returns:
             Complete system prompt
@@ -176,6 +179,13 @@ class PhasePromptBuilder:
         # 1. Base context (always included)
         base = self._load_prompt("base_context")
         if base:
+            # Modify base context based on milestones
+            if state and state.introduced:
+                # Remove the "introduce yourself" instruction if already introduced
+                base = base.replace(
+                    "- В ПЕРВОМ сообщении ОБЯЗАТЕЛЬНО представься: \"Привет, я Кирилл из агентства Лови Лидов\"",
+                    "- ТЫ УЖЕ ПРЕДСТАВИЛСЯ. НЕ представляйся повторно!"
+                )
             parts.append(base)
 
         # 2. Founders context (if needed)
@@ -196,9 +206,15 @@ class PhasePromptBuilder:
                 instruction = self.DEFAULT_PROMPTS["answer_question_instruction"]
             parts.append(instruction)
 
-        # 5. State context (if available)
+        # 5. State context with milestones (if available)
         if state:
             parts.append(state.to_context())
+
+        # 6. Style mirroring instructions (if contact_id provided)
+        if contact_id:
+            style_instructions = style_analyzer.build_style_instructions(contact_id)
+            if style_instructions:
+                parts.append(style_instructions)
 
         return "\n\n---\n\n".join(parts)
 
