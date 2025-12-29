@@ -221,7 +221,7 @@ Respond in JSON format:
             if contact_type == "bot" and bot_username:
                 contact = None  # Don't use LLM contact if it's a bot scenario
 
-            return JobAnalysisResult(
+            result = JobAnalysisResult(
                 is_real_job=is_real_job,
                 is_salary_ok=is_salary_ok,
                 is_relevant=is_real_job and is_salary_ok,
@@ -233,6 +233,12 @@ Respond in JSON format:
                 analysis_summary=data.get("summary", ""),
                 used_fallback=False,
             )
+
+            # Log when vacancy passes but has no TG contact
+            if result.is_relevant and not result.contact_username:
+                logger.warning(f"[JobAnalyzer] Vacancy PASSED but NO TG contact extracted. Type={contact_type}, Bot={bot_username}")
+
+            return result
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning(f"[JobAnalyzer] Failed to parse LLM response: {e}")

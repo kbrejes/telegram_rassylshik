@@ -506,19 +506,25 @@ class CRMHandler:
     ):
         """Обработка CRM workflow: автоответ + создание топика"""
         try:
+            # Log extracted contacts
+            tg_contact = contacts.get('telegram')
+            logger.info(f"[CRM] Starting workflow. Contacts: telegram={tg_contact}, email={contacts.get('email')}, phone={contacts.get('phone')}")
+
             contacted_users: Set[str] = set()
 
             for channel in matching_outputs:
                 if not channel.crm_enabled:
+                    logger.debug(f"[CRM] Skipping channel '{channel.name}': CRM not enabled")
                     continue
 
                 agent_pool = self.agent_pools.get(channel.id)
                 conv_manager = self.conversation_managers.get(channel.id)
 
                 if not agent_pool or not conv_manager:
+                    logger.warning(f"[CRM] Skipping channel '{channel.name}': no agent_pool or conv_manager")
                     continue
 
-                logger.info(f"CRM workflow для канала '{channel.name}'...")
+                logger.info(f"[CRM] Processing channel '{channel.name}'...")
 
                 # Get available agent for topic creation
                 available_agent = agent_pool.get_available_agent()
@@ -549,14 +555,19 @@ class CRMHandler:
     ) -> bool:
         """Отправка автоответа контакту с fallback через пул агентов"""
         if not channel.auto_response_enabled or not channel.auto_response_template:
+            logger.debug(f"[AUTO-RESPONSE] Skipped: auto_response not enabled for channel '{channel.name}'")
             return False
 
         telegram_contact = contacts.get('telegram')
         if not telegram_contact:
+            logger.info(f"[AUTO-RESPONSE] Skipped: no Telegram contact extracted")
             return False
 
         if telegram_contact.lower() in contacted_users:
+            logger.debug(f"[AUTO-RESPONSE] Skipped: {telegram_contact} already contacted")
             return False
+
+        logger.info(f"[AUTO-RESPONSE] Attempting to send to {telegram_contact}...")
 
         try:
             # Use pool's send_message which has built-in agent rotation/fallback
@@ -567,9 +578,12 @@ class CRMHandler:
             )
             if success:
                 contacted_users.add(telegram_contact.lower())
+                logger.info(f"[AUTO-RESPONSE] ✅ Successfully sent to {telegram_contact}")
                 return True
+            else:
+                logger.warning(f"[AUTO-RESPONSE] ❌ Failed to send to {telegram_contact} (all agents failed)")
         except Exception as e:
-            logger.error(f"Ошибка отправки автоответа: {e}")
+            logger.error(f"[AUTO-RESPONSE] ❌ Error sending to {telegram_contact}: {e}")
 
         return False
 
