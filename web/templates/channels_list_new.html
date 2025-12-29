@@ -663,12 +663,16 @@
                 const contentContainer = document.getElementById(`vacancy-content-${channelId}`);
 
                 // Filter vacancies by this channel's source titles
-                const channelVacancies = sourceTitles.length > 0
-                    ? sorted.filter(v => {
-                        const chatTitle = (v.chat_title || '').toLowerCase();
-                        return sourceTitles.some(title => chatTitle === title.toLowerCase());
-                    })
-                    : sorted;
+                // If no source titles mapped, show message instead of all vacancies
+                if (sourceTitles.length === 0) {
+                    contentContainer.innerHTML = '<div class="flex items-center justify-center py-6 text-sm text-gray-400 dark:text-gray-500">Sources not connected yet</div>';
+                    return;
+                }
+
+                const channelVacancies = sorted.filter(v => {
+                    const chatTitle = (v.chat_title || '').toLowerCase();
+                    return sourceTitles.some(title => chatTitle === title.toLowerCase());
+                });
 
                 if (channelVacancies.length === 0) {
                     contentContainer.innerHTML = '<div class="flex items-center justify-center py-6 text-sm text-gray-400 dark:text-gray-500">No vacancies yet</div>';
