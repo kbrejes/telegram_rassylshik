@@ -1,390 +1,181 @@
-# Telegram Job Monitor Bot 🤖
+# Job Notification Bot
 
-Автоматический бот для мониторинга и квалификации объявлений о работе в Telegram чатах и группах. Использует AI (Ollama) для анализа релевантности вакансий и автоматически генерирует ответы по шаблонам.
+Telegram userbot for monitoring job vacancies with AI-powered responses and CRM functionality.
 
-## Возможности
-
-- 📡 **Мониторинг Telegram чатов** - автоматическое отслеживание новых сообщений в указанных чатах и группах
-- 🤖 **AI квалификация** - умный анализ вакансий через локальную Ollama AI (бесплатно!)
-- 📝 **Генерация ответов** - автоматическое создание персонализированных ответов по шаблонам
-- 💬 **Уведомления в личку** - отправка подробной информации о релевантных вакансиях вам в Telegram
-- 📊 **База данных** - хранение истории обработанных вакансий (без дубликатов)
-- 🐳 **Docker** - простое развертывание на любом сервере одной командой
-
-## Архитектура
+## Architecture Overview
 
 ```
-telegram_rassylshik/
-├── .env                    # Конфигурация (создать из .env.example)
-├── channels.txt           # Список чатов для мониторинга
-├── templates.json         # Шаблоны ответов на вакансии
-├── main.py               # Точка входа
-├── bot.py                # Telegram userbot логика
-├── ai_qualifier.py       # AI квалификация
-├── message_processor.py  # Обработка сообщений
-├── template_engine.py    # Генерация ответов
-├── database.py           # SQLite база данных
-├── config.py             # Настройки
-├── Dockerfile            # Docker образ
-├── docker-compose.yml    # Docker оркестрация
-└── requirements.txt      # Python зависимости
+                                    +------------------+
+                                    |   Web Interface  |
+                                    |  (FastAPI/Jinja) |
+                                    +--------+---------+
+                                             |
++----------------+                           v
+|  Telegram      |    +-----------+    +------------+
+|  Channels      +--->| bot_multi |<-->| configs/   |
+|  (sources)     |    |   .py     |    | JSON files |
++----------------+    +-----+-----+    +------------+
+                            |
+              +-------------+-------------+
+              |             |             |
+              v             v             v
+        +----------+  +-----------+  +----------+
+        | Message  |  |    CRM    |  |   Job    |
+        | Processor|  |  Handler  |  | Analyzer |
+        +----------+  +-----+-----+  +----------+
+                            |             |
+              +-------------+             |
+              |             |             |
+              v             v             v
+        +----------+  +-----------+  +----------+
+        |  Agent   |  |    AI     |  | Database |
+        |   Pool   |  | Handlers  |  | (SQLite) |
+        +----------+  +-----------+  +----------+
 ```
 
-## Быстрый старт
+## Project Structure
 
-### Вариант 1: Docker (рекомендуется)
-
-#### Требования
-- Docker и Docker Compose
-- Минимум 4GB RAM (для Ollama AI)
-- Telegram аккаунт
-
-#### Шаг 1: Получение API ключей Telegram
-
-1. Перейдите на https://my.telegram.org
-2. Войдите с вашим номером телефона
-3. Перейдите в "API development tools"
-4. Создайте новое приложение и получите:
-   - `API_ID` (число)
-   - `API_HASH` (строка)
-
-#### Шаг 2: Узнайте свой Telegram ID
-
-1. Напишите боту [@userinfobot](https://t.me/userinfobot)
-2. Скопируйте ваш ID (число)
-
-#### Шаг 3: Настройка проекта
-
-```bash
-# Клонируйте/скопируйте проект
-cd telegram_rassylshik
-
-# Создайте .env файл
-cp .env.example .env
-
-# Отредактируйте .env файл
-nano .env
+```
+job_notification_bot/
+├── bot_multi.py           # Main bot entry point (Telegram monitoring)
+├── web/                   # Web interface (FastAPI)
+│   ├── app.py            # FastAPI application
+│   ├── routes/           # API endpoints
+│   └── templates/        # Jinja2 HTML templates
+├── src/                   # Core business logic
+│   ├── config.py         # Environment config loader
+│   ├── config_manager.py # Channel configuration manager
+│   ├── config_models.py  # Configuration dataclasses
+│   ├── database.py       # SQLite database operations
+│   ├── crm_handler.py    # CRM: auto-responses, topics
+│   ├── agent_pool.py     # Telegram agent management
+│   ├── agent_account.py  # Individual agent accounts
+│   ├── message_processor.py  # Message filtering
+│   ├── job_analyzer.py   # LLM-based job analysis
+│   └── conversation_manager.py  # Forum topic management
+├── ai_conversation/       # AI conversation handling
+│   ├── handler.py        # AI response generation
+│   ├── llm_client.py     # LLM provider abstraction
+│   └── memory.py         # Conversation memory
+├── auth/                  # Telegram authentication
+├── configs/               # Configuration files
+│   └── channels_config.json  # Channel definitions
+├── tests/                 # Test files
+└── docs/                  # Documentation
 ```
 
-Заполните `.env`:
+## Key Concepts
 
-```env
-API_ID=12345678
-API_HASH=abcdef1234567890abcdef1234567890
-PHONE=+1234567890
-NOTIFICATION_USER_ID=123456789
+| Term | Description |
+|------|-------------|
+| **Bot** | Main Telegram userbot that monitors channels |
+| **Agent** | Separate Telegram account for sending auto-responses |
+| **CRM Group** | Telegram forum where conversations are mirrored |
+| **Topic** | Forum thread for each contact |
+| **Channel** | Output destination for notifications |
+| **Source** | Input Telegram channel/group to monitor |
 
-OLLAMA_URL=http://ollama:11434
-OLLAMA_MODEL=qwen2.5:3b
-MAX_MESSAGE_AGE_HOURS=24
-DATABASE_PATH=/app/data/jobs.db
-```
+## Quick Start
 
-#### Шаг 4: Добавьте чаты для мониторинга
+### Prerequisites
 
-Отредактируйте `channels.txt`:
-
-```txt
-# Формат: @username или ID чата (по одному на строку)
-@pythonrujobs
-@freelance_ru
-@remotejobsrussia
-```
-
-Чтобы узнать ID приватного чата:
-1. Пересылите любое сообщение из чата боту [@getidsbot](https://t.me/getidsbot)
-2. Бот покажет ID чата
-
-#### Шаг 5: Настройте шаблоны ответов (опционально)
-
-Отредактируйте `templates.json` под ваше резюме и стиль общения.
-
-#### Шаг 6: Первый запуск (авторизация)
-
-```bash
-# Запуск для авторизации
-docker-compose run --rm bot python main.py
-```
-
-При первом запуске Telegram попросит:
-1. Ввести код из SMS
-2. Возможно, ввести пароль двухфакторной аутентификации (если включена)
-
-После успешной авторизации нажмите `Ctrl+C`.
-
-#### Шаг 7: Запуск в фоновом режиме
-
-```bash
-# Сначала запустим Ollama и подгрузим модель
-docker-compose up -d ollama
-
-# Подождем 10 секунд и загрузим модель
-sleep 10
-docker exec telegram_bot_ollama ollama pull qwen2.5:3b
-
-# Теперь запустим бота
-docker-compose up -d bot
-
-# Просмотр логов
-docker-compose logs -f bot
-```
-
-#### Управление
-
-```bash
-# Остановить бота
-docker-compose stop bot
-
-# Запустить снова
-docker-compose start bot
-
-# Перезапустить
-docker-compose restart bot
-
-# Полная остановка (с Ollama)
-docker-compose down
-
-# Просмотр логов
-docker-compose logs -f bot
-
-# Обновление кода
-docker-compose down
-docker-compose build
-docker-compose up -d
-```
-
-### Вариант 2: Локальная установка
-
-#### Требования
 - Python 3.10+
-- Ollama (установить отдельно)
+- Telegram API credentials (from https://my.telegram.org)
+- At least one Telegram account for the bot
 
-#### Установка
+### 1. Clone and Install
 
 ```bash
-# 1. Установите Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# 2. Загрузите модель
-ollama pull qwen2.5:3b
-
-# 3. Установите Python зависимости
+git clone <repo-url>
+cd job_notification_bot
 pip install -r requirements.txt
-
-# 4. Настройте .env (см. выше)
-cp .env.example .env
-nano .env
-
-# В .env установите:
-OLLAMA_URL=http://localhost:11434
-
-# 5. Настройте channels.txt и templates.json
-
-# 6. Запустите бота
-python main.py
 ```
 
-## Как это работает
-
-1. **Мониторинг**: Бот читает все новые сообщения в указанных чатах
-2. **Фильтрация**: Отбрасывает короткие, старые и служебные сообщения
-3. **AI анализ**: Ollama анализирует текст и определяет:
-   - Это объявление о работе?
-   - Релевантно ли вашему профилю?
-   - Какая позиция и навыки упоминаются?
-4. **Генерация ответа**: Подбирается подходящий шаблон и заполняется данными
-5. **Уведомление**: Вам в личку приходит сообщение с:
-   - Деталями вакансии
-   - Ссылкой на оригинал
-   - Контактами автора
-   - Готовым ответом для копирования
-6. **Сохранение**: Вакансия сохраняется в БД (чтобы не обрабатывать повторно)
-
-## Пример уведомления
-
-```
-🎯 **Новая релевантная вакансия!**
-
-📍 **Чат:** Python Jobs Russia
-💼 **Позиция:** Senior Python Developer
-🛠 **Технологии:** python, django, postgresql, docker, redis
-
-🔗 **Ссылка:** https://t.me/pythonrujobs/12345
-
-👤 **Контакт автора:**
-   Telegram: @recruiter_ivan
-   Имя: Иван Петров
-
-📞 **Контакты из объявления:**
-   Email: jobs@company.ru
-
-🤖 **AI анализ:** Вакансия соответствует вашему профилю Python разработчика
-
-========================================
-📝 **ПРЕДЛОЖЕННЫЙ ОТВЕТ:**
-========================================
-
-Добрый день! Откликаюсь на вашу вакансию Python разработчика.
-
-Опыт:
-- Python 3+ лет
-- django, postgresql, docker, redis
-- Работа с базами данных и API
-
-Портфолио и резюме вышлю по запросу.
-Контакт: @your_username
-
-========================================
-
-✅ Если все ок — скопируйте ответ и отправьте в личку автору
-```
-
-## Настройка шаблонов ответов
-
-Отредактируйте `templates.json`:
-
-```json
-{
-  "default": {
-    "name": "Стандартный ответ",
-    "template": "Здравствуйте! Меня заинтересовала ваша вакансия.\n\nУ меня есть опыт работы с {skills}. Готов обсудить детали."
-  },
-  "python_developer": {
-    "name": "Python разработчик",
-    "template": "Добрый день! Откликаюсь на вакансию Python разработчика.\n\nОпыт работы с {skills}.\nПортфолио: github.com/username"
-  }
-}
-```
-
-Переменные для подстановки:
-- `{skills}` - список навыков
-- `{position}` - название позиции
-- `{company}` - название компании
-
-## Хостинг
-
-### Oracle Cloud (бесплатно)
-
-Oracle предоставляет бесплатно навсегда:
-- 2 VM с 1GB RAM (или 1 VM с 24GB RAM на ARM)
-- 200GB хранилища
-
-**Инструкция:**
-
-1. Зарегистрируйтесь на https://www.oracle.com/cloud/free/
-2. Создайте VM (Ubuntu 22.04, минимум 4GB RAM)
-3. Подключитесь по SSH
-4. Установите Docker:
-   ```bash
-   curl -fsSL https://get.docker.com -o get-docker.sh
-   sudo sh get-docker.sh
-   sudo usermod -aG docker $USER
-   ```
-5. Установите Docker Compose:
-   ```bash
-   sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-   sudo chmod +x /usr/local/bin/docker-compose
-   ```
-6. Скопируйте проект на сервер
-7. Следуйте инструкциям выше (Docker вариант)
-
-### Другие бесплатные варианты
-
-- **Hetzner Cloud**: 4€/месяц за 4GB RAM сервер (первые 20€ бонусом)
-- **DigitalOcean**: $6/месяц за 2GB RAM (trial $200)
-- **Домашний сервер / Raspberry Pi**: если есть устройство с постоянным интернетом
-
-## Устранение проблем
-
-### Ollama не отвечает
+### 2. Configure Environment
 
 ```bash
-# Проверьте статус
-docker-compose ps
-
-# Проверьте логи Ollama
-docker-compose logs ollama
-
-# Перезапустите
-docker-compose restart ollama
-
-# Проверьте доступность модели
-docker exec telegram_bot_ollama ollama list
-
-# Если модели нет - загрузите
-docker exec telegram_bot_ollama ollama pull qwen2.5:3b
+cp .env.example .env
+# Edit .env with your Telegram credentials
 ```
 
-### Бот не получает сообщения
-
-1. Убедитесь, что вы состоите в чате (userbot работает только в ваших чатах)
-2. Проверьте `channels.txt` на правильность username/ID
-3. Проверьте логи: `docker-compose logs -f bot`
-
-### Ошибка авторизации Telegram
-
-1. Проверьте `.env`: правильные ли `API_ID`, `API_HASH`, `PHONE`
-2. Удалите session файл и авторизуйтесь заново:
-   ```bash
-   rm bot_session.session*
-   docker-compose run --rm bot python main.py
-   ```
-
-### Недостаточно RAM для Ollama
-
-Используйте более легкую модель в `.env`:
-
+Required variables:
 ```env
-OLLAMA_MODEL=qwen2.5:1.5b  # или gemma:2b
+API_ID=your_api_id
+API_HASH=your_api_hash
+PHONE=+1234567890
 ```
 
-## Безопасность
+### 3. Configure Channels
 
-⚠️ **Важно:**
+Edit `configs/channels_config.json` or use the web interface.
 
-- Никогда не коммитьте `.env` файл в git
-- Не делитесь своими `API_ID` и `API_HASH`
-- Session файлы (`*.session`) также должны быть приватными
-- Userbot работает под вашим аккаунтом - будьте осторожны с автоматическими действиями
-- Не используйте для спама (можете получить бан в Telegram)
+### 4. Run
 
-## FAQ
+```bash
+# Start the bot
+python bot_multi.py
 
-**Q: Это легально?**  
-A: Использование Telegram User API разрешено, но есть ограничения. Не используйте для спама и массовых рассылок.
+# In another terminal, start the web interface
+uvicorn web.app:app --host 0.0.0.0 --port 8000
+```
 
-**Q: Можно ли автоматически отправлять ответы?**  
-A: Технически да, но это не рекомендуется. Бот специально разработан так, чтобы вы вручную проверяли и отправляли ответы.
+## Two Services
 
-**Q: Сколько чатов можно мониторить?**  
-A: Неограниченно, но помните о rate limits Telegram API (~20 запросов/сек).
+The application runs as two separate processes:
 
-**Q: Работает ли с приватными группами?**  
-A: Да, если ваш аккаунт состоит в этой группе.
+| Service | Command | Purpose |
+|---------|---------|---------|
+| `bot_multi.py` | `python bot_multi.py` | Telegram monitoring, CRM, agents |
+| `web.app` | `uvicorn web.app:app` | Web UI, API endpoints |
 
-**Q: Можно ли использовать облачный AI вместо Ollama?**  
-A: Да, можно модифицировать `ai_qualifier.py` для работы с OpenAI/Anthropic API, но это платно.
+## Configuration Files
 
-## Лицензия
+| File | Purpose |
+|------|---------|
+| `.env` | Environment variables (API keys, phone) |
+| `configs/channels_config.json` | Channel definitions, agents, filters |
+| `configs/llm_providers.json` | LLM provider settings |
 
-MIT License - используйте свободно для личных нужд.
+## Documentation
 
-## Поддержка
+- [Quick Start Guide](docs/QUICKSTART.md)
+- [Web Interface Guide](docs/WEB_INTERFACE_GUIDE.md)
+- [Development Setup](docs/DEV_SETUP.md)
+- [Development Rules](.claude/CLAUDE.md)
 
-Если возникли проблемы:
-1. Проверьте логи: `docker-compose logs -f bot`
-2. Убедитесь, что все настроено правильно (`.env`, `channels.txt`)
-3. Проверьте, что Ollama работает и модель загружена
+## Development
 
-## Roadmap
+### Running Tests
 
-- [ ] Web интерфейс для управления
-- [ ] Поддержка нескольких профилей (разные навыки)
-- [ ] Статистика и аналитика
-- [ ] Telegram бот для управления (вместо файлов)
-- [ ] Интеграция с CV/резюме парсерами
+```bash
+pytest tests/ -v
+```
 
----
+### Code Style
 
-**Удачи в поиске работы! 🚀**
+- Python 3.10+ with type hints
+- Async/await for I/O operations
+- Docstrings in English
 
+### Important: Event Loop Rules
+
+Agents are bound to the event loop where they connect. **Never share agents between threads.**
+
+```python
+# WRONG - will crash
+agent = await get_existing_agent(name)  # Connected in bot thread
+await agent.send_message(...)  # Called from web thread - ERROR!
+
+# CORRECT
+from web.utils import get_agent_client
+client, disconnect = await get_agent_client(name)
+try:
+    await client.send_message(...)
+finally:
+    if disconnect:
+        await client.disconnect()
+```
+
+## License
+
+MIT
