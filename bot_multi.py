@@ -337,6 +337,15 @@ class MultiChannelJobMonitorBot:
                             logger.debug(f"  Agent {agent_session} already in CRM group")
                         else:
                             logger.warning(f"  Failed to add {agent_session}: {invite_err}")
+
+                    # IMPORTANT: Make agent's client cache the CRM group entity
+                    # The agent was invited via bot's client, but agent needs its own cache
+                    try:
+                        await agent.client.get_dialogs(limit=50)  # Refresh dialog list
+                        await agent.client.get_entity(channel.crm_group_id)
+                        logger.debug(f"  Agent {agent_session} cached CRM group entity")
+                    except Exception as cache_err:
+                        logger.debug(f"  Agent {agent_session} entity cache: {cache_err}")
                 except Exception as e:
                     logger.warning(f"  Error processing agent {agent_session}: {e}")
 
