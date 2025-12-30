@@ -115,6 +115,41 @@ class CRMHandler:
         # Setup message queue for retry of failed auto-responses
         self._setup_message_queue()
 
+    async def refresh_crm_entities(self):
+        """Refresh CRM group entity cache after agents are added to groups.
+
+        Call this after ensure_agents_in_crm_groups() to make sure
+        ConversationManagers can access the CRM groups.
+        """
+        logger.info("[CRM] Refreshing CRM group entity cache...")
+
+        for channel_id, conv_manager in self.conversation_managers.items():
+            agent_pool = self.agent_pools.get(channel_id)
+            if not agent_pool:
+                continue
+
+            primary_agent = agent_pool.get_available_agent()
+            if not primary_agent:
+                continue
+
+            group_id = conv_manager.group_id
+
+            try:
+                # Try to get entity - should work now that agent is in group
+                entity = await primary_agent.client.get_entity(group_id)
+                logger.info(f"  ✅ {channel_id}: CRM group accessible (title: {getattr(entity, 'title', 'N/A')})")
+                status_manager.update_crm_status(channel_id, group_id, True)
+            except Exception as e:
+                # Try getting dialogs first to refresh cache
+                try:
+                    await primary_agent.client.get_dialogs(limit=100)
+                    entity = await primary_agent.client.get_entity(group_id)
+                    logger.info(f"  ✅ {channel_id}: CRM group accessible after dialog refresh")
+                    status_manager.update_crm_status(channel_id, group_id, True)
+                except Exception as e2:
+                    logger.warning(f"  ❌ {channel_id}: Still can't access CRM group: {e2}")
+                    status_manager.update_crm_status(channel_id, group_id, False, str(e2))
+
     async def _setup_channel_crm(self, channel: ChannelConfig):
         """Настройка CRM для одного канала (legacy wrapper)"""
         await self._setup_channel_crm_atomic(

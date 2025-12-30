@@ -170,6 +170,9 @@ class MultiChannelJobMonitorBot:
         # Ensure all agents are in their CRM groups
         await self._ensure_agents_in_crm_groups()
 
+        # Refresh CRM entity cache now that agents are in groups
+        await self.crm.refresh_crm_entities()
+
         # Sync missed messages from while bot was offline
         try:
             await self.crm.sync_missed_messages(lookback_hours=2)
