@@ -1,11 +1,10 @@
 """
 CRM Module
 
-Handles CRM functionality: auto-responses, topics, and message relay.
-Split from crm_handler.py for better maintainability.
+Helper functions for CRM functionality.
+Main CRMHandler class remains in src/crm_handler.py for now.
 """
 
-from .handler import CRMHandler
 from .topic_utils import (
     create_topic_with_fallback,
     send_topic_info,
@@ -14,7 +13,6 @@ from .topic_utils import (
 )
 
 __all__ = [
-    "CRMHandler",
     "create_topic_with_fallback",
     "send_topic_info",
     "mirror_auto_response",
