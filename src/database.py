@@ -1,38 +1,82 @@
 """
 Database module for SQLite operations.
 
+This is a facade class that provides a unified interface to all repositories.
 Schema creation and migrations are handled here.
 For migration definitions, see src/db/migrations.py
 """
 import aiosqlite
 import logging
-from datetime import datetime
 from typing import Optional, List, Dict
 from src.config import config
 from src.db.migrations import MigrationRunner
+from src.db.jobs import JobRepository
+from src.db.topics import TopicRepository
+from src.db.prompts import PromptRepository
+from src.db.agents import AgentRepository
 
 logger = logging.getLogger(__name__)
 
 
 class Database:
-    """Класс для работы с базой данных вакансий"""
-    
+    """
+    Database facade providing unified access to all repositories.
+
+    Repositories:
+    - jobs: Job/vacancy operations (processed_jobs, notifications)
+    - topics: CRM topic-contact mapping (crm_topic_contacts, synced_crm_messages)
+    - prompts: Self-correcting prompts (prompt_versions, experiments, outcomes)
+    - agents: Bot interactions and auto-responses (bot_interactions, auto_response_attempts)
+    """
+
     def __init__(self, db_path: str = None):
         self.db_path = db_path or config.DATABASE_PATH
         self._connection = None
-    
+        # Repositories (initialized on connect)
+        self._jobs: Optional[JobRepository] = None
+        self._topics: Optional[TopicRepository] = None
+        self._prompts: Optional[PromptRepository] = None
+        self._agents: Optional[AgentRepository] = None
+
+    @property
+    def jobs(self) -> JobRepository:
+        """Access job repository directly."""
+        return self._jobs
+
+    @property
+    def topics(self) -> TopicRepository:
+        """Access topic repository directly."""
+        return self._topics
+
+    @property
+    def prompts(self) -> PromptRepository:
+        """Access prompt repository directly."""
+        return self._prompts
+
+    @property
+    def agents(self) -> AgentRepository:
+        """Access agent repository directly."""
+        return self._agents
+
     async def connect(self):
-        """Подключение к базе данных"""
+        """Connect to database and initialize repositories."""
         self._connection = await aiosqlite.connect(self.db_path)
         await self._create_tables()
-        logger.info(f"Подключено к базе данных: {self.db_path}")
-    
+
+        # Initialize repositories with the connection
+        self._jobs = JobRepository(self._connection)
+        self._topics = TopicRepository(self._connection)
+        self._prompts = PromptRepository(self._connection)
+        self._agents = AgentRepository(self._connection)
+
+        logger.info(f"Connected to database: {self.db_path}")
+
     async def close(self):
-        """Закрытие соединения"""
+        """Close database connection."""
         if self._connection:
             await self._connection.close()
-            logger.info("Соединение с базой данных закрыто")
-    
+            logger.info("Database connection closed")
+
     async def _create_tables(self) -> None:
         """Create database tables and run migrations."""
         # Create base tables first
@@ -53,7 +97,7 @@ class Database:
                 UNIQUE(message_id, chat_id)
             )
         """)
-        
+
         await self._connection.execute("""
             CREATE TABLE IF NOT EXISTS notifications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +108,7 @@ class Database:
             )
         """)
 
-        # Таблица для маппинга CRM топиков на контакты
+        # CRM topic-contact mapping table
         await self._connection.execute("""
             CREATE TABLE IF NOT EXISTS crm_topic_contacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -256,20 +300,16 @@ class Database:
 
         logger.info("Database tables created/verified, migrations applied")
 
+    # =========================================================================
+    # FACADE METHODS - Delegate to repositories for backward compatibility
+    # =========================================================================
+
+    # === Job Repository Facade ===
+
     async def check_duplicate(self, message_id: int, chat_id: int) -> bool:
-        """
-        Проверяет, было ли сообщение уже обработано
-        
-        Returns:
-            True если сообщение уже обрабатывалось, False если нет
-        """
-        cursor = await self._connection.execute(
-            "SELECT id FROM processed_jobs WHERE message_id = ? AND chat_id = ?",
-            (message_id, chat_id)
-        )
-        result = await cursor.fetchone()
-        return result is not None
-    
+        """Check if message was already processed."""
+        return await self._jobs.check_duplicate(message_id, chat_id)
+
     async def save_job(
         self,
         message_id: int,
@@ -283,86 +323,32 @@ class Database:
         status: str = 'processed',
         contact_username: Optional[str] = None
     ) -> int:
-        """
-        Сохраняет информацию об обработанной вакансии
-
-        Returns:
-            ID созданной записи
-        """
-        skills_str = ','.join(skills) if skills else None
-
-        cursor = await self._connection.execute("""
-            INSERT INTO processed_jobs
-            (message_id, chat_id, chat_title, message_text, position, skills, is_relevant, ai_reason, status, contact_username)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (message_id, chat_id, chat_title, message_text, position, skills_str, is_relevant, ai_reason, status, contact_username))
-
-        await self._connection.commit()
-        job_id = cursor.lastrowid
-        logger.info(f"Сохранена вакансия ID={job_id} из чата {chat_title}")
-        return job_id
-    
-    async def save_notification(self, job_id: int, template_used: str):
-        """Сохраняет информацию об отправленном уведомлении"""
-        await self._connection.execute(
-            "INSERT INTO notifications (job_id, template_used) VALUES (?, ?)",
-            (job_id, template_used)
+        """Save processed job information."""
+        job_id = await self._jobs.save_job(
+            message_id, chat_id, chat_title, message_text,
+            position, skills, is_relevant, ai_reason, status, contact_username
         )
-        await self._connection.commit()
-        logger.info(f"Сохранено уведомление для вакансии ID={job_id}")
-    
-    async def get_relevant_jobs(self, limit: int = 50) -> List[Dict]:
-        """Получает список релевантных вакансий"""
-        cursor = await self._connection.execute("""
-            SELECT id, message_id, chat_id, chat_title, position, skills, processed_at
-            FROM processed_jobs
-            WHERE is_relevant = 1
-            ORDER BY processed_at DESC
-            LIMIT ?
-        """, (limit,))
-        
-        rows = await cursor.fetchall()
-        jobs = []
-        for row in rows:
-            jobs.append({
-                'id': row[0],
-                'message_id': row[1],
-                'chat_id': row[2],
-                'chat_title': row[3],
-                'position': row[4],
-                'skills': row[5].split(',') if row[5] else [],
-                'processed_at': row[6]
-            })
-        
-        return jobs
-    
-    async def get_statistics(self) -> Dict:
-        """Возвращает статистику по обработанным вакансиям"""
-        cursor = await self._connection.execute("""
-            SELECT
-                COUNT(*) as total,
-                SUM(CASE WHEN is_relevant = 1 THEN 1 ELSE 0 END) as relevant,
-                COUNT(DISTINCT chat_id) as unique_chats
-            FROM processed_jobs
-        """)
+        logger.info(f"Saved job ID={job_id} from chat {chat_title}")
+        return job_id
 
-        row = await cursor.fetchone()
-        return {
-            'total': row[0],
-            'relevant': row[1],
-            'unique_chats': row[2]
-        }
+    async def save_notification(self, job_id: int, template_used: str) -> None:
+        """Save notification record."""
+        await self._jobs.save_notification(job_id, template_used)
+        logger.info(f"Saved notification for job ID={job_id}")
+
+    async def get_relevant_jobs(self, limit: int = 50) -> List[Dict]:
+        """Get recent relevant jobs."""
+        return await self._jobs.get_relevant_jobs(limit)
+
+    async def get_statistics(self) -> Dict:
+        """Get job processing statistics."""
+        return await self._jobs.get_statistics()
 
     async def get_vacancy_id(self, message_id: int, chat_id: int) -> Optional[int]:
-        """Get vacancy ID by message_id and chat_id"""
-        cursor = await self._connection.execute(
-            "SELECT id FROM processed_jobs WHERE message_id = ? AND chat_id = ?",
-            (message_id, chat_id)
-        )
-        row = await cursor.fetchone()
-        return row[0] if row else None
+        """Get vacancy ID by message_id and chat_id."""
+        return await self._jobs.get_vacancy_id(message_id, chat_id)
 
-    # === CRM Topic-Contact методы ===
+    # === Topic Repository Facade ===
 
     async def save_topic_contact(
         self,
@@ -372,64 +358,43 @@ class Database:
         contact_name: str = None,
         agent_session: str = None,
         vacancy_id: int = None
-    ):
-        """Сохраняет маппинг topic_id -> contact_id с опциональной привязкой к вакансии"""
-        await self._connection.execute("""
-            INSERT OR REPLACE INTO crm_topic_contacts
-            (group_id, topic_id, contact_id, contact_name, agent_session, vacancy_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (group_id, topic_id, contact_id, contact_name, agent_session, vacancy_id))
-        await self._connection.commit()
-        logger.debug(f"Сохранен маппинг: topic {topic_id} -> contact {contact_id}, vacancy {vacancy_id}")
+    ) -> None:
+        """Save topic-contact mapping."""
+        await self._topics.save_topic_contact(
+            group_id, topic_id, contact_id, contact_name, agent_session, vacancy_id
+        )
+        logger.debug(f"Saved mapping: topic {topic_id} -> contact {contact_id}, vacancy {vacancy_id}")
 
     async def get_contact_by_topic(self, group_id: int, topic_id: int) -> Optional[Dict]:
-        """Находит contact_id по topic_id"""
-        cursor = await self._connection.execute("""
-            SELECT contact_id, contact_name, agent_session
-            FROM crm_topic_contacts
-            WHERE group_id = ? AND topic_id = ?
-        """, (group_id, topic_id))
-        row = await cursor.fetchone()
-        if row:
-            return {
-                'contact_id': row[0],
-                'contact_name': row[1],
-                'agent_session': row[2]
-            }
-        return None
+        """Get contact info by topic."""
+        return await self._topics.get_contact_by_topic(group_id, topic_id)
 
     async def get_topic_by_contact(self, group_id: int, contact_id: int) -> Optional[int]:
-        """Находит topic_id по contact_id"""
-        cursor = await self._connection.execute("""
-            SELECT topic_id FROM crm_topic_contacts
-            WHERE group_id = ? AND contact_id = ?
-        """, (group_id, contact_id))
-        row = await cursor.fetchone()
-        return row[0] if row else None
+        """Get topic ID by contact."""
+        return await self._topics.get_topic_by_contact(group_id, contact_id)
 
     async def load_all_topic_contacts(self, group_id: int) -> Dict[int, int]:
-        """Загружает все маппинги для группы (topic_id -> contact_id)"""
-        cursor = await self._connection.execute("""
-            SELECT topic_id, contact_id FROM crm_topic_contacts WHERE group_id = ?
-        """, (group_id,))
-        rows = await cursor.fetchall()
-        return {row[0]: row[1] for row in rows}
+        """Load all topic-contact mappings for a group."""
+        return await self._topics.load_all_topic_contacts(group_id)
 
     async def delete_topic_contacts_by_group(self, group_id: int) -> int:
-        """Удаляет все записи crm_topic_contacts для указанной группы
+        """Delete all topic-contact mappings for a group."""
+        count = await self._topics.delete_topic_contacts_by_group(group_id)
+        logger.info(f"Deleted {count} crm_topic_contacts for group {group_id}")
+        return count
 
-        Returns:
-            Количество удалённых записей
-        """
-        cursor = await self._connection.execute("""
-            DELETE FROM crm_topic_contacts WHERE group_id = ?
-        """, (group_id,))
-        await self._connection.commit()
-        deleted_count = cursor.rowcount
-        logger.info(f"Удалено {deleted_count} записей crm_topic_contacts для группы {group_id}")
-        return deleted_count
+    async def is_message_synced(self, contact_id: int, message_id: int) -> bool:
+        """Check if message was already synced."""
+        return await self._topics.is_message_synced(contact_id, message_id)
 
-    # === Prompt Versioning Methods ===
+    async def mark_message_synced(self, contact_id: int, message_id: int) -> None:
+        """Mark message as synced."""
+        try:
+            await self._topics.mark_message_synced(contact_id, message_id)
+        except Exception as e:
+            logger.warning(f"Error marking message as synced: {e}")
+
+    # === Prompt Repository Facade ===
 
     async def create_prompt_version(
         self,
@@ -441,79 +406,21 @@ class Database:
         is_active: bool = False
     ) -> int:
         """Create a new prompt version."""
-        # Get next version number
-        cursor = await self._connection.execute("""
-            SELECT COALESCE(MAX(version), 0) + 1 FROM prompt_versions
-            WHERE prompt_type = ? AND prompt_name = ?
-        """, (prompt_type, prompt_name))
-        row = await cursor.fetchone()
-        version = row[0]
-
-        cursor = await self._connection.execute("""
-            INSERT INTO prompt_versions
-            (prompt_type, prompt_name, version, content, parent_version_id, created_by, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (prompt_type, prompt_name, version, content, parent_version_id, created_by, is_active))
-        await self._connection.commit()
-        return cursor.lastrowid
+        return await self._prompts.create_prompt_version(
+            prompt_type, prompt_name, content, parent_version_id, created_by, is_active
+        )
 
     async def get_active_prompt_version(self, prompt_type: str, prompt_name: str) -> Optional[Dict]:
         """Get the currently active prompt version."""
-        cursor = await self._connection.execute("""
-            SELECT id, version, content, created_by, created_at
-            FROM prompt_versions
-            WHERE prompt_type = ? AND prompt_name = ? AND is_active = 1
-        """, (prompt_type, prompt_name))
-        row = await cursor.fetchone()
-        if row:
-            return {
-                "id": row[0],
-                "version": row[1],
-                "content": row[2],
-                "created_by": row[3],
-                "created_at": row[4]
-            }
-        return None
+        return await self._prompts.get_active_prompt_version(prompt_type, prompt_name)
 
     async def get_prompt_version_by_id(self, version_id: int) -> Optional[Dict]:
         """Get prompt version by ID."""
-        cursor = await self._connection.execute("""
-            SELECT id, prompt_type, prompt_name, version, content, created_by, is_active
-            FROM prompt_versions WHERE id = ?
-        """, (version_id,))
-        row = await cursor.fetchone()
-        if row:
-            return {
-                "id": row[0],
-                "prompt_type": row[1],
-                "prompt_name": row[2],
-                "version": row[3],
-                "content": row[4],
-                "created_by": row[5],
-                "is_active": row[6]
-            }
-        return None
+        return await self._prompts.get_prompt_version_by_id(version_id)
 
-    async def set_active_prompt_version(self, version_id: int):
-        """Set a prompt version as active (deactivates others of same type/name)."""
-        # Get type and name
-        version = await self.get_prompt_version_by_id(version_id)
-        if not version:
-            return
-
-        # Deactivate all versions of same type/name
-        await self._connection.execute("""
-            UPDATE prompt_versions SET is_active = 0
-            WHERE prompt_type = ? AND prompt_name = ?
-        """, (version["prompt_type"], version["prompt_name"]))
-
-        # Activate the specified version
-        await self._connection.execute("""
-            UPDATE prompt_versions SET is_active = 1 WHERE id = ?
-        """, (version_id,))
-        await self._connection.commit()
-
-    # === Conversation Outcomes Methods ===
+    async def set_active_prompt_version(self, version_id: int) -> None:
+        """Set a prompt version as active."""
+        await self._prompts.set_active_prompt_version(version_id)
 
     async def save_conversation_outcome(
         self,
@@ -529,15 +436,10 @@ class Database:
         conversation_duration_hours: Optional[float] = None
     ) -> int:
         """Save a conversation outcome."""
-        cursor = await self._connection.execute("""
-            INSERT INTO conversation_outcomes
-            (contact_id, channel_id, outcome, outcome_details, prompt_version_id,
-             experiment_id, variant, total_messages, phases_visited, conversation_duration_hours)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (contact_id, channel_id, outcome, outcome_details, prompt_version_id,
-              experiment_id, variant, total_messages, phases_visited, conversation_duration_hours))
-        await self._connection.commit()
-        return cursor.lastrowid
+        return await self._prompts.save_conversation_outcome(
+            contact_id, channel_id, outcome, outcome_details, prompt_version_id,
+            experiment_id, variant, total_messages, phases_visited, conversation_duration_hours
+        )
 
     async def get_outcomes_for_prompt_version(
         self,
@@ -546,47 +448,26 @@ class Database:
         limit: int = 100
     ) -> List[Dict]:
         """Get conversation outcomes for a prompt version."""
-        if outcomes:
-            placeholders = ",".join("?" * len(outcomes))
-            query = f"""
-                SELECT id, contact_id, channel_id, outcome, outcome_details,
-                       total_messages, phases_visited, created_at
-                FROM conversation_outcomes
-                WHERE prompt_version_id = ? AND outcome IN ({placeholders})
-                ORDER BY created_at DESC LIMIT ?
-            """
-            params = [prompt_version_id] + outcomes + [limit]
-        else:
-            query = """
-                SELECT id, contact_id, channel_id, outcome, outcome_details,
-                       total_messages, phases_visited, created_at
-                FROM conversation_outcomes
-                WHERE prompt_version_id = ?
-                ORDER BY created_at DESC LIMIT ?
-            """
-            params = [prompt_version_id, limit]
+        return await self._prompts.get_outcomes_for_prompt_version(prompt_version_id, outcomes, limit)
 
-        cursor = await self._connection.execute(query, params)
-        rows = await cursor.fetchall()
-        return [
-            {
-                "id": r[0], "contact_id": r[1], "channel_id": r[2],
-                "outcome": r[3], "outcome_details": r[4],
-                "total_messages": r[5], "phases_visited": r[6], "created_at": r[7]
-            }
-            for r in rows
-        ]
-
-    async def update_conversation_outcome(self, contact_id: int, channel_id: str, outcome: str, outcome_details: str = None):
+    async def update_conversation_outcome(
+        self,
+        contact_id: int,
+        channel_id: str,
+        outcome: str,
+        outcome_details: str = None
+    ) -> None:
         """Update outcome for an existing conversation."""
-        await self._connection.execute("""
-            UPDATE conversation_outcomes
-            SET outcome = ?, outcome_details = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE contact_id = ? AND channel_id = ? AND outcome = 'ongoing'
-        """, (outcome, outcome_details, contact_id, channel_id))
-        await self._connection.commit()
+        await self._prompts.update_conversation_outcome(contact_id, channel_id, outcome, outcome_details)
 
-    # === A/B Experiment Methods ===
+    async def get_recent_outcomes(
+        self,
+        channel_id: Optional[str] = None,
+        outcome_filter: Optional[List[str]] = None,
+        limit: int = 50
+    ) -> List[Dict]:
+        """Get recent conversation outcomes."""
+        return await self._prompts.get_recent_outcomes(channel_id, outcome_filter, limit)
 
     async def create_experiment(
         self,
@@ -599,88 +480,26 @@ class Database:
         min_sample_size: int = 30
     ) -> int:
         """Create a new A/B experiment."""
-        cursor = await self._connection.execute("""
-            INSERT INTO prompt_experiments
-            (name, prompt_type, prompt_name, control_version_id, treatment_version_id,
-             traffic_split, min_sample_size)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (name, prompt_type, prompt_name, control_version_id, treatment_version_id,
-              traffic_split, min_sample_size))
-        await self._connection.commit()
-        return cursor.lastrowid
+        return await self._prompts.create_experiment(
+            name, prompt_type, prompt_name, control_version_id, treatment_version_id,
+            traffic_split, min_sample_size
+        )
 
     async def get_active_experiment(self, prompt_type: str, prompt_name: str) -> Optional[Dict]:
         """Get active experiment for a prompt."""
-        cursor = await self._connection.execute("""
-            SELECT id, name, control_version_id, treatment_version_id, traffic_split, min_sample_size
-            FROM prompt_experiments
-            WHERE prompt_type = ? AND prompt_name = ? AND status = 'active'
-        """, (prompt_type, prompt_name))
-        row = await cursor.fetchone()
-        if row:
-            return {
-                "id": row[0], "name": row[1],
-                "control_version_id": row[2], "treatment_version_id": row[3],
-                "traffic_split": row[4], "min_sample_size": row[5]
-            }
-        return None
+        return await self._prompts.get_active_experiment(prompt_type, prompt_name)
 
     async def get_experiment_stats(self, experiment_id: int) -> Dict:
         """Get statistics for an experiment."""
-        cursor = await self._connection.execute("""
-            SELECT variant, outcome, COUNT(*) as count
-            FROM conversation_outcomes
-            WHERE experiment_id = ?
-            GROUP BY variant, outcome
-        """, (experiment_id,))
-        rows = await cursor.fetchall()
+        return await self._prompts.get_experiment_stats(experiment_id)
 
-        stats = {
-            "control": {"total": 0, "success": 0, "failure": 0},
-            "treatment": {"total": 0, "success": 0, "failure": 0}
-        }
-
-        for variant, outcome, count in rows:
-            if variant in stats:
-                stats[variant]["total"] += count
-                if outcome == "call_scheduled":
-                    stats[variant]["success"] += count
-                elif outcome in ("disengaged", "declined"):
-                    stats[variant]["failure"] += count
-
-        # Get min_sample_size
-        cursor = await self._connection.execute(
-            "SELECT min_sample_size FROM prompt_experiments WHERE id = ?",
-            (experiment_id,)
-        )
-        row = await cursor.fetchone()
-        stats["min_sample_size"] = row[0] if row else 30
-
-        return stats
-
-    async def complete_experiment(self, experiment_id: int, winner: str):
+    async def complete_experiment(self, experiment_id: int, winner: str) -> None:
         """Mark experiment as completed."""
-        await self._connection.execute("""
-            UPDATE prompt_experiments
-            SET status = 'completed', end_date = CURRENT_TIMESTAMP
-            WHERE id = ?
-        """, (experiment_id,))
-        await self._connection.commit()
+        await self._prompts.complete_experiment(experiment_id, winner)
 
     async def get_active_experiments(self) -> List[Dict]:
         """Get all active experiments."""
-        cursor = await self._connection.execute("""
-            SELECT id, name, prompt_type, prompt_name, control_version_id, treatment_version_id
-            FROM prompt_experiments WHERE status = 'active'
-        """)
-        rows = await cursor.fetchall()
-        return [
-            {"id": r[0], "name": r[1], "prompt_type": r[2], "prompt_name": r[3],
-             "control_version_id": r[4], "treatment_version_id": r[5]}
-            for r in rows
-        ]
-
-    # === Prompt Suggestions Methods ===
+        return await self._prompts.get_active_experiments()
 
     async def save_prompt_suggestion(
         self,
@@ -691,24 +510,14 @@ class Database:
         confidence_score: float
     ) -> int:
         """Save an LLM-generated prompt suggestion."""
-        import json
-        cursor = await self._connection.execute("""
-            INSERT INTO prompt_suggestions
-            (prompt_version_id, suggested_content, reasoning, analyzed_conversation_ids, confidence_score)
-            VALUES (?, ?, ?, ?, ?)
-        """, (prompt_version_id, suggested_content, reasoning,
-              json.dumps(analyzed_conversation_ids), confidence_score))
-        await self._connection.commit()
-        return cursor.lastrowid
+        return await self._prompts.save_prompt_suggestion(
+            prompt_version_id, suggested_content, reasoning,
+            analyzed_conversation_ids, confidence_score
+        )
 
-    async def update_suggestion_status(self, suggestion_id: int, status: str):
+    async def update_suggestion_status(self, suggestion_id: int, status: str) -> None:
         """Update suggestion status."""
-        await self._connection.execute("""
-            UPDATE prompt_suggestions SET status = ? WHERE id = ?
-        """, (status, suggestion_id))
-        await self._connection.commit()
-
-    # === Contact Type Learnings Methods ===
+        await self._prompts.update_suggestion_status(suggestion_id, status)
 
     async def save_contact_type_learning(
         self,
@@ -718,116 +527,23 @@ class Database:
         confidence_score: float
     ) -> int:
         """Save a contact type learning."""
-        import json
-        cursor = await self._connection.execute("""
-            INSERT INTO contact_type_learnings
-            (contact_type, learning, source_conversation_ids, confidence_score)
-            VALUES (?, ?, ?, ?)
-        """, (contact_type, learning, json.dumps(source_conversation_ids), confidence_score))
-        await self._connection.commit()
-        return cursor.lastrowid
+        return await self._prompts.save_contact_type_learning(
+            contact_type, learning, source_conversation_ids, confidence_score
+        )
 
     async def get_contact_type_learnings(self, contact_type: str) -> List[Dict]:
         """Get learnings for a contact type."""
-        cursor = await self._connection.execute("""
-            SELECT id, learning, confidence_score
-            FROM contact_type_learnings
-            WHERE contact_type = ?
-            ORDER BY confidence_score DESC
-        """, (contact_type,))
-        rows = await cursor.fetchall()
-        return [{"id": r[0], "learning": r[1], "confidence_score": r[2]} for r in rows]
-
-    # === Metrics Methods ===
+        return await self._prompts.get_contact_type_learnings(contact_type)
 
     async def get_prompt_metrics(self, prompt_version_id: int) -> Dict:
         """Get metrics for a prompt version."""
-        cursor = await self._connection.execute("""
-            SELECT total_conversations, successful_outcomes, failed_outcomes, conversion_rate
-            FROM prompt_metrics WHERE prompt_version_id = ?
-        """, (prompt_version_id,))
-        row = await cursor.fetchone()
-        if row:
-            return {
-                "total_conversations": row[0],
-                "successful_outcomes": row[1],
-                "failed_outcomes": row[2],
-                "conversion_rate": row[3]
-            }
-        return {"total_conversations": 0, "successful_outcomes": 0, "failed_outcomes": 0, "conversion_rate": 0}
+        return await self._prompts.get_prompt_metrics(prompt_version_id)
 
-    async def update_prompt_metrics(self, prompt_version_id: int):
+    async def update_prompt_metrics(self, prompt_version_id: int) -> None:
         """Recalculate and update metrics for a prompt version."""
-        cursor = await self._connection.execute("""
-            SELECT
-                COUNT(*) as total,
-                SUM(CASE WHEN outcome = 'call_scheduled' THEN 1 ELSE 0 END) as success,
-                SUM(CASE WHEN outcome IN ('disengaged', 'declined') THEN 1 ELSE 0 END) as failed
-            FROM conversation_outcomes
-            WHERE prompt_version_id = ?
-        """, (prompt_version_id,))
-        row = await cursor.fetchone()
+        await self._prompts.update_prompt_metrics(prompt_version_id)
 
-        total, success, failed = row[0] or 0, row[1] or 0, row[2] or 0
-        conversion_rate = success / total if total > 0 else 0
-
-        # Upsert metrics
-        await self._connection.execute("""
-            INSERT INTO prompt_metrics (prompt_version_id, total_conversations, successful_outcomes, failed_outcomes, conversion_rate)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(prompt_version_id) DO UPDATE SET
-                total_conversations = ?,
-                successful_outcomes = ?,
-                failed_outcomes = ?,
-                conversion_rate = ?,
-                updated_at = CURRENT_TIMESTAMP
-        """, (prompt_version_id, total, success, failed, conversion_rate, total, success, failed, conversion_rate))
-        await self._connection.commit()
-
-    async def get_recent_outcomes(
-        self,
-        outcome_types: Optional[List[str]] = None,
-        days: int = 7
-    ) -> List[Dict]:
-        """Get recent conversation outcomes.
-
-        Args:
-            outcome_types: Filter by outcome types (e.g., ['declined', 'disengaged'])
-            days: Number of days to look back
-
-        Returns:
-            List of outcome records
-        """
-        if outcome_types:
-            placeholders = ",".join("?" * len(outcome_types))
-            cursor = await self._connection.execute(f"""
-                SELECT * FROM conversation_outcomes
-                WHERE outcome IN ({placeholders})
-                AND created_at >= datetime('now', ?)
-                ORDER BY created_at DESC
-            """, (*outcome_types, f"-{days} days"))
-        else:
-            cursor = await self._connection.execute("""
-                SELECT * FROM conversation_outcomes
-                WHERE created_at >= datetime('now', ?)
-                ORDER BY created_at DESC
-            """, (f"-{days} days",))
-
-        rows = await cursor.fetchall()
-        columns = [d[0] for d in cursor.description]
-        return [dict(zip(columns, row)) for row in rows]
-
-    async def execute(self, query: str, params: tuple = ()) -> None:
-        """Execute a raw SQL query.
-
-        Args:
-            query: SQL query to execute
-            params: Query parameters
-        """
-        await self._connection.execute(query, params)
-        await self._connection.commit()
-
-    # === Bot Interaction Methods ===
+    # === Agent Repository Facade ===
 
     async def create_bot_interaction(
         self,
@@ -836,12 +552,7 @@ class Database:
         channel_id: Optional[str] = None
     ) -> int:
         """Create a new bot interaction record."""
-        cursor = await self._connection.execute("""
-            INSERT INTO bot_interactions (bot_username, vacancy_id, channel_id, status, started_at)
-            VALUES (?, ?, ?, 'in_progress', CURRENT_TIMESTAMP)
-        """, (bot_username, vacancy_id, channel_id))
-        await self._connection.commit()
-        return cursor.lastrowid
+        return await self._agents.create_bot_interaction(bot_username, vacancy_id, channel_id)
 
     async def update_bot_interaction(
         self,
@@ -851,30 +562,12 @@ class Database:
         success_message: Optional[str] = None,
         messages_sent: Optional[int] = None,
         messages_received: Optional[int] = None
-    ):
+    ) -> None:
         """Update bot interaction status."""
-        updates = ["status = ?", "completed_at = CURRENT_TIMESTAMP"]
-        params = [status]
-
-        if error_reason is not None:
-            updates.append("error_reason = ?")
-            params.append(error_reason)
-        if success_message is not None:
-            updates.append("success_message = ?")
-            params.append(success_message)
-        if messages_sent is not None:
-            updates.append("messages_sent = ?")
-            params.append(messages_sent)
-        if messages_received is not None:
-            updates.append("messages_received = ?")
-            params.append(messages_received)
-
-        params.append(interaction_id)
-        await self._connection.execute(
-            f"UPDATE bot_interactions SET {', '.join(updates)} WHERE id = ?",
-            tuple(params)
+        await self._agents.update_bot_interaction(
+            interaction_id, status, error_reason, success_message,
+            messages_sent, messages_received
         )
-        await self._connection.commit()
 
     async def save_bot_message(
         self,
@@ -886,32 +579,13 @@ class Database:
         file_sent: Optional[str] = None
     ) -> int:
         """Save a message in bot conversation."""
-        cursor = await self._connection.execute("""
-            INSERT INTO bot_messages
-            (interaction_id, direction, message_text, has_buttons, button_clicked, file_sent)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (interaction_id, direction, message_text, 1 if has_buttons else 0, button_clicked, file_sent))
-        await self._connection.commit()
-        return cursor.lastrowid
+        return await self._agents.save_bot_message(
+            interaction_id, direction, message_text, has_buttons, button_clicked, file_sent
+        )
 
     async def get_bot_interaction(self, interaction_id: int) -> Optional[Dict]:
         """Get bot interaction by ID."""
-        cursor = await self._connection.execute("""
-            SELECT id, bot_username, vacancy_id, channel_id, status,
-                   started_at, completed_at, messages_sent, messages_received,
-                   error_reason, success_message
-            FROM bot_interactions WHERE id = ?
-        """, (interaction_id,))
-        row = await cursor.fetchone()
-        if row:
-            return {
-                "id": row[0], "bot_username": row[1], "vacancy_id": row[2],
-                "channel_id": row[3], "status": row[4], "started_at": row[5],
-                "completed_at": row[6], "messages_sent": row[7],
-                "messages_received": row[8], "error_reason": row[9],
-                "success_message": row[10]
-            }
-        return None
+        return await self._agents.get_bot_interaction(interaction_id)
 
     async def get_bot_interactions(
         self,
@@ -919,98 +593,11 @@ class Database:
         limit: int = 50
     ) -> List[Dict]:
         """Get bot interactions with optional status filter."""
-        if status:
-            cursor = await self._connection.execute("""
-                SELECT id, bot_username, vacancy_id, status, started_at, completed_at,
-                       messages_sent, error_reason, success_message
-                FROM bot_interactions WHERE status = ?
-                ORDER BY created_at DESC LIMIT ?
-            """, (status, limit))
-        else:
-            cursor = await self._connection.execute("""
-                SELECT id, bot_username, vacancy_id, status, started_at, completed_at,
-                       messages_sent, error_reason, success_message
-                FROM bot_interactions
-                ORDER BY created_at DESC LIMIT ?
-            """, (limit,))
-
-        rows = await cursor.fetchall()
-        return [
-            {
-                "id": r[0], "bot_username": r[1], "vacancy_id": r[2],
-                "status": r[3], "started_at": r[4], "completed_at": r[5],
-                "messages_sent": r[6], "error_reason": r[7], "success_message": r[8]
-            }
-            for r in rows
-        ]
+        return await self._agents.get_bot_interactions(status, limit)
 
     async def check_bot_already_contacted(self, bot_username: str) -> bool:
-        """Check if we already contacted this bot recently (last 24h)."""
-        cursor = await self._connection.execute("""
-            SELECT id FROM bot_interactions
-            WHERE bot_username = ?
-            AND created_at >= datetime('now', '-24 hours')
-        """, (bot_username,))
-        row = await cursor.fetchone()
-        return row is not None
-
-    # === Supervisor Chat History Methods ===
-
-    async def get_supervisor_chat_history(self, limit: int = 50) -> List[Dict]:
-        """Get supervisor chat history."""
-        cursor = await self._connection.execute("""
-            SELECT id, role, content, tool_calls, created_at
-            FROM supervisor_chat_history
-            ORDER BY created_at ASC
-            LIMIT ?
-        """, (limit,))
-        rows = await cursor.fetchall()
-        return [
-            {
-                "id": r[0],
-                "role": r[1],
-                "content": r[2],
-                "tool_calls": r[3],
-                "created_at": r[4]
-            }
-            for r in rows
-        ]
-
-    async def add_supervisor_message(self, role: str, content: str, tool_calls: str = None):
-        """Add a message to supervisor chat history."""
-        await self._connection.execute("""
-            INSERT INTO supervisor_chat_history (role, content, tool_calls)
-            VALUES (?, ?, ?)
-        """, (role, content, tool_calls))
-        await self._connection.commit()
-
-    async def clear_supervisor_chat_history(self):
-        """Clear all supervisor chat history."""
-        await self._connection.execute("DELETE FROM supervisor_chat_history")
-        await self._connection.commit()
-
-    # === Synced CRM Messages ===
-
-    async def is_message_synced(self, contact_id: int, message_id: int) -> bool:
-        """Check if a message was already synced to CRM."""
-        async with self._connection.execute(
-            "SELECT 1 FROM synced_crm_messages WHERE contact_id = ? AND message_id = ?",
-            (contact_id, message_id)
-        ) as cursor:
-            return await cursor.fetchone() is not None
-
-    async def mark_message_synced(self, contact_id: int, message_id: int):
-        """Mark a message as synced to CRM."""
-        try:
-            await self._connection.execute("""
-                INSERT OR IGNORE INTO synced_crm_messages (contact_id, message_id)
-                VALUES (?, ?)
-            """, (contact_id, message_id))
-            await self._connection.commit()
-        except Exception as e:
-            logger.warning(f"Error marking message as synced: {e}")
-
-    # === Auto-Response Attempt Methods ===
+        """Check if we already contacted this bot recently."""
+        return await self._agents.check_bot_already_contacted(bot_username)
 
     async def save_auto_response_attempt(
         self,
@@ -1023,78 +610,39 @@ class Database:
         error_message: Optional[str] = None,
         attempt_number: int = 1
     ) -> int:
-        """Save an auto-response attempt.
-
-        Status values:
-        - 'success': Message sent successfully
-        - 'failed': Send failed (with error_type and error_message)
-        - 'skipped': Skipped (no TG contact, already contacted, etc.)
-        - 'queued': Added to retry queue
-
-        Error types:
-        - 'invalid_peer': Invalid peer (bot, privacy settings, deleted account)
-        - 'spam_limit': Agent spam limitation
-        - 'flood_wait': Flood wait error
-        - 'no_contact': No TG contact extracted
-        - 'already_contacted': Contact already messaged
-        - 'no_agent': No available agent
-        - 'resolve_failed': Username resolution failed
-        - 'other': Other error
-        """
-        cursor = await self._connection.execute("""
-            INSERT INTO auto_response_attempts
-            (vacancy_id, contact_username, contact_user_id, agent_session, status, error_type, error_message, attempt_number)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (vacancy_id, contact_username, contact_user_id, agent_session, status, error_type, error_message, attempt_number))
-        await self._connection.commit()
-        return cursor.lastrowid
+        """Save an auto-response attempt."""
+        return await self._agents.save_auto_response_attempt(
+            vacancy_id, contact_username, contact_user_id, agent_session,
+            status, error_type, error_message, attempt_number
+        )
 
     async def get_auto_response_attempts(self, vacancy_id: int) -> List[Dict]:
         """Get all auto-response attempts for a vacancy."""
-        cursor = await self._connection.execute("""
-            SELECT id, contact_username, contact_user_id, agent_session, status,
-                   error_type, error_message, attempt_number, created_at
-            FROM auto_response_attempts
-            WHERE vacancy_id = ?
-            ORDER BY created_at ASC
-        """, (vacancy_id,))
-        rows = await cursor.fetchall()
-        return [
-            {
-                "id": r[0],
-                "contact_username": r[1],
-                "contact_user_id": r[2],
-                "agent_session": r[3],
-                "status": r[4],
-                "error_type": r[5],
-                "error_message": r[6],
-                "attempt_number": r[7],
-                "created_at": r[8]
-            }
-            for r in rows
-        ]
+        return await self._agents.get_auto_response_attempts(vacancy_id)
 
     async def get_latest_auto_response_status(self, vacancy_id: int) -> Optional[Dict]:
         """Get the latest auto-response attempt status for a vacancy."""
-        cursor = await self._connection.execute("""
-            SELECT status, error_type, error_message, contact_username, created_at
-            FROM auto_response_attempts
-            WHERE vacancy_id = ?
-            ORDER BY created_at DESC
-            LIMIT 1
-        """, (vacancy_id,))
-        row = await cursor.fetchone()
-        if row:
-            return {
-                "status": row[0],
-                "error_type": row[1],
-                "error_message": row[2],
-                "contact_username": row[3],
-                "created_at": row[4]
-            }
-        return None
+        return await self._agents.get_latest_auto_response_status(vacancy_id)
+
+    async def get_supervisor_chat_history(self, limit: int = 50) -> List[Dict]:
+        """Get supervisor chat history."""
+        return await self._agents.get_supervisor_chat_history(limit)
+
+    async def add_supervisor_message(self, role: str, content: str, tool_calls: str = None) -> None:
+        """Add a message to supervisor chat history."""
+        await self._agents.add_supervisor_message(role, content, tool_calls)
+
+    async def clear_supervisor_chat_history(self) -> None:
+        """Clear all supervisor chat history."""
+        await self._agents.clear_supervisor_chat_history()
+
+    # === Raw SQL Execution ===
+
+    async def execute(self, query: str, params: tuple = ()) -> None:
+        """Execute a raw SQL query."""
+        await self._connection.execute(query, params)
+        await self._connection.commit()
 
 
-# Глобальный экземпляр базы данных
+# Global database instance
 db = Database()
-
