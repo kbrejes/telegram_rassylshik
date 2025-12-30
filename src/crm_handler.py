@@ -45,6 +45,10 @@ class CRMHandler:
         # Channel configs for accessing settings like instant_response
         self.channel_configs: Dict[str, ChannelConfig] = {}
 
+        # NEW: Map agent client id -> list of channel IDs
+        # This allows finding channel by agent, not by topic
+        self.agent_to_channels: Dict[int, List[str]] = {}
+
         # Трекинг зарегистрированных обработчиков
         self._registered_agent_handlers: Set[int] = set()
 
@@ -66,6 +70,7 @@ class CRMHandler:
         new_contact_to_channel: Dict[int, str] = {}
         new_ai_handlers: Dict[str, AIConversationHandler] = {}
         new_channel_configs: Dict[str, ChannelConfig] = {}
+        new_agent_to_channels: Dict[int, List[str]] = {}
 
         # Инициализация AI handler pool (with database for self-correction)
         new_ai_handler_pool = AIHandlerPool(config_manager.llm_providers, database=db)
@@ -81,6 +86,7 @@ class CRMHandler:
             self.ai_handlers = new_ai_handlers
             self.channel_configs = new_channel_configs
             self.ai_handler_pool = new_ai_handler_pool
+            self.agent_to_channels = new_agent_to_channels
             return
 
         for channel in crm_enabled_channels:
@@ -91,13 +97,15 @@ class CRMHandler:
                 new_contact_to_channel,
                 new_ai_handlers,
                 new_channel_configs,
-                new_ai_handler_pool
+                new_ai_handler_pool,
+                new_agent_to_channels
             )
 
         # ATOMIC SWAP: Replace all data structures at once
         self.agent_pools = new_agent_pools
         self.conversation_managers = new_conversation_managers
         self.contact_to_channel = new_contact_to_channel
+        self.agent_to_channels = new_agent_to_channels
         self.ai_handlers = new_ai_handlers
         self.channel_configs = new_channel_configs
         self.ai_handler_pool = new_ai_handler_pool
@@ -116,7 +124,8 @@ class CRMHandler:
             self.contact_to_channel,
             self.ai_handlers,
             self.channel_configs,
-            self.ai_handler_pool
+            self.ai_handler_pool,
+            self.agent_to_channels
         )
 
     async def _setup_channel_crm_atomic(
@@ -127,7 +136,8 @@ class CRMHandler:
         contact_to_channel: Dict[int, str],
         ai_handlers: Dict[str, AIConversationHandler],
         channel_configs: Dict[str, ChannelConfig],
-        ai_handler_pool: AIHandlerPool
+        ai_handler_pool: AIHandlerPool,
+        agent_to_channels: Dict[int, List[str]]
     ):
         """Настройка CRM для одного канала (atomic version - writes to provided containers)"""
         try:
@@ -192,8 +202,16 @@ class CRMHandler:
             conv_manager.register_handlers()
 
             # Регистрируем обработчик входящих сообщений для агентов
+            # AND build agent_to_channels mapping
             for agent in agent_pool.agents:
                 agent_id = id(agent.client)
+
+                # Track which channels this agent is linked to
+                if agent_id not in agent_to_channels:
+                    agent_to_channels[agent_id] = []
+                if channel.id not in agent_to_channels[agent_id]:
+                    agent_to_channels[agent_id].append(channel.id)
+
                 if agent_id not in self._registered_agent_handlers:
                     self._register_contact_message_handler(agent.client, channel.id)
                     self._registered_agent_handlers.add(agent_id)
@@ -288,23 +306,29 @@ class CRMHandler:
         logger.info("[CRM] Message queue initialized for auto-response retries")
 
     def _register_contact_message_handler(self, agent_client: TelegramClient, channel_id: str):
-        """Регистрация обработчика входящих сообщений от контактов"""
+        """Регистрация обработчика входящих сообщений от контактов
+
+        NEW ARCHITECTURE (2025-12-30):
+        - Layer 1: AI response (MUST work independently)
+        - Layer 2: CRM mirroring (best-effort, never blocks Layer 1)
+        """
         logger.info(f"[HANDLER] Registering contact message handler for channel {channel_id}")
 
         @agent_client.on(events.NewMessage(incoming=True))
         async def handle_contact_message(event):
-            """Трансляция сообщения от контакта в топик"""
+            """Handle incoming message from contact - AI-first, CRM-secondary"""
             try:
                 message = event.message
                 logger.info(f"[HANDLER] Incoming message from chat_id={event.chat_id}")
 
-                # Игнорируем сообщения из групп
+                # === BASIC FILTERING ===
+                # Ignore messages from groups
                 chat = await event.get_chat()
                 if isinstance(chat, (Chat, Channel)):
                     logger.debug(f"[HANDLER] Ignored: message from group/channel")
                     return
 
-                # Игнорируем собственные сообщения
+                # Ignore outgoing messages
                 if message.out:
                     return
 
@@ -312,7 +336,7 @@ class CRMHandler:
                 if not sender:
                     return
 
-                # Проверяем что сообщение не от самого агента
+                # Ignore messages from self
                 try:
                     me = await agent_client.get_me()
                     if sender.id == me.id:
@@ -320,53 +344,100 @@ class CRMHandler:
                 except Exception:
                     pass
 
-                # Игнорируем служебные сообщения
+                # Ignore service messages
                 message_text = message.text or ""
                 from src.constants import SERVICE_MESSAGE_PREFIXES
                 if any(message_text.startswith(p) for p in SERVICE_MESSAGE_PREFIXES):
                     if message_text.startswith("👤 **") and "\n\n" not in message_text:
-                        pass  # Не служебное
+                        pass  # Not a service message
                     else:
                         return
 
-                # Ищем канал и conv_manager для этого контакта
-                channel_id_found = None
-                conv_manager = None
                 sender_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip() or sender.username or str(sender.id)
-                logger.info(f"[HANDLER] Looking for topic for sender {sender_name} (id={sender.id})")
+                logger.info(f"[HANDLER] Message from {sender_name} (id={sender.id}): {message_text[:50]}...")
 
-                for ch_id, cm in self.conversation_managers.items():
-                    topic_id = cm.get_topic_id(sender.id)
-                    logger.debug(f"[HANDLER] Channel {ch_id}: topic_id={topic_id} for sender {sender.id}")
-                    if topic_id:
-                        channel_id_found = ch_id
-                        conv_manager = cm
-                        self.contact_to_channel[sender.id] = ch_id
-                        break
+                # === FIND CHANNEL BY AGENT (not by topic) ===
+                agent_id = id(agent_client)
+                linked_channels = self.agent_to_channels.get(agent_id, [])
 
-                if not channel_id_found or not conv_manager:
-                    logger.info(f"[HANDLER] No topic found for sender {sender.id}, ignoring message")
+                if not linked_channels:
+                    logger.warning(f"[HANDLER] Agent {agent_id} not linked to any channels")
                     return
 
-                logger.info(f"[HANDLER] Found channel {channel_id_found} for sender {sender.id}")
+                # Use the first channel with AI enabled, or first channel
+                channel_id_found = None
+                ai_handler = None
+                for ch_id in linked_channels:
+                    handler = self.ai_handlers.get(ch_id)
+                    if handler:
+                        channel_id_found = ch_id
+                        ai_handler = handler
+                        break
 
-                # Проверяем, не было ли это сообщение отправлено агентом
-                if conv_manager.is_agent_sent_message(message.id):
+                if not channel_id_found:
+                    channel_id_found = linked_channels[0]
+
+                logger.info(f"[HANDLER] Using channel {channel_id_found} (AI={'YES' if ai_handler else 'NO'})")
+
+                # Get channel config and conv_manager (may be None)
+                channel_config = self.channel_configs.get(channel_id_found)
+                conv_manager = self.conversation_managers.get(channel_id_found)
+
+                # Check if this message was sent by agent (to avoid loops)
+                if conv_manager and conv_manager.is_agent_sent_message(message.id):
                     logger.debug(f"[HANDLER] Ignoring agent-sent message {message.id}")
                     return
 
-                topic_id = conv_manager.get_topic_id(sender.id)
-                ai_handler = self.ai_handlers.get(channel_id_found)
-
-                logger.info(f"[HANDLER] topic_id={topic_id}, ai_handler={'YES' if ai_handler else 'NO'}")
-
-                if topic_id:
-                    await self._relay_contact_message_to_topic(
-                        agent_client, conv_manager, sender, message,
-                        topic_id, ai_handler, channel_id_found
+                # === LAYER 1: AI RESPONSE (core functionality) ===
+                if ai_handler and message_text:
+                    logger.info(f"[HANDLER] Processing AI response for {sender_name}")
+                    await self._handle_ai_response_standalone(
+                        agent_client=agent_client,
+                        contact_id=sender.id,
+                        contact_name=sender_name,
+                        message_text=message_text,
+                        channel_id=channel_id_found,
+                        ai_handler=ai_handler,
+                        channel_config=channel_config,
+                        conv_manager=conv_manager  # May be None, that's OK
                     )
-                else:
-                    logger.warning(f"[HANDLER] No topic_id for sender {sender.id} in channel {channel_id_found}")
+
+                # === LAYER 2: CRM MIRRORING (best-effort) ===
+                if conv_manager:
+                    topic_id = conv_manager.get_topic_id(sender.id)
+
+                    # If no topic exists, try to create one on-demand
+                    if not topic_id:
+                        logger.info(f"[HANDLER] No topic for {sender_name}, creating on-demand...")
+                        try:
+                            topic_id = await conv_manager.create_topic(
+                                title=sender_name,
+                                contact_id=sender.id,
+                                vacancy_id=None  # No vacancy context for direct messages
+                            )
+                            if topic_id:
+                                logger.info(f"[HANDLER] Created topic {topic_id} for {sender_name}")
+                                self.contact_to_channel[sender.id] = channel_id_found
+                        except Exception as e:
+                            logger.warning(f"[HANDLER] Failed to create topic: {e}")
+                            # Continue without CRM - AI already responded
+
+                    # Mirror message to CRM topic
+                    if topic_id:
+                        try:
+                            relay_text = f"👤 **{sender_name}:**\n\n{message_text}"
+                            sent_msg = await agent_client.send_message(
+                                entity=conv_manager.group_id,
+                                message=relay_text,
+                                file=message.media if message.media else None,
+                                reply_to=topic_id
+                            )
+                            if sent_msg and hasattr(sent_msg, 'id'):
+                                conv_manager.save_message_to_topic(sent_msg.id, topic_id)
+                            logger.debug(f"[HANDLER] Mirrored to CRM topic {topic_id}")
+                        except Exception as e:
+                            logger.warning(f"[HANDLER] CRM mirror failed: {e}")
+                            # Don't crash - AI already responded
 
             except Exception as e:
                 logger.error(f"Ошибка в handle_contact_message: {e}", exc_info=True)
@@ -472,6 +543,94 @@ class CRMHandler:
                 suggest_callback=suggest_in_topic,
             )
         )
+
+    async def _handle_ai_response_standalone(
+        self,
+        agent_client: TelegramClient,
+        contact_id: int,
+        contact_name: str,
+        message_text: str,
+        channel_id: str,
+        ai_handler: AIConversationHandler,
+        channel_config: Optional[ChannelConfig],
+        conv_manager: Optional[ConversationManager]
+    ):
+        """AI response that works independently of CRM (Layer 1 - core functionality)
+
+        This method:
+        - Always processes AI response
+        - CRM mirroring is optional and best-effort
+        - Never fails due to CRM issues
+        """
+        instant_response = channel_config.instant_response if channel_config else False
+
+        async def send_to_contact(cid: int, text: str) -> bool:
+            try:
+                # Show typing indicator before sending (skip if instant_response)
+                if not instant_response:
+                    await human_behavior.simulate_typing(
+                        client=agent_client,
+                        contact=cid,
+                        message_length=len(text)
+                    )
+                sent = await agent_client.send_message(cid, text)
+                if sent:
+                    # Mark as agent-sent (if conv_manager available)
+                    if conv_manager:
+                        conv_manager.mark_agent_sent_message(sent.id)
+
+                    # Best-effort: mirror AI response to CRM topic
+                    if conv_manager:
+                        topic_id = conv_manager.get_topic_id(cid)
+                        if topic_id:
+                            try:
+                                ai_msg = f"🤖 **AI:**\n\n{text}"
+                                topic_sent = await agent_client.send_message(
+                                    entity=conv_manager.group_id,
+                                    message=ai_msg,
+                                    reply_to=topic_id
+                                )
+                                if topic_sent:
+                                    conv_manager.save_message_to_topic(topic_sent.id, topic_id)
+                            except Exception as e:
+                                logger.warning(f"[AI] CRM mirror failed (non-blocking): {e}")
+                return True
+            except Exception as e:
+                logger.error(f"[AI] Error sending response: {e}")
+                return False
+
+        async def suggest_in_topic(cid: int, text: str, name: str):
+            """Suggest response in CRM topic (best-effort)"""
+            if not conv_manager:
+                logger.debug("[AI] No conv_manager, skipping suggestion")
+                return
+
+            topic_id = conv_manager.get_topic_id(cid)
+            if not topic_id:
+                logger.debug(f"[AI] No topic for {cid}, skipping suggestion")
+                return
+
+            try:
+                suggest_msg = f"💡 **AI предлагает ответ:**\n\n{text}\n\n_Отправьте этот текст или напишите свой ответ_"
+                await agent_client.send_message(
+                    entity=conv_manager.group_id,
+                    message=suggest_msg,
+                    reply_to=topic_id
+                )
+            except Exception as e:
+                logger.warning(f"[AI] Failed to suggest in topic: {e}")
+
+        # Process AI response asynchronously
+        asyncio.create_task(
+            ai_handler.handle_message(
+                contact_id=contact_id,
+                message=message_text,
+                contact_name=contact_name,
+                send_callback=send_to_contact,
+                suggest_callback=suggest_in_topic,
+            )
+        )
+        logger.info(f"[AI] Started async AI response for {contact_name}")
 
     async def _send_message_from_topic_to_contact(
         self,
