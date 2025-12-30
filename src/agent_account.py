@@ -182,9 +182,18 @@ class AgentAccount:
             if isinstance(user, str) and not user.startswith('@'):
                 target = f"@{user}"
 
-            # Log what we're sending to
+            # If InputPeerUser is passed, resolve the entity ourselves
+            # because access_hash is session-specific (bot's hash won't work for agent)
             if isinstance(user, InputPeerUser):
-                logger.debug(f"Агент {self.session_name}: Отправка через InputPeerUser(id={user.user_id})")
+                logger.debug(f"Агент {self.session_name}: InputPeerUser получен, резолвим user_id={user.user_id}")
+                try:
+                    # Try to get entity by user_id using agent's own client
+                    target = await self.client.get_entity(user.user_id)
+                    logger.debug(f"Агент {self.session_name}: Успешно резолвили в {target}")
+                except Exception as resolve_err:
+                    logger.debug(f"Агент {self.session_name}: Не удалось резолвить: {resolve_err}")
+                    # Fall back to the original InputPeerUser
+                    target = user
 
             await self.client.send_message(target, text)
             logger.info(f"Агент {self.session_name}: Сообщение отправлено {user}")

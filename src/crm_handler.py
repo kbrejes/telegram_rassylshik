@@ -317,14 +317,10 @@ class CRMHandler:
                 logger.debug(f"[QUEUE] No available agents for channel {channel_id}")
                 return False
 
-            # Construct target using InputPeerUser if we have resolved info
+            # Always use username/contact string for agents
+            # (access_hash from bot is session-specific and won't work for agents)
             target: Any = contact
-            if resolved_user_id and resolved_access_hash:
-                from telethon.tl.types import InputPeerUser
-                target = InputPeerUser(user_id=resolved_user_id, access_hash=resolved_access_hash)
-                logger.info(f"[QUEUE] Using InputPeerUser for {contact} (id={resolved_user_id})")
-            elif resolved_user_id:
-                target = resolved_user_id
+            logger.info(f"[QUEUE] Using contact {contact} (resolved_id={resolved_user_id})")
 
             try:
                 success = await agent_pool.send_message(
@@ -862,17 +858,10 @@ class CRMHandler:
             await log_attempt('skipped', 'already_contacted', f'{telegram_contact} already contacted in this batch')
             return False
 
-        # Construct InputPeerUser if we have both user_id and access_hash
+        # Always use username for agents - they need to resolve with their own client
+        # (access_hash from bot is session-specific and won't work for agents)
         target: Any = telegram_contact
-        if resolved_user_id and resolved_access_hash:
-            from telethon.tl.types import InputPeerUser
-            target = InputPeerUser(user_id=resolved_user_id, access_hash=resolved_access_hash)
-            logger.info(f"[AUTO-RESPONSE] Using InputPeerUser for {telegram_contact} (id={resolved_user_id})")
-        elif resolved_user_id:
-            target = resolved_user_id
-            logger.info(f"[AUTO-RESPONSE] Using user_id={resolved_user_id} for {telegram_contact}")
-        else:
-            logger.info(f"[AUTO-RESPONSE] Using username {telegram_contact}")
+        logger.info(f"[AUTO-RESPONSE] Using username {telegram_contact} (resolved_id={resolved_user_id})")
 
         try:
             # Use pool's send_message which has built-in agent rotation/fallback
