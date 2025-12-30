@@ -1,6 +1,6 @@
 """
 Agent account management for Telegram user accounts
-Адаптировано из crm_response_bot для job_notification_bot
+Adapted from crm_response_bot for job_notification_bot
 """
 import asyncio
 import logging
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgentAccount:
-    """Представляет Telegram аккаунт агента для автоответов"""
+    """Represents a Telegram agent account for auto-responses"""
 
     def __init__(
         self,
@@ -27,32 +27,32 @@ class AgentAccount:
         phone: Optional[str] = None
     ):
         """
-        Инициализация агента
+        Initialize agent
 
         Args:
-            session_name: Имя файла сессии (без пути, только имя)
-            phone: Номер телефона (нужен для первого входа)
+            session_name: Session file name (without path, name only)
+            phone: Phone number (required for first login)
         """
-        # Используем абсолютный путь из session_config
+        # Use absolute path from session_config
         self.session_name = get_agent_session_path(session_name)
         self.phone = phone
         self.client: Optional[TelegramClient] = None
         self._is_connected = False
         self._flood_tracker = FloodWaitTracker()
-        # Храним event loop в котором был подключен клиент
+        # Store event loop where client was connected
         self._connected_loop: Optional[asyncio.AbstractEventLoop] = None
         # Last connection error for status reporting
         self.last_connect_error: Optional[str] = None
     
     async def connect(self) -> bool:
         """
-        Подключение к Telegram
+        Connect to Telegram
 
         Returns:
-            True если подключение успешно
+            True if connection successful
         """
         try:
-            # Используем TimeoutSQLiteSession для избежания "database is locked"
+            # Use TimeoutSQLiteSession to avoid "database is locked"
             session = TimeoutSQLiteSession(self.session_name)
             self.client = TelegramClient(
                 session,
@@ -71,7 +71,7 @@ class AgentAccount:
                 await self.client.send_code_request(self.phone)
                 logger.info(f"Agent {self.session_name}: Code sent to {self.phone}")
 
-                # Запросит код в терминале
+                # Will prompt for code in terminal
                 await self.client.start(phone=self.phone)
 
             self._is_connected = True
@@ -123,13 +123,13 @@ class AgentAccount:
 
     def is_valid_loop(self) -> bool:
         """
-        Проверяет, что мы в том же event loop где был подключен клиент.
+        Checks that we are in the same event loop where client was connected.
 
-        ВАЖНО: Не пытается переподключиться! Переподключение из другого потока
-        сломает агента для основного потока бота.
+        IMPORTANT: Does not attempt to reconnect! Reconnecting from another thread
+        will break the agent for the main bot thread.
 
         Returns:
-            True если текущий loop совпадает с loop подключения
+            True if current loop matches the connection loop
         """
         if not self._is_connected or not self.client:
             return False
@@ -142,10 +142,10 @@ class AgentAccount:
         if self._connected_loop is current_loop:
             return True
 
-        # Loop изменился - это означает вызов из неправильного потока
+        # Loop changed - this means call from wrong thread
         logger.error(
-            f"Агент {self.session_name}: Попытка использования из неправильного event loop! "
-            f"Агенты из agent_pool можно использовать только из потока бота."
+            f"Agent {self.session_name}: Attempt to use from wrong event loop! "
+            f"Agents from agent_pool can only be used from bot thread."
         )
         return False
 
@@ -155,14 +155,14 @@ class AgentAccount:
         text: str
     ) -> bool:
         """
-        Отправка сообщения пользователю
+        Send message to user
 
         Args:
-            user: Username (с или без @), user ID, User объект, or InputPeerUser
-            text: Текст сообщения
+            user: Username (with or without @), user ID, User object, or InputPeerUser
+            text: Message text
 
         Returns:
-            True если сообщение отправлено успешно
+            True if message sent successfully
         """
         if not self._is_connected or not self.client:
             logger.error(f"Agent {self.session_name}: Not connected")
@@ -172,7 +172,7 @@ class AgentAccount:
             logger.warning(f"Agent {self.session_name}: Unavailable (FloodWait)")
             return False
 
-        # Проверяем что мы в правильном event loop
+        # Check that we are in the correct event loop
         if not self.is_valid_loop():
             return False
 
@@ -230,15 +230,15 @@ class AgentAccount:
     
     @property
     def flood_wait_until(self) -> Optional[float]:
-        """Время до которого действует FloodWait (для совместимости с AgentPool)"""
+        """Time until which FloodWait is active (for AgentPool compatibility)"""
         return self._flood_tracker.flood_wait_until
 
     def is_available(self) -> bool:
         """
-        Проверка доступности агента для отправки сообщений
+        Check agent availability for sending messages
 
         Returns:
-            True если агент не в FloodWait и подключен
+            True if agent is not in FloodWait and connected
         """
         if not self._is_connected:
             return False
@@ -246,10 +246,10 @@ class AgentAccount:
 
     def handle_flood_wait(self, seconds: int) -> None:
         """
-        Обработка FloodWait ошибки
+        Handle FloodWait error
 
         Args:
-            seconds: Количество секунд ожидания
+            seconds: Number of seconds to wait
         """
         self._flood_tracker.set_flood_wait(seconds)
         flood_wait_until = time.time() + seconds
@@ -271,21 +271,21 @@ class AgentAccount:
         )
 
         logger.warning(
-            f"Агент {self.session_name}: Недоступен {format_wait_time(seconds)}"
+            f"Agent {self.session_name}: Unavailable {format_wait_time(seconds)}"
         )
-    
+
     async def get_me(self):
-        """Получить информацию о текущем пользователе"""
+        """Get current user information"""
         if not self._is_connected or not self.client:
             return None
         return await self.client.get_me()
 
     async def health_check(self) -> bool:
         """
-        Проверяет, что сессия агента валидна и работает
+        Check that agent session is valid and working
 
         Returns:
-            True если агент подключен и авторизован
+            True if agent is connected and authorized
         """
         if not self._is_connected or not self.client:
             return False
@@ -298,6 +298,6 @@ class AgentAccount:
             return False
 
     def get_remaining_flood_wait(self) -> int:
-        """Возвращает оставшееся время FloodWait в секундах"""
+        """Returns remaining FloodWait time in seconds"""
         return self._flood_tracker.remaining_seconds
 

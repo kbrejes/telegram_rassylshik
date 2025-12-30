@@ -1,5 +1,5 @@
 """
-Модели данных для конфигурации каналов
+Data models for channel configuration
 """
 import os
 from dataclasses import dataclass, field
@@ -8,12 +8,12 @@ from typing import List
 
 @dataclass
 class AgentConfig:
-    """Конфигурация агента для CRM"""
+    """Agent configuration for CRM"""
     phone: str
     session_name: str
 
     def to_dict(self) -> dict:
-        """Конвертация в словарь"""
+        """Convert to dictionary"""
         return {
             'phone': self.phone,
             'session_name': self.session_name
@@ -21,7 +21,7 @@ class AgentConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'AgentConfig':
-        """Создание из словаря"""
+        """Create from dictionary"""
         return cls(
             phone=data['phone'],
             session_name=data['session_name']
@@ -138,7 +138,7 @@ class JobAnalyzerConfig:
 
 @dataclass
 class PromptsConfig:
-    """Конфигурация промптов для AI"""
+    """Prompts configuration for AI"""
     base_context: str = ""
     discovery: str = ""
     engagement: str = ""
@@ -169,7 +169,7 @@ class PromptsConfig:
 
     @classmethod
     def load_defaults(cls) -> 'PromptsConfig':
-        """Загрузить дефолтные промпты из файлов"""
+        """Load default prompts from files"""
         prompts_dir = "prompts"
 
         def read_file(path: str) -> str:
@@ -191,13 +191,13 @@ class PromptsConfig:
 
 @dataclass
 class FilterConfig:
-    """Конфигурация фильтров для канала"""
+    """Filter configuration for channel"""
     include_keywords: List[str] = field(default_factory=list)
     exclude_keywords: List[str] = field(default_factory=list)
     require_all_includes: bool = False
 
     def to_dict(self) -> dict:
-        """Конвертация в словарь"""
+        """Convert to dictionary"""
         return {
             'include_keywords': self.include_keywords,
             'exclude_keywords': self.exclude_keywords,
@@ -206,7 +206,7 @@ class FilterConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'FilterConfig':
-        """Создание из словаря"""
+        """Create from dictionary"""
         return cls(
             include_keywords=data.get('include_keywords', []),
             exclude_keywords=data.get('exclude_keywords', []),
@@ -216,7 +216,7 @@ class FilterConfig:
 
 @dataclass
 class ChannelConfig:
-    """Конфигурация канала для уведомлений"""
+    """Channel configuration for notifications"""
     id: str
     name: str
     telegram_id: int
@@ -224,23 +224,23 @@ class ChannelConfig:
     input_sources: List[str] = field(default_factory=list)
     filters: FilterConfig = field(default_factory=FilterConfig)
 
-    # CRM функциональность
+    # CRM functionality
     crm_enabled: bool = False
-    crm_group_id: int = 0  # ID группы для форум-топиков
-    agents: List[AgentConfig] = field(default_factory=list)  # Список агентов для автоответов
+    crm_group_id: int = 0  # Group ID for forum topics
+    agents: List[AgentConfig] = field(default_factory=list)  # List of agents for auto-responses
     auto_response_enabled: bool = False
-    auto_response_template: str = "Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?"
+    auto_response_template: str = "Hello! Interested in your vacancy. Could you tell me more?"
     instant_response: bool = False  # Skip human-like delays for instant responses
 
-    # AI Conversation (включено по умолчанию)
+    # AI Conversation (enabled by default)
     ai_conversation_enabled: bool = True
     ai_config: AIConfig = field(default_factory=AIConfig)
 
-    # Промпты для AI (если пустые - используются дефолтные из файлов)
+    # AI prompts (if empty - defaults from files are used)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
 
     def to_dict(self) -> dict:
-        """Конвертация в словарь"""
+        """Convert to dictionary"""
         return {
             'id': self.id,
             'name': self.name,
@@ -261,7 +261,7 @@ class ChannelConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'ChannelConfig':
-        """Создание из словаря"""
+        """Create from dictionary"""
         filters_data = data.get('filters', {})
 
         # Parse agents list
@@ -289,7 +289,7 @@ class ChannelConfig:
             crm_group_id=data.get('crm_group_id', 0),
             agents=agents,
             auto_response_enabled=data.get('auto_response_enabled', False),
-            auto_response_template=data.get('auto_response_template', 'Здравствуйте! Заинтересовала ваша вакансия. Расскажите подробнее?'),
+            auto_response_template=data.get('auto_response_template', 'Hello! Interested in your vacancy. Could you tell me more?'),
             instant_response=data.get('instant_response', False),
             ai_conversation_enabled=data.get('ai_conversation_enabled', True),
             ai_config=ai_config,

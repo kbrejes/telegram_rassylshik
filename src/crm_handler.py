@@ -37,12 +37,12 @@ logger = logging.getLogger(__name__)
 
 
 class CRMHandler:
-    """Обработчик CRM функциональности: автоответы, топики, AI"""
+    """CRM functionality handler: auto-responses, topics, AI"""
 
     def __init__(self, bot: "MultiChannelJobMonitorBot"):
         self.bot = bot
 
-        # CRM данные
+        # CRM data
         self.agent_pools: Dict[str, AgentPool] = {}
         self.conversation_managers: Dict[str, ConversationManager] = {}
         self.contact_to_channel: Dict[int, str] = {}
@@ -59,12 +59,12 @@ class CRMHandler:
         # This allows finding channel by agent, not by topic
         self.agent_to_channels: Dict[int, List[str]] = {}
 
-        # Трекинг зарегистрированных обработчиков
+        # Tracking of registered handlers
         self._registered_agent_handlers: Set[int] = set()
 
     async def setup_agents(self, output_channels: List[ChannelConfig], config_manager) -> None:
-        """Инициализация CRM агентов и conversation managers для каналов"""
-        logger.info("Инициализация CRM агентов...")
+        """Initialize CRM agents and conversation managers for channels"""
+        logger.info("Initializing CRM agents...")
 
         # ATOMIC RELOAD: Build new data structures first, then swap
         # This prevents race condition where messages arrive during reload
@@ -78,13 +78,13 @@ class CRMHandler:
         new_channel_configs: Dict[str, ChannelConfig] = {}
         new_agent_to_channels: Dict[int, List[str]] = {}
 
-        # Инициализация AI handler pool (with database for self-correction)
+        # Initialize AI handler pool (with database for self-correction)
         new_ai_handler_pool = AIHandlerPool(config_manager.llm_providers, database=db)
 
         crm_enabled_channels = [ch for ch in output_channels if ch.crm_enabled]
 
         if not crm_enabled_channels:
-            logger.info("Нет каналов с включенным CRM")
+            logger.info("No channels with CRM enabled")
             # Atomic swap to empty
             self.agent_pools = new_agent_pools
             self.conversation_managers = new_conversation_managers
@@ -116,7 +116,7 @@ class CRMHandler:
         self.channel_configs = new_channel_configs
         self.ai_handler_pool = new_ai_handler_pool
 
-        logger.info(f"CRM инициализирован для {len(self.agent_pools)} каналов")
+        logger.info(f"CRM initialized for {len(self.agent_pools)} channels")
 
         # Setup message queue for retry of failed auto-responses
         self._setup_message_queue()
@@ -158,7 +158,7 @@ class CRMHandler:
                 status_manager.update_crm_status(channel_id, group_id, False, "No agent has access")
 
     async def _setup_channel_crm(self, channel: ChannelConfig) -> None:
-        """Настройка CRM для одного канала (legacy wrapper)"""
+        """Setup CRM for a single channel (legacy wrapper)"""
         await self._setup_channel_crm_atomic(
             channel,
             self.agent_pools,
@@ -181,50 +181,50 @@ class CRMHandler:
         ai_handler_pool: AIHandlerPool,
         agent_to_channels: Dict[int, List[str]]
     ):
-        """Настройка CRM для одного канала (atomic version - writes to provided containers)"""
+        """Setup CRM for a single channel (atomic version - writes to provided containers)"""
         try:
-            logger.info(f"Настройка CRM для канала '{channel.name}'...")
+            logger.info(f"Setting up CRM for channel '{channel.name}'...")
 
-            # Валидация конфигурации
+            # Validate configuration
             if not channel.agents:
-                logger.warning(f"  Канал '{channel.name}': нет агентов, CRM пропущен")
+                logger.warning(f"  Channel '{channel.name}': no agents, CRM skipped")
                 return
 
             if not channel.crm_group_id:
-                logger.warning(f"  Канал '{channel.name}': не указан crm_group_id, CRM пропущен")
+                logger.warning(f"  Channel '{channel.name}': crm_group_id not specified, CRM skipped")
                 return
 
-            # Создаем пул агентов
+            # Create agent pool
             agent_pool = AgentPool(channel.agents)
 
-            # Инициализируем пул
+            # Initialize pool
             if not await agent_pool.initialize():
-                logger.error(f"  Не удалось инициализировать пул агентов для '{channel.name}'")
+                logger.error(f"  Failed to initialize agent pool for '{channel.name}'")
                 return
 
             agent_pools[channel.id] = agent_pool
             channel_configs[channel.id] = channel
 
-            # Получаем первого доступного агента
+            # Get first available agent
             primary_agent = agent_pool.get_available_agent()
             if not primary_agent:
-                logger.error(f"  Нет доступных агентов для '{channel.name}'")
+                logger.error(f"  No available agents for '{channel.name}'")
                 return
 
-            # ВАЖНО: Агент должен "узнать" о CRM группе перед использованием
-            # Группа могла быть создана веб-интерфейсом через другой клиент
+            # IMPORTANT: Agent must "discover" CRM group before use
+            # Group may have been created by web interface via another client
             try:
                 await primary_agent.client.get_entity(channel.crm_group_id)
-                logger.debug(f"  Агент получил доступ к CRM группе {channel.crm_group_id}")
+                logger.debug(f"  Agent got access to CRM group {channel.crm_group_id}")
                 # Update CRM status as accessible
                 status_manager.update_crm_status(channel.id, channel.crm_group_id, True)
             except Exception as e:
-                logger.warning(f"  Агент не может получить доступ к CRM группе: {e}")
+                logger.warning(f"  Agent cannot access CRM group: {e}")
                 # Update CRM status as inaccessible
                 status_manager.update_crm_status(channel.id, channel.crm_group_id, False, str(e))
-                # Продолжаем - возможно группа станет доступна позже
+                # Continue - group may become accessible later
 
-            # Создаем conversation manager
+            # Create conversation manager
             conv_manager = ConversationManager(
                 client=primary_agent.client,
                 group_id=channel.crm_group_id,
@@ -232,18 +232,18 @@ class CRMHandler:
                 group_monitor_client=self.bot.client
             )
 
-            # Загружаем кэш из БД
+            # Load cache from DB
             await conv_manager.load_cache_from_db()
 
-            # Восстанавливаем contact_to_channel маппинг
+            # Restore contact_to_channel mapping
             for contact_id in conv_manager._topic_cache.keys():
                 contact_to_channel[contact_id] = channel.id
-            logger.info(f"  Восстановлено {len(conv_manager._topic_cache)} контактов")
+            logger.info(f"  Restored {len(conv_manager._topic_cache)} contacts")
 
-            # Регистрируем обработчики
+            # Register handlers
             conv_manager.register_handlers()
 
-            # Регистрируем обработчик входящих сообщений для агентов
+            # Register incoming message handler for agents
             # AND build agent_to_channels mapping
             for agent in agent_pool.agents:
                 agent_id = id(agent.client)
@@ -260,15 +260,15 @@ class CRMHandler:
 
             conversation_managers[channel.id] = conv_manager
 
-            # Инициализация AI handler
+            # Initialize AI handler
             if channel.ai_conversation_enabled:
                 await self._setup_ai_handler_atomic(channel, ai_handlers, ai_handler_pool)
 
         except Exception as e:
-            logger.error(f"  Ошибка настройки CRM для '{channel.name}': {e}", exc_info=True)
+            logger.error(f"  Error setting up CRM for '{channel.name}': {e}", exc_info=True)
 
     async def _setup_ai_handler(self, channel: ChannelConfig) -> None:
-        """Инициализация AI handler для канала (legacy wrapper)"""
+        """Initialize AI handler for channel (legacy wrapper)"""
         await self._setup_ai_handler_atomic(channel, self.ai_handlers, self.ai_handler_pool)
 
     async def _setup_ai_handler_atomic(
@@ -277,7 +277,7 @@ class CRMHandler:
         ai_handlers: Dict[str, AIConversationHandler],
         ai_handler_pool: AIHandlerPool
     ):
-        """Инициализация AI handler для канала (atomic version)"""
+        """Initialize AI handler for channel (atomic version)"""
         try:
             ai_config = AIConfig.from_dict(channel.ai_config.to_dict())
             start_time = time.time()
@@ -292,14 +292,14 @@ class CRMHandler:
             provider_name = ai_config.provider if hasattr(ai_config, 'provider') else "groq"
             status_manager.update_llm_status(provider_name, True, latency_ms)
 
-            logger.info(f"  AI handler инициализирован (mode: {ai_config.mode})")
+            logger.info(f"  AI handler initialized (mode: {ai_config.mode})")
         except Exception as ai_error:
             # Update LLM status as unreachable
             provider_name = "groq"  # Default provider
             if hasattr(channel, 'ai_config') and hasattr(channel.ai_config, 'provider'):
                 provider_name = channel.ai_config.provider
             status_manager.update_llm_status(provider_name, False, error=str(ai_error))
-            logger.warning(f"  Не удалось инициализировать AI: {ai_error}")
+            logger.warning(f"  Failed to initialize AI: {ai_error}")
 
     def _setup_message_queue(self) -> None:
         """Setup the message queue for retrying failed auto-responses."""
@@ -347,7 +347,7 @@ class CRMHandler:
         logger.info("[CRM] Message queue initialized for auto-response retries")
 
     def _register_contact_message_handler(self, agent_client: TelegramClient, channel_id: str) -> None:
-        """Регистрация обработчика входящих сообщений от контактов
+        """Register handler for incoming messages from contacts
 
         NEW ARCHITECTURE (2025-12-30):
         - Layer 1: AI response (MUST work independently)
@@ -481,7 +481,7 @@ class CRMHandler:
                             # Don't crash - AI already responded
 
             except Exception as e:
-                logger.error(f"Ошибка в handle_contact_message: {e}", exc_info=True)
+                logger.error(f"Error in handle_contact_message: {e}", exc_info=True)
 
     async def _relay_contact_message_to_topic(
         self,
@@ -493,7 +493,7 @@ class CRMHandler:
         ai_handler: Optional[AIConversationHandler],
         channel_id: str
     ):
-        """Пересылка сообщения от контакта в топик CRM"""
+        """Relay message from contact to CRM topic"""
         sender_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
         if not sender_name and sender.username:
             sender_name = f"@{sender.username}"
@@ -502,7 +502,7 @@ class CRMHandler:
 
         relay_text = f"👤 **{sender_name}:**\n\n{message.text or ''}"
 
-        # Отправляем в CRM
+        # Send to CRM
         try:
             sent_msg = await agent_client.send_message(
                 entity=conv_manager.group_id,
@@ -513,7 +513,7 @@ class CRMHandler:
             if sent_msg and hasattr(sent_msg, 'id'):
                 conv_manager.save_message_to_topic(sent_msg.id, topic_id)
         except Exception as e:
-            logger.warning(f"Не удалось отправить в CRM топик: {e}")
+            logger.warning(f"Failed to send to CRM topic: {e}")
 
         # AI response
         if ai_handler and message.text:
@@ -564,9 +564,9 @@ class CRMHandler:
         media,
         topic_id: int
     ):
-        """Отправка сообщения из темы CRM-группы контакту"""
+        """Send message from CRM group topic to contact"""
         try:
-            # Ищем канал для контакта
+            # Find channel for contact
             channel_id = self.contact_to_channel.get(contact_id)
             if not channel_id:
                 for ch_id, conv_manager in self.conversation_managers.items():
@@ -576,32 +576,32 @@ class CRMHandler:
                         break
 
                 if not channel_id:
-                    logger.warning(f"Канал для контакта {contact_id} не найден")
+                    logger.warning(f"Channel for contact {contact_id} not found")
                     return
 
-            # Ищем агента для этой темы
+            # Find agent for this topic
             agent = self.topic_to_agent.get(topic_id)
             if not agent:
                 agent_pool = self.agent_pools.get(channel_id)
                 if not agent_pool:
-                    logger.error(f"Нет пула агентов для канала {channel_id}")
+                    logger.error(f"No agent pool for channel {channel_id}")
                     return
 
                 agent = agent_pool.get_available_agent()
                 if not agent:
-                    logger.error(f"Нет доступных агентов для контакта {contact_id}")
+                    logger.error(f"No available agents for contact {contact_id}")
                     return
 
             if not agent.client:
-                logger.error(f"У агента {agent.session_name} нет клиента")
+                logger.error(f"Agent {agent.session_name} has no client")
                 return
 
-            # Записываем в AI контекст
+            # Write to AI context
             ai_handler = self.ai_handlers.get(channel_id)
             if ai_handler and text:
                 ai_handler.add_operator_message(contact_id, text)
 
-            # Отправляем сообщение
+            # Send message
             try:
                 from telethon.tl.types import MessageMediaWebPage
                 media_file = None
@@ -623,11 +623,11 @@ class CRMHandler:
                         conv_manager.mark_agent_sent_message(sent_message.id)
 
             except Exception as send_error:
-                logger.error(f"Ошибка отправки через агента: {send_error}", exc_info=True)
+                logger.error(f"Error sending via agent: {send_error}", exc_info=True)
                 raise
 
         except Exception as e:
-            logger.error(f"Ошибка в _send_message_from_topic_to_contact: {e}", exc_info=True)
+            logger.error(f"Error in _send_message_from_topic_to_contact: {e}", exc_info=True)
 
     async def handle_crm_workflow(
         self,
@@ -638,7 +638,7 @@ class CRMHandler:
         contacts: Dict[str, Optional[str]],
         message_processor
     ):
-        """Обработка CRM workflow: автоответ + создание топика"""
+        """Handle CRM workflow: auto-response + topic creation"""
         try:
             # Log extracted contacts
             tg_contact = contacts.get('telegram')
@@ -685,7 +685,7 @@ class CRMHandler:
                 # Get available agent for topic creation
                 available_agent = agent_pool.get_available_agent()
                 if not available_agent:
-                    logger.warning(f"  Нет доступных агентов для '{channel.name}'")
+                    logger.warning(f"  No available agents for '{channel.name}'")
                     continue
 
                 # Look up vacancy_id for attempt logging
@@ -706,7 +706,7 @@ class CRMHandler:
                 )
 
         except Exception as e:
-            logger.error(f"Ошибка в CRM workflow: {e}", exc_info=True)
+            logger.error(f"Error in CRM workflow: {e}", exc_info=True)
 
     async def _send_auto_response(
         self,
@@ -766,29 +766,29 @@ class CRMHandler:
         auto_response_sent: bool,
         message_processor
     ):
-        """Создание топика в CRM группе"""
+        """Create topic in CRM group"""
         if not contacts.get('telegram'):
             return
 
         try:
-            # Проверяем, что агент используется из правильного потока
+            # Check that agent is used from correct thread
             if not agent.is_valid_loop():
-                logger.error(f"Агент вызван из неправильного event loop")
+                logger.error(f"Agent called from wrong event loop")
                 return
 
-            # Резолвим контакт
+            # Resolve contact
             contact_user = await self.bot.client.get_entity(contacts['telegram'])
 
             if not isinstance(contact_user, User):
                 return
 
-            # Резолвим через агента тоже
+            # Resolve via agent too
             try:
                 await agent.client.get_entity(contacts['telegram'])
             except Exception:
                 pass
 
-            # Проверяем/создаем топик
+            # Check/create topic
             topic_id = conv_manager.get_topic_id(contact_user.id)
 
             if not topic_id:
@@ -814,10 +814,10 @@ class CRMHandler:
                 if topic_id:
                     self.contact_to_channel[contact_user.id] = channel.id
                 else:
-                    logger.error("Не удалось создать топик (все агенты заморожены или ошибка)")
+                    logger.error("Failed to create topic (all agents frozen or error)")
                     return
 
-            # Привязываем агента к теме
+            # Bind agent to topic
             if topic_id:
                 self.topic_to_agent[topic_id] = agent
                 # Save agent binding to DB
@@ -835,19 +835,19 @@ class CRMHandler:
                 except Exception as e:
                     logger.warning(f"Failed to save agent binding: {e}")
 
-            # Инициализируем AI контекст
+            # Initialize AI context
             if auto_response_sent and topic_id:
                 await self._init_ai_context(
                     channel, contact_user.id, message, chat_title
                 )
 
-            # Зеркалируем автоответ
+            # Mirror auto-response
             if auto_response_sent and topic_id:
                 await self._mirror_auto_response(
                     agent, conv_manager, channel, topic_id
                 )
 
-            # Отправляем инфо в топик
+            # Send info to topic
             if topic_id and contact_user:
                 await self._send_topic_info(
                     conv_manager, contact_user, chat_title,
@@ -855,9 +855,9 @@ class CRMHandler:
                 )
 
         except ValueError as e:
-            logger.warning(f"Не удалось найти пользователя {contacts['telegram']}: {e}")
+            logger.warning(f"Could not find user {contacts['telegram']}: {e}")
         except Exception as e:
-            logger.error(f"Ошибка создания топика: {e}", exc_info=True)
+            logger.error(f"Error creating topic: {e}", exc_info=True)
 
     async def _init_ai_context(
         self,
@@ -1018,20 +1018,20 @@ class CRMHandler:
         return synced_count
 
     async def cleanup(self) -> None:
-        """Очистка ресурсов CRM"""
+        """Cleanup CRM resources"""
         # Stop message queue retry task
         message_queue.stop_retry_task()
 
-        # Закрываем AI handlers
+        # Close AI handlers
         if self.ai_handler_pool:
             self.ai_handler_pool.close_all()
         self.ai_handlers.clear()
 
-        # Очищаем пулы агентов
+        # Cleanup agent pools
         for channel_id, agent_pool in self.agent_pools.items():
             try:
                 await agent_pool.disconnect_all()
             except Exception as e:
-                logger.error(f"Ошибка очистки пула агентов для {channel_id}: {e}")
+                logger.error(f"Error cleaning up agent pool for {channel_id}: {e}")
 
         self.agent_pools.clear()

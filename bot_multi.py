@@ -1,6 +1,6 @@
 """
-Telegram userbot для мониторинга вакансий с поддержкой множественных каналов
-+ CRM функциональность (автоответы и трансляция в топики)
+Telegram userbot for job vacancy monitoring with multiple channel support
++ CRM functionality (auto-responses and message relay to topics)
 """
 import asyncio
 import logging
@@ -24,20 +24,20 @@ logger = logging.getLogger(__name__)
 
 
 class NeedsAuthenticationError(Exception):
-    """Исключение: требуется авторизация через веб-интерфейс"""
+    """Exception: authorization required via web interface"""
     pass
 
 
 class ChannelNameLogFilter(logging.Filter):
-    """Фильтр для замены ID каналов на их имена в логах"""
-    
+    """Filter for replacing channel IDs with names in logs"""
+
     def __init__(self, channel_map: Dict[int, str]):
         super().__init__()
         self.channel_map = channel_map
         self.unknown_channels = set()
-    
+
     def filter(self, record):
-        """Заменяет ID каналов на имена в сообщениях логов"""
+        """Replaces channel IDs with names in log messages"""
         try:
             if record.args:
                 try:
@@ -72,37 +72,37 @@ class ChannelNameLogFilter(logging.Filter):
 
 
 class MultiChannelJobMonitorBot:
-    """Класс для мониторинга вакансий с поддержкой множественных output каналов"""
+    """Bot for monitoring job vacancies with multiple output channel support."""
 
     def __init__(self):
-        # Используем абсолютный путь к сессии из session_config
+        # Use absolute path from session_config
         self.client = TelegramClient(
             get_bot_session_path(),
             config.API_ID,
             config.API_HASH
         )
-        
-        self.monitored_sources: Set[int] = set()  # ID источников для мониторинга
-        self.channel_names: Dict[int, str] = {}  # ID -> название
-        
-        # Config manager для работы с output каналами
+
+        self.monitored_sources: Set[int] = set()  # Source IDs to monitor
+        self.channel_names: Dict[int, str] = {}  # ID -> channel name
+
+        # Config manager for output channels
         self.config_manager = ConfigManager()
         self.output_channels: List[ChannelConfig] = []
 
-        # CRM функциональность (вынесено в отдельный модуль)
+        # CRM functionality (extracted to separate module)
         self.crm = CRMHandler(self)
 
         # Job analyzer (LLM-based filtering)
         self.job_analyzer: Optional[JobAnalyzer] = None
 
-        # Для отслеживания изменений конфигурации
+        # For tracking config file changes
         self.config_file_path = Path("configs/channels_config.json")
         self.last_config_mtime = None
         
         self.is_running = False
 
     async def check_session_valid(self) -> bool:
-        """Проверяет существует ли валидная сессия"""
+        """Check if valid session exists"""
         session_path = Path(f"{get_bot_session_path()}.session")
         if not session_path.exists():
             return False
@@ -112,59 +112,59 @@ class MultiChannelJobMonitorBot:
                 await self.client.connect()
             return await self.client.is_user_authorized()
         except Exception as e:
-            logger.debug(f"Ошибка проверки сессии: {e}")
+            logger.debug(f"Error checking session: {e}")
             return False
 
     async def start(self, wait_for_auth: bool = True):
         """
-        Запуск бота с проверкой сессии
+        Start the bot with session verification.
 
         Args:
-            wait_for_auth: Если True и нет сессии - ждать авторизации через веб.
-                          Если False - пытаться авторизоваться автоматически.
+            wait_for_auth: If True and no session - wait for web auth.
+                          If False - try automatic authorization.
         """
-        logger.info("Запуск Multi-Channel Telegram userbot...")
+        logger.info("Starting Multi-Channel Telegram userbot...")
 
-        # Устанавливаем главный поток для агентов
-        # Агенты должны подключаться только из этого потока
+        # Set main thread for agents
+        # Agents must connect only from this thread
         from src.agent_pool import set_main_thread
         set_main_thread()
 
         if not self.client.is_connected():
             await self.client.connect()
 
-        # Если уже авторизованы - не нужно отправлять код
+        # If already authorized - no need to send code
         if await self.client.is_user_authorized():
-            logger.info("Найдена существующая сессия, используем её")
+            logger.info("Found existing session, using it")
         else:
-            # Сессии нет - нужна авторизация
+            # No session - need authorization
             if wait_for_auth:
-                # НЕ пытаемся автоматически авторизоваться
-                # Ждём пока пользователь авторизуется через веб-интерфейс
-                logger.info("Сессия не найдена. Ожидание авторизации через веб-интерфейс...")
-                raise NeedsAuthenticationError("Требуется авторизация через веб-интерфейс")
+                # DO NOT try automatic authorization
+                # Wait for user to authorize via web interface
+                logger.info("Session not found. Waiting for web interface authorization...")
+                raise NeedsAuthenticationError("Authorization required via web interface")
             else:
-                # Старое поведение - автоматическая авторизация (может вызвать FloodWait)
-                logger.info("Сессия не найдена, попытка авторизации...")
+                # Legacy behavior - automatic auth (may cause FloodWait)
+                logger.info("Session not found, attempting authorization...")
                 await self.client.start(phone=config.PHONE)
 
-        # Проверка авторизации
+        # Verify authorization
         me = await self.client.get_me()
-        logger.info(f"Бот авторизован как: {me.first_name} ({me.phone})")
-        
-        # Подключение к базе данных
+        logger.info(f"Bot authorized as: {me.first_name} ({me.phone})")
+
+        # Connect to database
         await db.connect()
-        
-        # Загрузка конфигурации output каналов
+
+        # Load output channel configuration
         await self.load_output_channels()
 
-        # Загрузка всех уникальных input источников
+        # Load all unique input sources
         await self.load_input_sources()
 
-        # Инициализация LLM job analyzer
+        # Initialize LLM job analyzer
         await self._init_job_analyzer()
 
-        # Инициализация CRM агентов и conversation managers
+        # Initialize CRM agents and conversation managers
         await self.crm.setup_agents(self.output_channels, self.config_manager)
 
         # Ensure all agents are in their CRM groups
@@ -179,61 +179,61 @@ class MultiChannelJobMonitorBot:
         except Exception as e:
             logger.warning(f"Error syncing missed messages: {e}")
 
-        # Настройка фильтра логов
+        # Setup log filter
         self._setup_log_filter()
-        
-        # Регистрация обработчиков событий
+
+        # Register event handlers
         self.register_handlers()
-        
-        # Сохраняем время модификации конфига при старте
+
+        # Save config modification time at startup
         if self.config_file_path.exists():
             self.last_config_mtime = os.path.getmtime(self.config_file_path)
     
-    async def load_output_channels(self):
-        """Загружает конфигурацию output каналов из ConfigManager"""
+    async def load_output_channels(self) -> None:
+        """Load output channel configuration from ConfigManager."""
         try:
             self.output_channels = self.config_manager.load()
             
             enabled_channels = [ch for ch in self.output_channels if ch.enabled]
             
             if not enabled_channels:
-                logger.warning("Нет активных output каналов в конфигурации")
+                logger.warning("No active output channels in configuration")
             else:
-                logger.info(f"Загружено {len(enabled_channels)} активных output каналов:")
+                logger.info(f"Loaded {len(enabled_channels)} active output channels:")
                 for ch in enabled_channels:
                     logger.info(f"  - {ch.name} (ID: {ch.telegram_id})")
-        
+
         except Exception as e:
-            logger.error(f"Ошибка загрузки output каналов: {e}")
+            logger.error(f"Error loading output channels: {e}")
             self.output_channels = []
     
-    async def load_input_sources(self):
-        """Загружает все уникальные input источники из output каналов"""
+    async def load_input_sources(self) -> None:
+        """Load all unique input sources from output channels."""
         try:
-            # Собираем все уникальные источники
+            # Collect all unique sources
             all_sources = self.config_manager.get_all_input_sources()
-            
+
             if not all_sources:
-                logger.warning("Не найдено источников для мониторинга")
+                logger.warning("No sources found for monitoring")
                 return
-            
-            logger.info(f"Загрузка {len(all_sources)} input источников...")
-            
+
+            logger.info(f"Loading {len(all_sources)} input sources...")
+
             from telethon.tl.functions.channels import JoinChannelRequest
             from telethon.errors import UserAlreadyParticipantError, ChannelPrivateError
 
             for source in all_sources:
                 try:
-                    # Если это ID (число), преобразуем в int
+                    # If it's an ID (number), convert to int
                     if source.lstrip('-').isdigit():
                         channel_id = int(source)
                         entity = await self.client.get_entity(channel_id)
                     else:
-                        # Иначе это username, получаем entity
+                        # Otherwise it's a username, get entity
                         entity = await self.client.get_entity(source)
                         channel_id = entity.id
 
-                    # Получаем название канала
+                    # Get channel title
                     channel_title = self._get_chat_title(entity)
 
                     # Ensure bot is subscribed to the channel
@@ -263,7 +263,7 @@ class MultiChannelJobMonitorBot:
                     )
 
                 except Exception as e:
-                    logger.error(f"  ✗ Ошибка загрузки источника '{source}': {e}")
+                    logger.error(f"  ✗ Error loading source '{source}': {e}")
                     # Update source status as inaccessible
                     status_manager.update_source_status(
                         source,
@@ -272,11 +272,11 @@ class MultiChannelJobMonitorBot:
                         error=str(e)
                     )
             
-            logger.info(f"Всего загружено {len(self.monitored_sources)} источников для мониторинга")
+            logger.info(f"Total loaded {len(self.monitored_sources)} sources for monitoring")
             logger.info(f"[DEBUG] monitored_sources IDs: {sorted(self.monitored_sources)[:10]}...")
 
         except Exception as e:
-            logger.error(f"Ошибка при загрузке input источников: {e}")
+            logger.error(f"Error loading input sources: {e}")
 
     async def _init_job_analyzer(self):
         """Initialize LLM-based job analyzer."""
@@ -377,7 +377,7 @@ class MultiChannelJobMonitorBot:
                     logger.warning(f"  Error processing agent {agent_session}: {e}")
 
     def _setup_log_filter(self):
-        """Настраивает фильтр для замены ID каналов на имена в логах"""
+        """Setup filter for replacing channel IDs with names in logs"""
         telethon_logger = logging.getLogger('telethon.client.updates')
         log_filter = ChannelNameLogFilter(self.channel_names)
         telethon_logger.addFilter(log_filter)
@@ -386,11 +386,11 @@ class MultiChannelJobMonitorBot:
         root_telethon.addFilter(log_filter)
     
     def register_handlers(self):
-        """Регистрирует обработчики событий"""
-        
+        """Register event handlers"""
+
         @self.client.on(events.NewMessage())
         async def handle_new_message(event):
-            """Обработчик новых сообщений"""
+            """Handler for new messages"""
             try:
                 message = event.message
                 chat = await event.get_chat()
@@ -398,51 +398,51 @@ class MultiChannelJobMonitorBot:
                 # DEBUG: log all incoming messages
                 logger.info(f"[DEBUG] Message from chat_id={chat.id}, monitored={chat.id in self.monitored_sources}, title={getattr(chat, 'title', 'N/A')}")
 
-                # Проверяем, нужно ли мониторить этот чат
+                # Check if we should monitor this chat
                 if chat.id not in self.monitored_sources:
                     return
 
-                # Игнорируем собственные сообщения
+                # Ignore our own messages
                 if message.out:
                     return
 
                 await self.process_message(message, chat)
-            
+
             except Exception as e:
-                logger.error(f"Ошибка при обработке нового сообщения: {e}", exc_info=True)
-        
-        logger.info("Обработчики событий зарегистрированы")
-    
-    async def watch_config_changes(self):
-        """Фоновая задача для отслеживания изменений конфигурации"""
-        logger.info("Запущен мониторинг изменений конфигурации (проверка каждые 30 сек)")
-        
+                logger.error(f"Error processing new message: {e}", exc_info=True)
+
+        logger.info("Event handlers registered")
+
+    async def watch_config_changes(self) -> None:
+        """Background task to watch for configuration changes."""
+        logger.info("Started config change monitoring (checking every 30 sec)")
+
         while True:
             try:
-                await asyncio.sleep(30)  # Проверка каждые 30 секунд
-                
+                await asyncio.sleep(30)  # Check every 30 seconds
+
                 if not self.config_file_path.exists():
                     continue
-                
-                # Получаем время модификации файла
+
+                # Get file modification time
                 current_mtime = os.path.getmtime(self.config_file_path)
-                
-                # Если файл изменился
+
+                # If file changed
                 if self.last_config_mtime and current_mtime != self.last_config_mtime:
-                    logger.info("Обнаружены изменения в конфигурации! Перезагрузка...")
+                    logger.info("Config changes detected! Reloading...")
 
                     # Small delay to ensure file write is complete (atomic replace should be instant, but just in case)
                     await asyncio.sleep(0.5)
 
-                    # Перезагружаем конфигурацию
+                    # Reload configuration
                     await self.reload_configuration()
-                    
-                    logger.info("Конфигурация перезагружена успешно")
+
+                    logger.info("Configuration reloaded successfully")
                 
                 self.last_config_mtime = current_mtime
                 
             except Exception as e:
-                logger.error(f"Ошибка при проверке конфигурации: {e}")
+                logger.error(f"Error checking configuration: {e}")
     
     def _get_command_handlers(self) -> dict:
         """
@@ -683,36 +683,36 @@ class MultiChannelJobMonitorBot:
 
         logger.info(f"Sent CRM message to contact {contact_id} from web interface")
 
-    async def reload_configuration(self):
-        """Перезагрузка конфигурации без перезапуска бота"""
+    async def reload_configuration(self) -> None:
+        """Reload configuration without restarting the bot."""
         try:
-            # Загружаем output каналы
+            # Load output channels
             await self.load_output_channels()
-            
-            # Получаем новый список источников
+
+            # Get new list of sources
             new_sources = self.config_manager.get_all_input_sources()
             new_sources_str = {str(s) for s in new_sources}
-            
-            # Добавляем новые источники (которых еще нет)
+
+            # Add new sources (that aren't already monitored)
             for source in new_sources:
-                # Проверяем есть ли уже этот источник
+                # Check if source is already monitored
                 already_monitored = False
-                
+
                 if source.lstrip('-').isdigit():
-                    # Это ID
+                    # This is an ID
                     source_id = int(source)
                     if source_id in self.monitored_sources:
                         already_monitored = True
                 else:
-                    # Это username - проверяем по имени
+                    # This is a username - check by name
                     for monitored_id in self.monitored_sources:
                         if self.channel_names.get(monitored_id, '').lower() == source.lower():
                             already_monitored = True
                             break
-                
+
                 if not already_monitored:
                     try:
-                        # Загружаем entity для нового источника
+                        # Load entity for new source
                         if source.lstrip('-').isdigit():
                             channel_id = int(source)
                             entity = await self.client.get_entity(channel_id)
@@ -733,10 +733,10 @@ class MultiChannelJobMonitorBot:
                             title=channel_title
                         )
 
-                        logger.info(f"  ➕ Добавлен новый источник: {source} → {channel_title}")
+                        logger.info(f"  ➕ Added new source: {source} → {channel_title}")
 
                     except Exception as e:
-                        logger.error(f"  ✗ Ошибка загрузки нового источника '{source}': {e}")
+                        logger.error(f"  ✗ Error loading new source '{source}': {e}")
                         # Update source status as inaccessible
                         status_manager.update_source_status(
                             source,
@@ -744,19 +744,19 @@ class MultiChannelJobMonitorBot:
                             is_member=False,
                             error=str(e)
                         )
-            
-            # Удаляем источники, которых больше нет в конфигурации
+
+            # Remove sources that are no longer in configuration
             sources_to_remove = []
-            
+
             for monitored_id in list(self.monitored_sources):
-                # Проверяем есть ли этот ID в новой конфигурации
+                # Check if this ID is in new configuration
                 found = False
-                
-                # Проверка по ID
+
+                # Check by ID
                 if str(monitored_id) in new_sources_str or str(-monitored_id) in new_sources_str:
                     found = True
                 else:
-                    # Проверка по username
+                    # Check by username
                     for source in new_sources:
                         if not source.lstrip('-').isdigit():
                             try:
@@ -766,49 +766,49 @@ class MultiChannelJobMonitorBot:
                                     break
                             except Exception:
                                 pass
-                
+
                 if not found:
                     sources_to_remove.append(monitored_id)
-            
+
             for source_id in sources_to_remove:
                 channel_name = self.channel_names.get(source_id, str(source_id))
                 self.monitored_sources.remove(source_id)
                 if source_id in self.channel_names:
                     del self.channel_names[source_id]
-                logger.info(f"  ➖ Удален источник: {channel_name}")
+                logger.info(f"  ➖ Removed source: {channel_name}")
 
-            logger.info(f"Мониторится: {len(self.monitored_sources)} источников, {len(self.output_channels)} output каналов")
+            logger.info(f"Monitoring: {len(self.monitored_sources)} sources, {len(self.output_channels)} output channels")
 
-            # Переинициализируем CRM агентов для новых каналов
+            # Re-initialize CRM agents for new channels
             await self.crm.setup_agents(self.output_channels, self.config_manager)
 
             # Ensure all agents are in their CRM groups
             await self._ensure_agents_in_crm_groups()
 
         except Exception as e:
-            logger.error(f"Ошибка перезагрузки конфигурации: {e}", exc_info=True)
-    
-    async def process_message(self, message, chat):
+            logger.error(f"Error reloading configuration: {e}", exc_info=True)
+
+    async def process_message(self, message, chat) -> None:
         """
-        Обрабатывает сообщение из отслеживаемого чата для всех output каналов
+        Process a message from a monitored chat for all output channels.
 
         Args:
-            message: Объект сообщения Telethon
-            chat: Объект чата
+            message: Telethon message object
+            chat: Chat object
         """
-        # Получаем название чата
+        # Get chat title
         chat_title = self._get_chat_title(chat)
 
-        logger.info(f"Получено сообщение {message.id} из чата '{chat_title}'")
+        logger.info(f"Received message {message.id} from chat '{chat_title}'")
 
-        # Первичная фильтрация
+        # Initial filtering
         if not message_processor.should_process_message(message):
             return
 
-        # Проверка на дубликат
+        # Check for duplicate
         is_duplicate = await db.check_duplicate(message.id, chat.id)
         if is_duplicate:
-            logger.debug(f"Сообщение {message.id} уже обрабатывалось ранее")
+            logger.debug(f"Message {message.id} was already processed")
             return
 
         # === LLM Job Analysis ===
@@ -856,13 +856,13 @@ class MultiChannelJobMonitorBot:
 
         keywords = message_processor.extract_keywords(message.text)
         payment_info = message_processor.extract_payment_info(message.text)
-        
-        # Определяем в какие output каналы нужно отправить это сообщение
+
+        # Determine which output channels should receive this message
         matching_outputs = self._find_matching_outputs(chat, message.text, keywords)
-        
+
         if not matching_outputs:
-            logger.debug("Сообщение не подходит ни под один output канал")
-            # Сохраняем как нерелевантное
+            logger.debug("Message doesn't match any output channel")
+            # Save as not relevant
             await db.save_job(
                 message_id=message.id,
                 chat_id=chat.id,
@@ -876,8 +876,8 @@ class MultiChannelJobMonitorBot:
                 contact_username=contacts.get('telegram')
             )
             return
-        
-        # Сохраняем в базу данных
+
+        # Save to database
         await db.save_job(
             message_id=message.id,
             chat_id=chat.id,
@@ -890,8 +890,8 @@ class MultiChannelJobMonitorBot:
             status='relevant',
             contact_username=contacts.get('telegram')
         )
-        
-        # Отправляем уведомления во все matching output каналы
+
+        # Send notifications to all matching output channels
         await self.send_notifications(
             message=message,
             chat=chat,
@@ -901,8 +901,8 @@ class MultiChannelJobMonitorBot:
             payment_info=payment_info,
             output_channels=matching_outputs
         )
-        
-        # CRM workflow: автоответ + создание топика
+
+        # CRM workflow: auto-response + topic creation
         await self.crm.handle_crm_workflow(
             message=message,
             chat=chat,
@@ -913,76 +913,76 @@ class MultiChannelJobMonitorBot:
         )
     
     def _find_matching_outputs(
-        self, 
-        chat, 
-        text: str, 
+        self,
+        chat,
+        text: str,
         keywords: List[str]
     ) -> List[ChannelConfig]:
         """
-        Находит output каналы, которым подходит данное сообщение
-        
+        Find output channels that match the given message
+
         Args:
-            chat: Объект чата источника
-            text: Текст сообщения
-            keywords: Найденные ключевые слова
-        
+            chat: Source chat object
+            text: Message text
+            keywords: Found keywords
+
         Returns:
-            Список подходящих output каналов
+            List of matching output channels
         """
         matching = []
         text_lower = text.lower()
-        
-        # Получаем все output каналы, которые мониторят этот источник
+
+        # Get all output channels that monitor this source
         source_id = str(chat.id)
         potential_outputs = self.config_manager.get_output_channels_for_source(source_id)
-        
-        # Если нет по ID, пробуем по username
+
+        # If not found by ID, try by username
         if not potential_outputs and hasattr(chat, 'username') and chat.username:
             potential_outputs = self.config_manager.get_output_channels_for_source(f"@{chat.username}")
-        
-        # Проверяем фильтры для каждого output канала
+
+        # Check filters for each output channel
         for output in potential_outputs:
             if self._check_filters(text_lower, keywords, output.filters):
                 matching.append(output)
-        
+
         return matching
-    
+
     def _check_filters(self, text_lower: str, _keywords: List[str], filters) -> bool:
         """
-        Проверка фильтров для канала
+        Check filters for a channel.
 
         Args:
-            text_lower: Текст сообщения в нижнем регистре
-            _keywords: Найденные ключевые слова (reserved for future use)
-            filters: Объект FilterConfig
-        
+            text_lower: Message text in lowercase
+            _keywords: Extracted keywords (reserved for future use)
+            filters: FilterConfig object
+
         Returns:
-            True если сообщение проходит фильтры
+            True if message passes filters
         """
-        # Проверка включающих ключевых слов
+        # Check include keywords
         if filters.include_keywords:
             include_lower = [kw.lower() for kw in filters.include_keywords]
-            
+
             if filters.require_all_includes:
-                # Требуются ВСЕ ключевые слова
+                # ALL keywords required
                 if not all(kw in text_lower for kw in include_lower):
                     return False
             else:
-                # Требуется ХОТЯ БЫ одно ключевое слово
+                # AT LEAST ONE keyword required
                 if not any(kw in text_lower for kw in include_lower):
                     return False
-        
-        # Проверка исключающих ключевых слов
+
+        # Check exclude keywords
         if filters.exclude_keywords:
             exclude_lower = [kw.lower() for kw in filters.exclude_keywords]
-            
-            # Если есть хотя бы одно исключающее слово - отклоняем
+
+            # If any exclude keyword found - reject
             if any(kw in text_lower for kw in exclude_lower):
-                logger.debug(f"Сообщение содержит исключающие слова: {[kw for kw in exclude_lower if kw in text_lower]}")
+                logger.debug(f"Message contains exclude words: {[kw for kw in exclude_lower if kw in text_lower]}")
                 return False
-        
+
         return True
-    
+
     async def send_notifications(
         self,
         message,
@@ -992,94 +992,94 @@ class MultiChannelJobMonitorBot:
         contacts: dict,
         _payment_info: dict,
         output_channels: List[ChannelConfig]
-    ):
-        """Отправляет уведомления во все подходящие output каналы
+    ) -> None:
+        """Send notifications to all matching output channels.
 
         Note: _payment_info is extracted but not yet used in notification format.
         """
-        logger.info(f"Отправка уведомлений в {len(output_channels)} output каналов...")
-        
-        # Получаем информацию об отправителе
+        logger.info(f"Sending notifications to {len(output_channels)} output channels...")
+
+        # Get sender info
         sender_info = message_processor.get_sender_info(message)
-        
-        # Формируем ссылку на сообщение
+
+        # Build message link
         message_link = message_processor.get_message_link(message, chat)
-        
-        # Форматируем уведомление
+
+        # Format notification
         lines = []
-        lines.append("🎯 **Новая вакансия!**")
+        lines.append("🎯 **New vacancy!**")
         lines.append("")
-        lines.append(f"📍 **Чат:** {chat_title}")
-        
+        lines.append(f"📍 **Chat:** {chat_title}")
+
         if keywords:
-            lines.append(f"🛠 **Навыки:** {', '.join(keywords[:5])}")
+            lines.append(f"🛠 **Skills:** {', '.join(keywords[:5])}")
         
         lines.append("")
-        lines.append(f"🔗 **Перейти:** {message_link}")
+        lines.append(f"🔗 **Link:** {message_link}")
         
-        # Контакты
+        # Contacts
         contacts_list = []
-        
+
         if sender_info.get('username'):
             contacts_list.append(f"✉️ {sender_info['username']}")
         elif sender_info.get('full_name'):
             contacts_list.append(f"👤 {sender_info['full_name']}")
-        
+
         if contacts.get('telegram') and contacts['telegram'] != sender_info.get('username'):
             contacts_list.append(f"✉️ {contacts['telegram']}")
         if contacts.get('email'):
             contacts_list.append(f"📧 {contacts['email']}")
         if contacts.get('phone'):
             contacts_list.append(f"📞 {contacts['phone']}")
-        
+
         if contacts_list:
             lines.append("")
-            lines.append("**Контакты:**")
+            lines.append("**Contacts:**")
             for contact in contacts_list:
                 lines.append(f"   {contact}")
-        
+
         notification_text = '\n'.join(lines)
-        
-        # Отправляем во все output каналы
+
+        # Send to all output channels
         success_count = 0
         for output in output_channels:
             try:
-                # Получаем entity канала чтобы Telethon знал о нём
+                # Get channel entity so Telethon knows about it
                 try:
                     entity = await self.client.get_entity(output.telegram_id)
                     entity_title = self._get_chat_title(entity)
-                    logger.info(f"  📤 Отправка в '{output.name}' → Telegram: '{entity_title}' (ID: {output.telegram_id})")
+                    logger.info(f"  📤 Sending to '{output.name}' → Telegram: '{entity_title}' (ID: {output.telegram_id})")
                 except Exception as entity_error:
-                    logger.error(f"  ✗ Не удалось получить entity для '{output.name}' (ID: {output.telegram_id}): {entity_error}")
-                    logger.info(f"  💡 Убедитесь что бот имеет доступ к этому каналу/группе")
+                    logger.error(f"  ✗ Failed to get entity for '{output.name}' (ID: {output.telegram_id}): {entity_error}")
+                    logger.info(f"  💡 Make sure bot has access to this channel/group")
                     continue
-                
-                # Отправляем сообщение
+
+                # Send message
                 await self.client.send_message(
                     entity,
                     notification_text
                 )
                 success_count += 1
-            
+
             except Exception as e:
-                logger.error(f"  ✗ Ошибка отправки в '{output.name}': {e}")
-        
+                logger.error(f"  ✗ Error sending to '{output.name}': {e}")
+
         if success_count > 0:
-            logger.info(f"Успешно отправлено {success_count}/{len(output_channels)} уведомлений")
-    
+            logger.info(f"Successfully sent {success_count}/{len(output_channels)} notifications")
+
     def _get_chat_title(self, chat) -> str:
-        """Получает название чата"""
+        """Get chat title."""
         if isinstance(chat, User):
             return f"{chat.first_name} {chat.last_name or ''}".strip()
         elif isinstance(chat, (Chat, Channel)):
             return chat.title or f"Chat {chat.id}"
         else:
             return f"Unknown chat {chat.id}"
-    
-    async def run(self):
-        """Основной цикл работы бота"""
-        logger.info("Бот начал мониторинг сообщений...")
-        logger.info("Нажмите Ctrl+C для остановки")
+
+    async def run(self) -> None:
+        """Main bot loop."""
+        logger.info("Bot started monitoring messages...")
+        logger.info("Press Ctrl+C to stop")
 
         # Update bot status
         try:
@@ -1096,31 +1096,31 @@ class MultiChannelJobMonitorBot:
             logger.error(f"Failed to update bot status: {e}")
             status_manager.update_bot_status(True, False)
 
-        # Запускаем фоновые задачи
+        # Start background tasks
         config_watcher = asyncio.create_task(self.watch_config_changes())
         command_processor = asyncio.create_task(self.process_commands())
 
         try:
             await self.client.run_until_disconnected()
         except KeyboardInterrupt:
-            logger.info("Получен сигнал остановки")
+            logger.info("Stop signal received")
         finally:
             config_watcher.cancel()
             command_processor.cancel()
             await self.stop()
-    
-    async def stop(self):
-        """Остановка бота"""
-        logger.info("Остановка бота...")
+
+    async def stop(self) -> None:
+        """Stop the bot."""
+        logger.info("Stopping bot...")
         self.is_running = False
 
         # Update bot status
         status_manager.update_bot_status(False, False)
 
-        # Очищаем CRM ресурсы
+        # Clean up CRM resources
         await self.crm.cleanup()
 
-        # Отключаем всех глобальных агентов
+        # Disconnect all global agents
         await disconnect_all_global_agents()
 
         # Update all agents to disconnected
@@ -1128,28 +1128,28 @@ class MultiChannelJobMonitorBot:
         for session_name in status.get("agents", {}).keys():
             status_manager.update_agent_status(session_name, "disconnected")
 
-        # Закрываем соединение с БД
+        # Close database connection
         await db.close()
 
         if self.client.is_connected():
             await self.client.disconnect()
 
-        logger.info("Бот остановлен")
+        logger.info("Bot stopped")
 
 
-# Глобальный экземпляр бота
+# Global bot instance
 bot = MultiChannelJobMonitorBot()
 
 
 def get_bot_client():
-    """Возвращает клиент бота если он подключён, иначе None"""
+    """Return bot client if connected, otherwise None."""
     if bot and bot.client and bot.client.is_connected():
         return bot.client
     return None
 
 
 if __name__ == "__main__":
-    # Настройка логирования
+    # Setup logging
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -1161,9 +1161,9 @@ if __name__ == "__main__":
             await bot.run()
         except NeedsAuthenticationError as e:
             logger.error(f"❌ {e}")
-            logger.info("Запустите веб-интерфейс: python3 -m uvicorn web.app:app --port 8080")
+            logger.info("Start web interface: python3 -m uvicorn web.app:app --port 8080")
         except KeyboardInterrupt:
-            logger.info("Остановка по Ctrl+C")
+            logger.info("Stopped by Ctrl+C")
         finally:
             await bot.stop()
 
