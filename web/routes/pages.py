@@ -7,13 +7,12 @@ from fastapi.templating import Jinja2Templates
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.config_manager import ConfigManager
+from web import config_manager
 
 router = APIRouter()
 
 BASE_DIR = Path(__file__).parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-config_manager = ConfigManager()
 
 
 @router.get("/")

@@ -10,13 +10,13 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from auth import bot_auth_manager
-from src.config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
+from src.config_manager import ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
 from web.utils import get_or_create_bot_client
+from web import config_manager
 from src.session_config import get_agent_session_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/channels", tags=["channels-create"])
-config_manager = ConfigManager()
 
 
 class PromptsRequest(BaseModel):

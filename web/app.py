@@ -11,7 +11,8 @@ from fastapi.staticfiles import StaticFiles
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.config_manager import ConfigManager
+# Import shared config_manager from web package
+from web import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,6 @@ app = FastAPI(title="Job Notification Bot - Management Interface")
 # Setup static files
 BASE_DIR = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-
-# Initialize config manager
-config_manager = ConfigManager()
 
 # Очередь отложенных удалений Telegram сущностей
 pending_telegram_deletions: List[Dict[str, Any]] = []

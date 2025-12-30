@@ -8,14 +8,13 @@ from fastapi import APIRouter, HTTPException
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.config_manager import ConfigManager, ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
+from src.config_manager import ChannelConfig, FilterConfig, AgentConfig, PromptsConfig
 from web.utils import ChannelCreateRequest, ChannelUpdateRequest, get_agent_client, create_new_bot_client, PromptsRequest
+from web import config_manager
 from auth import bot_auth_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/channels", tags=["channels"])
-
-config_manager = ConfigManager()
 
 # Очередь отложенных удалений (импортируется из app.py)
 pending_telegram_deletions: List = []

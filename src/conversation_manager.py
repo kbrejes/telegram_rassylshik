@@ -32,7 +32,13 @@ class FrozenAccountError(Exception):
 class ConversationManager:
     """Управление форум-топиками и трансляцией сообщений"""
     
-    def __init__(self, client: TelegramClient, group_id: int, send_contact_message_cb=None, group_monitor_client=None):
+    def __init__(
+        self,
+        client: TelegramClient,
+        group_id: int,
+        send_contact_message_cb: Optional[callable] = None,
+        group_monitor_client: Optional[TelegramClient] = None
+    ) -> None:
         """
         Инициализация
         
@@ -63,7 +69,7 @@ class ConversationManager:
 
         logger.info(f"ConversationManager инициализирован для группы: {group_id}")
 
-    async def load_cache_from_db(self):
+    async def load_cache_from_db(self) -> None:
         """Загружает кэш topic_id <-> contact_id из базы данных"""
         try:
             mappings = await db.load_all_topic_contacts(self.group_id)
@@ -206,20 +212,20 @@ class ConversationManager:
             logger.error(f"Ошибка отправки в топик {topic_id}: {e}")
             return False
     
-    def save_message_to_topic(self, message_id: int, topic_id: int):
+    def save_message_to_topic(self, message_id: int, topic_id: int) -> None:
         """
         Сохранить связь message_id -> topic_id вручную
-        
+
         Args:
             message_id: ID сообщения
             topic_id: ID топика
         """
         self._message_to_topic_cache[message_id] = topic_id
-    
-    def mark_agent_sent_message(self, message_id: int):
+
+    def mark_agent_sent_message(self, message_id: int) -> None:
         """
         Пометить сообщение как отправленное агентом контакту (чтобы не зеркалировать обратно)
-        
+
         Args:
             message_id: ID сообщения
         """
@@ -237,7 +243,7 @@ class ConversationManager:
         """
         return message_id in self._agent_sent_messages
     
-    def register_handlers(self):
+    def register_handlers(self) -> None:
         """
         Регистрация обработчиков для двусторонней трансляции сообщений
         """

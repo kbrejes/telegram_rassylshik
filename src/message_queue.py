@@ -50,7 +50,7 @@ class MessageQueue:
     MAX_AGE_HOURS = MAX_MESSAGE_AGE_HOURS
     RETRY_INTERVAL_SECONDS = MESSAGE_QUEUE_RETRY_INTERVAL_SECONDS
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._queue: Dict[str, QueuedMessage] = {}  # key -> message
         self._lock = asyncio.Lock()
         self._retry_task: Optional[asyncio.Task] = None
@@ -60,7 +60,7 @@ class MessageQueue:
     def set_send_callback(
         self,
         callback: Callable[[str, str, str, Optional[int], Optional[int]], Awaitable[bool]]
-    ):
+    ) -> None:
         """
         Set the callback for sending messages.
 
@@ -136,7 +136,7 @@ class MessageQueue:
         async with self._lock:
             return list(self._queue.values())
 
-    async def _cleanup_old_messages(self):
+    async def _cleanup_old_messages(self) -> None:
         """Remove messages older than MAX_AGE_HOURS."""
         cutoff = time.time() - (self.MAX_AGE_HOURS * 3600)
         removed = 0
@@ -157,7 +157,7 @@ class MessageQueue:
         if removed > 0:
             logger.info(f"[QUEUE] Cleaned up {removed} old messages")
 
-    async def _process_queue(self):
+    async def _process_queue(self) -> None:
         """Process messages in the queue, attempting to send them."""
         if not self._send_callback:
             logger.warning("[QUEUE] No send callback set, cannot process queue")
@@ -235,7 +235,7 @@ class MessageQueue:
                 f"{dropped} dropped"
             )
 
-    async def _retry_loop(self):
+    async def _retry_loop(self) -> None:
         """Background task that periodically processes the queue."""
         logger.info(
             f"[QUEUE] Starting retry loop "
@@ -261,13 +261,13 @@ class MessageQueue:
                 logger.error(f"[QUEUE] Error in retry loop: {e}")
                 await asyncio.sleep(10)  # Wait before retrying
 
-    def start_retry_task(self):
+    def start_retry_task(self) -> None:
         """Start the background retry task."""
         if self._retry_task is None or self._retry_task.done():
             self._retry_task = asyncio.create_task(self._retry_loop())
             logger.info("[QUEUE] Retry task started")
 
-    def stop_retry_task(self):
+    def stop_retry_task(self) -> None:
         """Stop the background retry task."""
         if self._retry_task and not self._retry_task.done():
             self._retry_task.cancel()
