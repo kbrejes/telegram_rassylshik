@@ -27,6 +27,8 @@ class AgentStatus:
     flood_wait_until: Optional[float] = None
     last_health_check: Optional[str] = None
     user_info: Optional[Dict[str, Any]] = None
+    can_join_groups: Optional[bool] = None  # None = unknown, True = can, False = restricted
+    crm_access: Optional[bool] = None  # Can this agent access CRM groups?
 
     def to_dict(self) -> dict:
         return {
@@ -36,7 +38,9 @@ class AgentStatus:
             "error_message": self.error_message,
             "flood_wait_until": self.flood_wait_until,
             "last_health_check": self.last_health_check,
-            "user_info": self.user_info
+            "user_info": self.user_info,
+            "can_join_groups": self.can_join_groups,
+            "crm_access": self.crm_access
         }
 
 
@@ -160,11 +164,15 @@ class StatusManager:
         phone: str = "",
         error: Optional[str] = None,
         flood_wait_until: Optional[float] = None,
-        user_info: Optional[dict] = None
+        user_info: Optional[dict] = None,
+        can_join_groups: Optional[bool] = None,
+        crm_access: Optional[bool] = None
     ):
         """Update agent connection status."""
         with self._lock:
             current = self._read_status()
+            # Preserve existing values for fields not being updated
+            existing = current.get("agents", {}).get(session_name, {})
             agent_status = AgentStatus(
                 session_name=session_name,
                 status=status,
@@ -172,7 +180,9 @@ class StatusManager:
                 error_message=error,
                 flood_wait_until=flood_wait_until,
                 last_health_check=datetime.now().isoformat(),
-                user_info=user_info
+                user_info=user_info,
+                can_join_groups=can_join_groups if can_join_groups is not None else existing.get("can_join_groups"),
+                crm_access=crm_access if crm_access is not None else existing.get("crm_access")
             )
             current["agents"][session_name] = agent_status.to_dict()
             self._write_status(current)

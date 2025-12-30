@@ -175,6 +175,34 @@
                     </button>
                 </div>
 
+                <!-- System Health Summary -->
+                <div id="system-health" class="mb-6 hidden">
+                    <div class="bg-white dark:bg-dark-800 rounded-xl shadow-sm p-4">
+                        <div class="flex flex-wrap gap-4 items-center justify-between">
+                            <div class="flex flex-wrap gap-4">
+                                <div class="flex items-center gap-2">
+                                    <span id="health-agents-dot" class="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
+                                    <span class="text-sm text-gray-600 dark:text-gray-300">
+                                        <span id="health-agents-count" class="font-semibold">0</span> / <span id="health-agents-total">0</span> agents active
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span id="health-crm-dot" class="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
+                                    <span class="text-sm text-gray-600 dark:text-gray-300">
+                                        <span id="health-crm-count" class="font-semibold">0</span> with CRM access
+                                    </span>
+                                </div>
+                            </div>
+                            <div id="health-warning" class="hidden text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                </svg>
+                                <span id="health-warning-text"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Agents Grid -->
                 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="agents-grid">
                     <div class="col-span-full flex items-center justify-center py-12">
@@ -343,6 +371,12 @@
                 labelClass: 'text-orange-600 dark:text-orange-400',
                 tooltip: 'Telegram flagged this account for spam (PeerFloodError). Wait 1-24 hours before using. DO NOT delete.'
             },
+            group_restricted: {
+                dot: 'bg-orange-500',
+                label: 'Group Restricted',
+                labelClass: 'text-orange-600 dark:text-orange-400',
+                tooltip: 'This agent cannot be added to groups (Telegram restriction). The agent can still send DMs but cannot access CRM groups. This usually means the account is new or has privacy restrictions.'
+            },
             auth_required: {
                 dot: 'bg-yellow-500',
                 label: 'Auth Required',
@@ -409,14 +443,87 @@
                 if (err.includes('auth') && (err.includes('expired') || err.includes('invalid'))) return 'auth_expired';
                 // Code rate limit - "all available options" error from Telegram
                 if (err.includes('all available options') || err.includes('resendcoderequest')) return 'code_rate_limit';
+                // Group restricted - agent can't be added to groups
+                if (err.includes('group restricted') || err.includes('invalid object id')) return 'group_restricted';
+            }
+
+            // Check can_join_groups flag
+            if (agent.can_join_groups === false) {
+                return 'group_restricted';
             }
 
             return status;
         }
 
+        function updateHealthSummary(allAgents) {
+            const healthPanel = document.getElementById('system-health');
+            healthPanel.classList.remove('hidden');
+
+            let totalAgents = 0;
+            let connectedAgents = 0;
+            let crmAccessAgents = 0;
+            let restrictedAgents = 0;
+            let issues = [];
+
+            for (const [sessionName, agent] of allAgents) {
+                if (sessionName === 'bot_session') continue;
+                totalAgents++;
+
+                const state = getAgentState(agent, sessionName);
+                if (state === 'connected' || state === 'group_restricted') {
+                    connectedAgents++;
+                }
+                if (agent.crm_access === true) {
+                    crmAccessAgents++;
+                }
+                if (state === 'group_restricted' || agent.can_join_groups === false) {
+                    restrictedAgents++;
+                }
+                if (state === 'blocked' || state === 'auth_expired' || state === 'session_revoked') {
+                    issues.push(`${sessionName.replace('agent_', '')}: ${STATE_CONFIG[state]?.label || state}`);
+                }
+            }
+
+            // Update counts
+            document.getElementById('health-agents-count').textContent = connectedAgents;
+            document.getElementById('health-agents-total').textContent = totalAgents;
+            document.getElementById('health-crm-count').textContent = crmAccessAgents;
+
+            // Update dots
+            const agentsDot = document.getElementById('health-agents-dot');
+            const crmDot = document.getElementById('health-crm-dot');
+
+            agentsDot.className = 'w-2.5 h-2.5 rounded-full ' +
+                (connectedAgents === totalAgents && totalAgents > 0 ? 'bg-green-500' :
+                 connectedAgents > 0 ? 'bg-amber-500' : 'bg-red-500');
+
+            crmDot.className = 'w-2.5 h-2.5 rounded-full ' +
+                (crmAccessAgents > 0 ? 'bg-green-500' : 'bg-red-500');
+
+            // Show warning if needed
+            const warningEl = document.getElementById('health-warning');
+            const warningText = document.getElementById('health-warning-text');
+
+            if (crmAccessAgents === 0 && connectedAgents > 0) {
+                warningEl.classList.remove('hidden');
+                warningText.textContent = 'No agents can access CRM - conversation mirroring is DOWN';
+            } else if (restrictedAgents > 0) {
+                warningEl.classList.remove('hidden');
+                warningText.textContent = `${restrictedAgents} agent(s) restricted from groups - can still send DMs`;
+            } else if (issues.length > 0) {
+                warningEl.classList.remove('hidden');
+                warningText.textContent = `Issues: ${issues.join(', ')}`;
+            } else {
+                warningEl.classList.add('hidden');
+            }
+        }
+
         function renderAgentsFromMap(allAgents) {
             const container = document.getElementById('agents-grid');
             let html = '';
+
+            // Update health summary first
+            updateHealthSummary(allAgents);
 
             for (const [sessionName, agent] of allAgents) {
                 if (sessionName === 'bot_session') continue;
@@ -440,6 +547,14 @@
                     if (remaining > 0) {
                         floodBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">${remaining}m</span>`;
                     }
+                }
+
+                // CRM access badge
+                let crmBadge = '';
+                if (agent.crm_access === true) {
+                    crmBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" title="Can mirror to CRM groups">CRM</span>`;
+                } else if (agent.crm_access === false) {
+                    crmBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400" title="Cannot access CRM groups - another agent is handling CRM">No CRM</span>`;
                 }
 
                 // Build tooltip with actual error message if present
@@ -480,9 +595,10 @@
                                 <span class="font-semibold text-gray-900 dark:text-white truncate">${displayName}</span>
                                 ${username ? `<span class="text-xs text-gray-500 dark:text-gray-400">${username}</span>` : ''}
                             </div>
-                            <div class="flex items-center gap-2 mb-3 ml-4">
+                            <div class="flex items-center gap-2 mb-3 ml-4 flex-wrap">
                                 <span class="text-xs font-medium ${config.labelClass} cursor-pointer hover:underline tooltip-trigger" data-tooltip="${tooltipText}" onclick="showTooltip(this)">${config.label}</span>
                                 ${floodBadge}
+                                ${crmBadge}
                             </div>
                             ${button}
                         </div>

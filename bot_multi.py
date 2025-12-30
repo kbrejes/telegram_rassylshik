@@ -301,6 +301,7 @@ class MultiChannelJobMonitorBot:
     async def _ensure_agents_in_crm_groups(self):
         """Ensure all linked agents are members of their CRM groups."""
         from telethon.tl.functions.channels import InviteToChannelRequest
+        from src.connection_status import status_manager
 
         for channel in self.output_channels:
             if not channel.crm_enabled or not channel.crm_group_id or not channel.agents:
@@ -331,10 +332,27 @@ class MultiChannelJobMonitorBot:
                             users=[user_to_invite]
                         ))
                         logger.info(f"  ✅ Added {agent_session} to CRM group")
+                        # Agent can join groups
+                        status_manager.update_agent_status(
+                            agent_session, "connected",
+                            can_join_groups=True
+                        )
                     except Exception as invite_err:
                         err_str = str(invite_err)
                         if "USER_ALREADY_PARTICIPANT" in err_str or "already" in err_str.lower():
                             logger.debug(f"  Agent {agent_session} already in CRM group")
+                            status_manager.update_agent_status(
+                                agent_session, "connected",
+                                can_join_groups=True
+                            )
+                        elif "Invalid object ID" in err_str or "USER_PRIVACY_RESTRICTED" in err_str:
+                            # Agent is restricted from joining groups (Telegram limitation)
+                            logger.warning(f"  ⚠️ Agent {agent_session} RESTRICTED from joining groups: {invite_err}")
+                            status_manager.update_agent_status(
+                                agent_session, "connected",
+                                can_join_groups=False,
+                                error=f"Group restricted: {err_str[:100]}"
+                            )
                         else:
                             logger.warning(f"  Failed to add {agent_session}: {invite_err}")
 
@@ -344,8 +362,17 @@ class MultiChannelJobMonitorBot:
                         await agent.client.get_dialogs(limit=100)  # Refresh dialog list
                         entity = await agent.client.get_entity(channel.crm_group_id)
                         logger.info(f"  ✅ Agent {agent_session} cached CRM entity: {getattr(entity, 'title', 'N/A')}")
+                        # Agent has CRM access
+                        status_manager.update_agent_status(
+                            agent_session, "connected",
+                            crm_access=True
+                        )
                     except Exception as cache_err:
                         logger.warning(f"  ⚠️ Agent {agent_session} can't cache CRM entity: {cache_err}")
+                        status_manager.update_agent_status(
+                            agent_session, "connected",
+                            crm_access=False
+                        )
                 except Exception as e:
                     logger.warning(f"  Error processing agent {agent_session}: {e}")
 
