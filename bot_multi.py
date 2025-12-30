@@ -12,7 +12,7 @@ from typing import List, Set, Dict, Optional
 from src.config import config
 from src.database import db
 from src.message_processor import message_processor
-from src.config_manager import ConfigManager, ChannelConfig, AIConfig
+from src.config_manager import ConfigManager, ChannelConfig
 from src.agent_pool import disconnect_all_global_agents, get_or_create_agent, get_existing_agent
 from src.crm_handler import CRMHandler
 from src.session_config import get_bot_session_path, get_agent_session_path, SESSIONS_DIR
@@ -444,9 +444,29 @@ class MultiChannelJobMonitorBot:
             except Exception as e:
                 logger.error(f"Ошибка при проверке конфигурации: {e}")
     
+    def _get_command_handlers(self) -> dict:
+        """
+        Command registry mapping command types to (handler, success_message_template).
+
+        This pattern makes it easy to:
+        - Add new commands (just add to dict)
+        - Test commands individually
+        - See all available commands at a glance
+        """
+        return {
+            "connect_agent": (self._cmd_connect_agent, "Agent {target} connected"),
+            "disconnect_agent": (self._cmd_disconnect_agent, "Agent {target} disconnected"),
+            "delete_agent": (self._cmd_delete_agent, "Agent {target} deleted"),
+            "connect_all": (self._cmd_connect_all, "Connected {result} agents"),
+            "disconnect_all": (self._cmd_disconnect_all, "Disconnected {result} agents"),
+            "health_check": (self._cmd_health_check, "Health check completed"),
+            "send_crm_message": (self._cmd_send_crm_message, "Message sent"),
+        }
+
     async def process_commands(self):
         """Background task to process commands from web interface"""
         logger.info("Command processor started (checking every 2 seconds)")
+        handlers = self._get_command_handlers()
 
         while True:
             try:
@@ -465,36 +485,16 @@ class MultiChannelJobMonitorBot:
                     logger.info(f"Processing command: {cmd.type} -> {cmd.target}")
 
                     try:
-                        if cmd.type == "connect_agent":
-                            await self._cmd_connect_agent(cmd.target)
-                            command_queue.mark_completed(cmd.id, True, f"Agent {cmd.target} connected")
-
-                        elif cmd.type == "disconnect_agent":
-                            await self._cmd_disconnect_agent(cmd.target)
-                            command_queue.mark_completed(cmd.id, True, f"Agent {cmd.target} disconnected")
-
-                        elif cmd.type == "delete_agent":
-                            await self._cmd_delete_agent(cmd.target)
-                            command_queue.mark_completed(cmd.id, True, f"Agent {cmd.target} deleted")
-
-                        elif cmd.type == "connect_all":
-                            count = await self._cmd_connect_all()
-                            command_queue.mark_completed(cmd.id, True, f"Connected {count} agents")
-
-                        elif cmd.type == "disconnect_all":
-                            count = await self._cmd_disconnect_all()
-                            command_queue.mark_completed(cmd.id, True, f"Disconnected {count} agents")
-
-                        elif cmd.type == "health_check":
-                            await self._cmd_health_check()
-                            command_queue.mark_completed(cmd.id, True, "Health check completed")
-
-                        elif cmd.type == "send_crm_message":
-                            await self._cmd_send_crm_message(cmd.target)
-                            command_queue.mark_completed(cmd.id, True, "Message sent")
-
-                        else:
+                        if cmd.type not in handlers:
                             command_queue.mark_completed(cmd.id, False, f"Unknown command: {cmd.type}")
+                            continue
+
+                        handler, success_template = handlers[cmd.type]
+                        result = await handler(cmd.target)
+
+                        # Format success message with target and result
+                        success_msg = success_template.format(target=cmd.target, result=result)
+                        command_queue.mark_completed(cmd.id, True, success_msg)
 
                     except Exception as e:
                         logger.error(f"Error executing command {cmd.id}: {e}")
@@ -695,8 +695,6 @@ class MultiChannelJobMonitorBot:
             
             # Добавляем новые источники (которых еще нет)
             for source in new_sources:
-                source_str = str(source)
-                
                 # Проверяем есть ли уже этот источник
                 already_monitored = False
                 
@@ -949,13 +947,13 @@ class MultiChannelJobMonitorBot:
         
         return matching
     
-    def _check_filters(self, text_lower: str, keywords: List[str], filters) -> bool:
+    def _check_filters(self, text_lower: str, _keywords: List[str], filters) -> bool:
         """
         Проверка фильтров для канала
-        
+
         Args:
             text_lower: Текст сообщения в нижнем регистре
-            keywords: Найденные ключевые слова
+            _keywords: Найденные ключевые слова (reserved for future use)
             filters: Объект FilterConfig
         
         Returns:
@@ -992,10 +990,13 @@ class MultiChannelJobMonitorBot:
         chat_title: str,
         keywords: List[str],
         contacts: dict,
-        payment_info: dict,
+        _payment_info: dict,
         output_channels: List[ChannelConfig]
     ):
-        """Отправляет уведомления во все подходящие output каналы"""
+        """Отправляет уведомления во все подходящие output каналы
+
+        Note: _payment_info is extracted but not yet used in notification format.
+        """
         logger.info(f"Отправка уведомлений в {len(output_channels)} output каналов...")
         
         # Получаем информацию об отправителе
@@ -1054,7 +1055,7 @@ class MultiChannelJobMonitorBot:
                     continue
                 
                 # Отправляем сообщение
-                sent_message = await self.client.send_message(
+                await self.client.send_message(
                     entity,
                     notification_text
                 )

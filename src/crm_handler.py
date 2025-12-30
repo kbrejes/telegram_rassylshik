@@ -15,10 +15,9 @@ from telethon.tl.types import User, Chat, Channel
 
 from src.agent_account import AgentAccount
 from src.agent_pool import AgentPool
-from src.conversation_manager import ConversationManager, FrozenAccountError
+from src.conversation_manager import ConversationManager
 from src.connection_status import status_manager
 from src.database import db
-from src.human_behavior import human_behavior
 from src.message_queue import message_queue
 from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig
 from src.config_manager import ChannelConfig
@@ -28,6 +27,8 @@ from src.crm.topic_utils import (
     mirror_auto_response,
     init_ai_context,
 )
+from src.crm.auto_responder import send_auto_response
+from src.crm.ai_integration import handle_ai_response
 
 if TYPE_CHECKING:
     from bot_multi import MultiChannelJobMonitorBot
@@ -61,7 +62,7 @@ class CRMHandler:
         # Трекинг зарегистрированных обработчиков
         self._registered_agent_handlers: Set[int] = set()
 
-    async def setup_agents(self, output_channels: List[ChannelConfig], config_manager):
+    async def setup_agents(self, output_channels: List[ChannelConfig], config_manager) -> None:
         """Инициализация CRM агентов и conversation managers для каналов"""
         logger.info("Инициализация CRM агентов...")
 
@@ -69,11 +70,7 @@ class CRMHandler:
         # This prevents race condition where messages arrive during reload
         # and find empty conversation_managers dict
 
-        # Store old data for cleanup later
-        old_agent_pools = self.agent_pools
-        old_ai_handlers = self.ai_handlers
-
-        # Create new containers (DON'T clear old ones yet)
+        # Create new containers (DON'T clear old ones yet - atomic swap)
         new_agent_pools: Dict[str, AgentPool] = {}
         new_conversation_managers: Dict[str, ConversationManager] = {}
         new_contact_to_channel: Dict[int, str] = {}
@@ -124,7 +121,7 @@ class CRMHandler:
         # Setup message queue for retry of failed auto-responses
         self._setup_message_queue()
 
-    async def refresh_crm_entities(self):
+    async def refresh_crm_entities(self) -> None:
         """Refresh CRM group entity cache after agents are added to groups.
 
         Call this after ensure_agents_in_crm_groups() to make sure
@@ -160,7 +157,7 @@ class CRMHandler:
                 logger.warning(f"  ❌ {channel_id}: No agent can access CRM group {group_id}")
                 status_manager.update_crm_status(channel_id, group_id, False, "No agent has access")
 
-    async def _setup_channel_crm(self, channel: ChannelConfig):
+    async def _setup_channel_crm(self, channel: ChannelConfig) -> None:
         """Настройка CRM для одного канала (legacy wrapper)"""
         await self._setup_channel_crm_atomic(
             channel,
@@ -270,7 +267,7 @@ class CRMHandler:
         except Exception as e:
             logger.error(f"  Ошибка настройки CRM для '{channel.name}': {e}", exc_info=True)
 
-    async def _setup_ai_handler(self, channel: ChannelConfig):
+    async def _setup_ai_handler(self, channel: ChannelConfig) -> None:
         """Инициализация AI handler для канала (legacy wrapper)"""
         await self._setup_ai_handler_atomic(channel, self.ai_handlers, self.ai_handler_pool)
 
@@ -304,7 +301,7 @@ class CRMHandler:
             status_manager.update_llm_status(provider_name, False, error=str(ai_error))
             logger.warning(f"  Не удалось инициализировать AI: {ai_error}")
 
-    def _setup_message_queue(self):
+    def _setup_message_queue(self) -> None:
         """Setup the message queue for retrying failed auto-responses."""
 
         async def send_callback(
@@ -312,9 +309,12 @@ class CRMHandler:
             text: str,
             channel_id: str,
             resolved_user_id: Optional[int] = None,
-            resolved_access_hash: Optional[int] = None
+            _resolved_access_hash: Optional[int] = None
         ) -> bool:
-            """Callback for message queue to send messages."""
+            """Callback for message queue to send messages.
+
+            Note: _resolved_access_hash kept for API compatibility but not used.
+            """
             agent_pool = self.agent_pools.get(channel_id)
             if not agent_pool:
                 logger.warning(f"[QUEUE] No agent pool for channel {channel_id}")
@@ -346,7 +346,7 @@ class CRMHandler:
         message_queue.start_retry_task()
         logger.info("[CRM] Message queue initialized for auto-response retries")
 
-    def _register_contact_message_handler(self, agent_client: TelegramClient, channel_id: str):
+    def _register_contact_message_handler(self, agent_client: TelegramClient, channel_id: str) -> None:
         """Регистрация обработчика входящих сообщений от контактов
 
         NEW ARCHITECTURE (2025-12-30):
@@ -539,94 +539,23 @@ class CRMHandler:
         channel_config: Optional[ChannelConfig] = None,
         conv_manager: Optional[ConversationManager] = None,
         topic_id: Optional[int] = None
-    ):
-        """Handle AI response to contact message.
-
-        This unified method:
-        - Always processes AI response (core functionality)
-        - CRM mirroring is optional and best-effort
-        - Never fails due to CRM issues
-
-        Args:
-            agent_client: Telegram client to send messages
-            contact_id: Contact's user ID
-            contact_name: Contact's display name
-            message_text: Message to respond to
-            channel_id: Channel ID for config lookup
-            ai_handler: AI conversation handler
-            channel_config: Optional channel config (for instant_response setting)
-            conv_manager: Optional conversation manager (for CRM mirroring)
-            topic_id: Optional topic ID (if not provided, will be looked up from conv_manager)
-        """
+    ) -> None:
+        """Handle AI response to contact message. Delegates to extracted module."""
         # Get channel config if not provided
         if not channel_config:
             channel_config = self.channel_configs.get(channel_id)
         instant_response = channel_config.instant_response if channel_config else False
 
-        # Get topic_id if not provided but conv_manager is available
-        if not topic_id and conv_manager:
-            topic_id = conv_manager.get_topic_id(contact_id)
-
-        async def send_to_contact(cid: int, text: str) -> bool:
-            try:
-                # Show typing indicator before sending (skip if instant_response)
-                if not instant_response:
-                    await human_behavior.simulate_typing(
-                        client=agent_client,
-                        contact=cid,
-                        message_length=len(text)
-                    )
-                sent = await agent_client.send_message(cid, text)
-                if sent:
-                    # Mark as agent-sent (if conv_manager available)
-                    if conv_manager:
-                        conv_manager.mark_agent_sent_message(sent.id)
-
-                    # Best-effort: mirror AI response to CRM topic
-                    if conv_manager and topic_id:
-                        try:
-                            ai_msg = f"🤖 **AI:**\n\n{text}"
-                            topic_sent = await agent_client.send_message(
-                                entity=conv_manager.group_id,
-                                message=ai_msg,
-                                reply_to=topic_id
-                            )
-                            if topic_sent:
-                                conv_manager.save_message_to_topic(topic_sent.id, topic_id)
-                        except Exception as e:
-                            logger.warning(f"[AI] CRM mirror failed (non-blocking): {e}")
-                return True
-            except Exception as e:
-                logger.error(f"[AI] Error sending response: {e}")
-                return False
-
-        async def suggest_in_topic(cid: int, text: str, name: str):
-            """Suggest response in CRM topic (best-effort)"""
-            if not conv_manager or not topic_id:
-                logger.debug("[AI] No conv_manager or topic_id, skipping suggestion")
-                return
-
-            try:
-                suggest_msg = f"💡 **AI suggests response:**\n\n{text}\n\n_Send this text or write your own response_"
-                await agent_client.send_message(
-                    entity=conv_manager.group_id,
-                    message=suggest_msg,
-                    reply_to=topic_id
-                )
-            except Exception as e:
-                logger.warning(f"[AI] Failed to suggest in topic: {e}")
-
-        # Process AI response asynchronously
-        asyncio.create_task(
-            ai_handler.handle_message(
-                contact_id=contact_id,
-                message=message_text,
-                contact_name=contact_name,
-                send_callback=send_to_contact,
-                suggest_callback=suggest_in_topic,
-            )
+        await handle_ai_response(
+            agent_client=agent_client,
+            contact_id=contact_id,
+            contact_name=contact_name,
+            message_text=message_text,
+            ai_handler=ai_handler,
+            instant_response=instant_response,
+            conv_manager=conv_manager,
+            topic_id=topic_id
         )
-        logger.info(f"[AI] Started async AI response for {contact_name}")
 
     async def _send_message_from_topic_to_contact(
         self,
@@ -789,101 +718,16 @@ class CRMHandler:
         resolved_access_hash: Optional[int] = None,
         vacancy_id: Optional[int] = None
     ) -> bool:
-        """Отправка автоответа контакту с fallback через пул агентов"""
-        telegram_contact = contacts.get('telegram')
-
-        # Helper to log attempts
-        async def log_attempt(status: str, error_type: str = None, error_message: str = None, agent_session: str = None):
-            if vacancy_id:
-                try:
-                    await db.save_auto_response_attempt(
-                        vacancy_id=vacancy_id,
-                        contact_username=telegram_contact,
-                        contact_user_id=resolved_user_id,
-                        agent_session=agent_session,
-                        status=status,
-                        error_type=error_type,
-                        error_message=error_message
-                    )
-                except Exception as e:
-                    logger.warning(f"[AUTO-RESPONSE] Failed to log attempt: {e}")
-
-        if not channel.auto_response_enabled or not channel.auto_response_template:
-            logger.debug(f"[AUTO-RESPONSE] Skipped: auto_response not enabled for channel '{channel.name}'")
-            return False
-
-        if not telegram_contact:
-            logger.info(f"[AUTO-RESPONSE] Skipped: no Telegram contact extracted")
-            await log_attempt('skipped', 'no_contact', 'No Telegram contact extracted from vacancy')
-            return False
-
-        if telegram_contact.lower() in contacted_users:
-            logger.debug(f"[AUTO-RESPONSE] Skipped: {telegram_contact} already contacted")
-            await log_attempt('skipped', 'already_contacted', f'{telegram_contact} already contacted in this batch')
-            return False
-
-        # Always use username for agents - they need to resolve with their own client
-        # (access_hash from bot is session-specific and won't work for agents)
-        target: Any = telegram_contact
-        logger.info(f"[AUTO-RESPONSE] Using username {telegram_contact} (resolved_id={resolved_user_id})")
-
-        try:
-            # Use pool's send_message which has built-in agent rotation/fallback
-            success = await agent_pool.send_message(
-                target,
-                channel.auto_response_template,
-                max_retries=len(agent_pool.agents) if agent_pool.agents else 3
-            )
-            if success:
-                contacted_users.add(telegram_contact.lower())
-                logger.info(f"[AUTO-RESPONSE] ✅ Successfully sent to {telegram_contact}")
-                await log_attempt('success')
-                return True
-            else:
-                # All agents failed - queue for retry with resolved info
-                logger.warning(f"[AUTO-RESPONSE] ❌ Failed to send to {telegram_contact} (all agents failed)")
-                await log_attempt('failed', 'all_agents_failed', 'All agents failed (likely spam limit or invalid peer)')
-
-                await message_queue.add(
-                    contact=telegram_contact,
-                    text=channel.auto_response_template,
-                    channel_id=channel.id,
-                    error="All agents failed (likely spam limit)",
-                    resolved_user_id=resolved_user_id,
-                    resolved_access_hash=resolved_access_hash
-                )
-                logger.info(f"[AUTO-RESPONSE] 📥 Queued message for {telegram_contact} for later retry")
-                await log_attempt('queued', 'retry_scheduled', 'Added to message queue for later retry')
-
-        except Exception as e:
-            error_str = str(e)
-            logger.error(f"[AUTO-RESPONSE] ❌ Error sending to {telegram_contact}: {e}")
-
-            # Determine error type
-            error_type = 'other'
-            if "invalid" in error_str.lower() and "peer" in error_str.lower():
-                error_type = 'invalid_peer'
-            elif "flood" in error_str.lower():
-                error_type = 'flood_wait'
-            elif "spam" in error_str.lower():
-                error_type = 'spam_limit'
-
-            await log_attempt('failed', error_type, error_str[:500])
-
-            # Queue if it's a rate limit error
-            if error_type in ('flood_wait', 'spam_limit'):
-                await message_queue.add(
-                    contact=telegram_contact,
-                    text=channel.auto_response_template,
-                    channel_id=channel.id,
-                    error=error_str,
-                    resolved_user_id=resolved_user_id,
-                    resolved_access_hash=resolved_access_hash
-                )
-                logger.info(f"[AUTO-RESPONSE] 📥 Queued message for {telegram_contact} for later retry")
-                await log_attempt('queued', 'retry_scheduled', 'Added to message queue for later retry')
-
-        return False
+        """Send auto-response to contact. Delegates to extracted module."""
+        return await send_auto_response(
+            channel=channel,
+            agent_pool=agent_pool,
+            contacts=contacts,
+            contacted_users=contacted_users,
+            resolved_user_id=resolved_user_id,
+            resolved_access_hash=resolved_access_hash,
+            vacancy_id=vacancy_id
+        )
 
     async def _create_topic_with_fallback(
         self,
@@ -1072,7 +916,7 @@ class CRMHandler:
             message_processor=message_processor
         )
 
-    async def sync_missed_messages(self, lookback_hours: int = 2):
+    async def sync_missed_messages(self, lookback_hours: int = 2) -> int:
         """
         Sync messages that were missed while the bot was offline.
         Fetches recent messages from all active conversations and processes unhandled ones.
@@ -1173,7 +1017,7 @@ class CRMHandler:
         logger.info(f"Synced {synced_count} missed messages")
         return synced_count
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Очистка ресурсов CRM"""
         # Stop message queue retry task
         message_queue.stop_retry_task()

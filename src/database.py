@@ -1,11 +1,15 @@
 """
-Модуль для работы с базой данных SQLite
+Database module for SQLite operations.
+
+Schema creation and migrations are handled here.
+For migration definitions, see src/db/migrations.py
 """
 import aiosqlite
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict
 from src.config import config
+from src.db.migrations import MigrationRunner
 
 logger = logging.getLogger(__name__)
 
@@ -29,24 +33,9 @@ class Database:
             await self._connection.close()
             logger.info("Соединение с базой данных закрыто")
     
-    async def _create_tables(self):
-        """Создание таблиц в базе данных"""
-        # Migration: add contact_username column if not exists
-        try:
-            await self._connection.execute("ALTER TABLE processed_jobs ADD COLUMN contact_username TEXT")
-            await self._connection.commit()
-            logger.info("Added contact_username column to processed_jobs")
-        except Exception:
-            pass  # Column already exists
-
-        # Migration: add vacancy_id column to crm_topic_contacts if not exists
-        try:
-            await self._connection.execute("ALTER TABLE crm_topic_contacts ADD COLUMN vacancy_id INTEGER")
-            await self._connection.commit()
-            logger.info("Added vacancy_id column to crm_topic_contacts")
-        except Exception:
-            pass  # Column already exists
-
+    async def _create_tables(self) -> None:
+        """Create database tables and run migrations."""
+        # Create base tables first
         await self._connection.execute("""
             CREATE TABLE IF NOT EXISTS processed_jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -260,8 +249,13 @@ class Database:
         """)
 
         await self._connection.commit()
-        logger.info("Таблицы созданы/проверены")
-    
+
+        # Run migrations for schema changes
+        migration_runner = MigrationRunner(self._connection)
+        await migration_runner.run_migrations()
+
+        logger.info("Database tables created/verified, migrations applied")
+
     async def check_duplicate(self, message_id: int, chat_id: int) -> bool:
         """
         Проверяет, было ли сообщение уже обработано
