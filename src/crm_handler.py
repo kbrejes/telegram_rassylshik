@@ -1,6 +1,9 @@
 """
-CRM Handler - логика автоответов, топиков и трансляции сообщений
-Вынесено из bot_multi.py для улучшения читаемости
+CRM Handler - auto-responses, topics, and message relay logic.
+Extracted from bot_multi.py for better readability.
+
+This module orchestrates CRM functionality. Helper functions are in:
+- src/crm/topic_utils.py - Topic creation and management
 """
 import asyncio
 import logging
@@ -19,6 +22,12 @@ from src.human_behavior import human_behavior
 from src.message_queue import message_queue
 from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig
 from src.config_manager import ChannelConfig
+from src.crm.topic_utils import (
+    create_topic_with_fallback,
+    send_topic_info,
+    mirror_auto_response,
+    init_ai_context,
+)
 
 if TYPE_CHECKING:
     from bot_multi import MultiChannelJobMonitorBot
@@ -423,7 +432,7 @@ class CRMHandler:
                 # === LAYER 1: AI RESPONSE (core functionality) ===
                 if ai_handler and message_text:
                     logger.info(f"[HANDLER] Processing AI response for {sender_name}")
-                    await self._handle_ai_response_standalone(
+                    await self._handle_ai_response(
                         agent_client=agent_client,
                         contact_id=sender.id,
                         contact_name=sender_name,
@@ -506,77 +515,20 @@ class CRMHandler:
         except Exception as e:
             logger.warning(f"Не удалось отправить в CRM топик: {e}")
 
-        # AI ответ
+        # AI response
         if ai_handler and message.text:
             await self._handle_ai_response(
-                agent_client, conv_manager, sender.id, sender_name,
-                message.text, topic_id, ai_handler, channel_id
+                agent_client=agent_client,
+                contact_id=sender.id,
+                contact_name=sender_name,
+                message_text=message.text,
+                channel_id=channel_id,
+                ai_handler=ai_handler,
+                conv_manager=conv_manager,
+                topic_id=topic_id
             )
 
     async def _handle_ai_response(
-        self,
-        agent_client: TelegramClient,
-        conv_manager: ConversationManager,
-        contact_id: int,
-        contact_name: str,
-        message_text: str,
-        topic_id: int,
-        ai_handler: AIConversationHandler,
-        channel_id: str
-    ):
-        """Обработка AI ответа на сообщение контакта"""
-        # Check if instant response is enabled for this channel
-        channel_config = self.channel_configs.get(channel_id)
-        instant_response = channel_config.instant_response if channel_config else False
-
-        async def send_to_contact(cid: int, text: str) -> bool:
-            try:
-                # Show typing indicator before sending (skip if instant_response)
-                if not instant_response:
-                    await human_behavior.simulate_typing(
-                        client=agent_client,
-                        contact=cid,
-                        message_length=len(text)
-                    )
-                sent = await agent_client.send_message(cid, text)
-                if sent:
-                    conv_manager.mark_agent_sent_message(sent.id)
-                    # Зеркалируем в топик
-                    try:
-                        ai_msg = f"🤖 **AI:**\n\n{text}"
-                        topic_sent = await agent_client.send_message(
-                            entity=conv_manager.group_id,
-                            message=ai_msg,
-                            reply_to=topic_id
-                        )
-                        if topic_sent:
-                            conv_manager.save_message_to_topic(topic_sent.id, topic_id)
-                    except Exception as e:
-                        logger.warning(f"Не удалось зеркалировать AI в CRM: {e}")
-                return True
-            except Exception as e:
-                logger.error(f"Ошибка отправки AI ответа: {e}")
-                return False
-
-        async def suggest_in_topic(cid: int, text: str, name: str):
-            suggest_msg = f"💡 **AI предлагает ответ:**\n\n{text}\n\n_Отправьте этот текст или напишите свой ответ_"
-            await agent_client.send_message(
-                entity=conv_manager.group_id,
-                message=suggest_msg,
-                reply_to=topic_id
-            )
-
-        asyncio.create_task(
-            ai_handler.handle_message(
-                contact_id=contact_id,
-                message=message_text,
-                contact_name=contact_name,
-                send_callback=send_to_contact,
-                suggest_callback=suggest_in_topic,
-            )
-        )
-
-    async def _handle_ai_response_standalone(
         self,
         agent_client: TelegramClient,
         contact_id: int,
@@ -584,17 +536,36 @@ class CRMHandler:
         message_text: str,
         channel_id: str,
         ai_handler: AIConversationHandler,
-        channel_config: Optional[ChannelConfig],
-        conv_manager: Optional[ConversationManager]
+        channel_config: Optional[ChannelConfig] = None,
+        conv_manager: Optional[ConversationManager] = None,
+        topic_id: Optional[int] = None
     ):
-        """AI response that works independently of CRM (Layer 1 - core functionality)
+        """Handle AI response to contact message.
 
-        This method:
-        - Always processes AI response
+        This unified method:
+        - Always processes AI response (core functionality)
         - CRM mirroring is optional and best-effort
         - Never fails due to CRM issues
+
+        Args:
+            agent_client: Telegram client to send messages
+            contact_id: Contact's user ID
+            contact_name: Contact's display name
+            message_text: Message to respond to
+            channel_id: Channel ID for config lookup
+            ai_handler: AI conversation handler
+            channel_config: Optional channel config (for instant_response setting)
+            conv_manager: Optional conversation manager (for CRM mirroring)
+            topic_id: Optional topic ID (if not provided, will be looked up from conv_manager)
         """
+        # Get channel config if not provided
+        if not channel_config:
+            channel_config = self.channel_configs.get(channel_id)
         instant_response = channel_config.instant_response if channel_config else False
+
+        # Get topic_id if not provided but conv_manager is available
+        if not topic_id and conv_manager:
+            topic_id = conv_manager.get_topic_id(contact_id)
 
         async def send_to_contact(cid: int, text: str) -> bool:
             try:
@@ -612,20 +583,18 @@ class CRMHandler:
                         conv_manager.mark_agent_sent_message(sent.id)
 
                     # Best-effort: mirror AI response to CRM topic
-                    if conv_manager:
-                        topic_id = conv_manager.get_topic_id(cid)
-                        if topic_id:
-                            try:
-                                ai_msg = f"🤖 **AI:**\n\n{text}"
-                                topic_sent = await agent_client.send_message(
-                                    entity=conv_manager.group_id,
-                                    message=ai_msg,
-                                    reply_to=topic_id
-                                )
-                                if topic_sent:
-                                    conv_manager.save_message_to_topic(topic_sent.id, topic_id)
-                            except Exception as e:
-                                logger.warning(f"[AI] CRM mirror failed (non-blocking): {e}")
+                    if conv_manager and topic_id:
+                        try:
+                            ai_msg = f"🤖 **AI:**\n\n{text}"
+                            topic_sent = await agent_client.send_message(
+                                entity=conv_manager.group_id,
+                                message=ai_msg,
+                                reply_to=topic_id
+                            )
+                            if topic_sent:
+                                conv_manager.save_message_to_topic(topic_sent.id, topic_id)
+                        except Exception as e:
+                            logger.warning(f"[AI] CRM mirror failed (non-blocking): {e}")
                 return True
             except Exception as e:
                 logger.error(f"[AI] Error sending response: {e}")
@@ -633,17 +602,12 @@ class CRMHandler:
 
         async def suggest_in_topic(cid: int, text: str, name: str):
             """Suggest response in CRM topic (best-effort)"""
-            if not conv_manager:
-                logger.debug("[AI] No conv_manager, skipping suggestion")
-                return
-
-            topic_id = conv_manager.get_topic_id(cid)
-            if not topic_id:
-                logger.debug(f"[AI] No topic for {cid}, skipping suggestion")
+            if not conv_manager or not topic_id:
+                logger.debug("[AI] No conv_manager or topic_id, skipping suggestion")
                 return
 
             try:
-                suggest_msg = f"💡 **AI предлагает ответ:**\n\n{text}\n\n_Отправьте этот текст или напишите свой ответ_"
+                suggest_msg = f"💡 **AI suggests response:**\n\n{text}\n\n_Send this text or write your own response_"
                 await agent_client.send_message(
                     entity=conv_manager.group_id,
                     message=suggest_msg,
@@ -930,97 +894,21 @@ class CRMHandler:
         vacancy_id: Optional[int],
         primary_agent: AgentAccount
     ) -> Optional[int]:
-        """
-        Try to create a topic, falling back to other agents if the primary is frozen.
-        """
-        from pathlib import Path
-
-        # First try with the primary agent (conv_manager's client)
-        try:
-            topic_id = await conv_manager.create_topic(
-                title=title,
-                contact_id=contact_id,
-                vacancy_id=vacancy_id
-            )
-            if topic_id:
-                return topic_id
-        except FrozenAccountError as e:
-            agent_name = Path(primary_agent.session_name).stem
-            logger.warning(f"Agent {agent_name} is frozen, trying other agents...")
-            # Update status to show agent is frozen
-            status_manager.update_agent_status(
-                session_name=agent_name,
-                status="frozen",
-                phone=primary_agent.phone if hasattr(primary_agent, 'phone') else "",
-                error="Account is frozen for forum operations"
-            )
-
-        # Try other agents from the pool
+        """Delegate to extracted function in topic_utils.py"""
         agent_pool = self.agent_pools.get(channel.id)
         if not agent_pool:
             logger.error("No agent pool found for channel")
             return None
 
-        for agent in agent_pool.agents:
-            if agent == primary_agent:
-                continue  # Skip the primary agent we already tried
-
-            if not agent.client or not agent.client.is_connected():
-                continue
-
-            agent_name = Path(agent.session_name).stem
-            logger.info(f"Trying to create topic with agent {agent_name}...")
-
-            try:
-                # Create a temporary ConversationManager with this agent's client
-                from telethon.tl.functions.messages import CreateForumTopicRequest
-                import random
-
-                group_entity = await agent.client.get_entity(conv_manager.group_id)
-                result = await agent.client(CreateForumTopicRequest(
-                    peer=group_entity,
-                    title=title[:128],
-                    random_id=random.randint(1, 2**31)
-                ))
-
-                topic_id = result.updates[0].id
-
-                # Cache in conv_manager
-                conv_manager._topic_cache[contact_id] = topic_id
-                conv_manager._reverse_topic_cache[topic_id] = contact_id
-
-                # Save to DB
-                await db.save_topic_contact(
-                    group_id=conv_manager.group_id,
-                    topic_id=topic_id,
-                    contact_id=contact_id,
-                    contact_name=title,
-                    vacancy_id=vacancy_id
-                )
-
-                logger.info(f"Topic created successfully with agent {agent_name}")
-                return topic_id
-
-            except FrozenAccountError:
-                logger.warning(f"Agent {agent_name} is also frozen")
-                status_manager.update_agent_status(
-                    session_name=agent_name,
-                    status="frozen",
-                    error="Account is frozen for forum operations"
-                )
-            except Exception as e:
-                if "frozen" in str(e).lower():
-                    logger.warning(f"Agent {agent_name} is frozen: {e}")
-                    status_manager.update_agent_status(
-                        session_name=agent_name,
-                        status="frozen",
-                        error=str(e)
-                    )
-                else:
-                    logger.error(f"Error creating topic with agent {agent_name}: {e}")
-
-        logger.error("All agents failed to create topic (frozen or error)")
-        return None
+        return await create_topic_with_fallback(
+            channel_id=channel.id,
+            conv_manager=conv_manager,
+            title=title,
+            contact_id=contact_id,
+            vacancy_id=vacancy_id,
+            primary_agent=primary_agent,
+            agent_pool=agent_pool
+        )
 
     async def _create_crm_topic(
         self,
@@ -1134,20 +1022,18 @@ class CRMHandler:
         message,
         chat_title: str
     ):
-        """Инициализация AI контекста для контакта"""
+        """Delegate to extracted function in topic_utils.py"""
         ai_handler = self.ai_handlers.get(channel.id)
         if not ai_handler:
             return
 
-        try:
-            job_info = f"Вакансия из канала: {chat_title}\n\n{message.text[:500]}..."
-            await ai_handler.initialize_context(
-                contact_id=contact_id,
-                initial_message=channel.auto_response_template,
-                job_info=job_info,
-            )
-        except Exception as e:
-            logger.warning(f"Ошибка инициализации AI контекста: {e}")
+        await init_ai_context(
+            ai_handler=ai_handler,
+            contact_id=contact_id,
+            auto_response_template=channel.auto_response_template,
+            chat_title=chat_title,
+            message_text=message.text or ""
+        )
 
     async def _mirror_auto_response(
         self,
@@ -1156,18 +1042,14 @@ class CRMHandler:
         channel: ChannelConfig,
         topic_id: int
     ):
-        """Зеркалирование автоответа в топик"""
-        try:
-            agent_message = f"🤖 **Агент:**\n\n{channel.auto_response_template}"
-            sent_msg = await agent.client.send_message(
-                entity=channel.crm_group_id,
-                message=agent_message,
-                reply_to=topic_id
-            )
-            if sent_msg and hasattr(sent_msg, 'id'):
-                conv_manager.save_message_to_topic(sent_msg.id, topic_id)
-        except Exception as e:
-            logger.error(f"Ошибка зеркалирования автоответа: {e}")
+        """Delegate to extracted function in topic_utils.py"""
+        await mirror_auto_response(
+            agent=agent,
+            conv_manager=conv_manager,
+            crm_group_id=channel.crm_group_id,
+            auto_response_template=channel.auto_response_template,
+            topic_id=topic_id
+        )
 
     async def _send_topic_info(
         self,
@@ -1179,16 +1061,16 @@ class CRMHandler:
         topic_id: int,
         message_processor
     ):
-        """Отправка информационного сообщения в топик"""
-        sender_info = f"{contact_user.first_name}"
-        if contact_user.username:
-            sender_info += f" (@{contact_user.username})"
-
-        info_message = f"📌 **Новый контакт: {sender_info}**\n\n"
-        info_message += f"📍 **Канал вакансии:** {chat_title}\n"
-        info_message += f"🔗 **Ссылка:** {message_processor.get_message_link(message, chat)}"
-
-        await conv_manager.send_to_topic(topic_id, info_message, link_preview=False)
+        """Delegate to extracted function in topic_utils.py"""
+        await send_topic_info(
+            conv_manager=conv_manager,
+            contact_user=contact_user,
+            chat_title=chat_title,
+            message=message,
+            chat=chat,
+            topic_id=topic_id,
+            message_processor=message_processor
+        )
 
     async def sync_missed_messages(self, lookback_hours: int = 2):
         """
