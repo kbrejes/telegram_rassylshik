@@ -10,6 +10,12 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Callable, Awaitable
 from datetime import datetime
 
+from src.constants import (
+    MESSAGE_QUEUE_MAX_RETRIES,
+    MAX_MESSAGE_AGE_HOURS,
+    MESSAGE_QUEUE_RETRY_INTERVAL_SECONDS,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,9 +46,9 @@ class MessageQueue:
     and retries the messages.
     """
 
-    MAX_RETRIES = 5
-    MAX_AGE_HOURS = 24  # Messages older than this are dropped
-    RETRY_INTERVAL_SECONDS = 60  # Check queue every minute
+    MAX_RETRIES = MESSAGE_QUEUE_MAX_RETRIES
+    MAX_AGE_HOURS = MAX_MESSAGE_AGE_HOURS
+    RETRY_INTERVAL_SECONDS = MESSAGE_QUEUE_RETRY_INTERVAL_SECONDS
 
     def __init__(self):
         self._queue: Dict[str, QueuedMessage] = {}  # key -> message

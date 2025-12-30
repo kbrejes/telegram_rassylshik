@@ -17,10 +17,10 @@ Self-correcting system:
 import asyncio
 import random
 import logging
-from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Callable, Awaitable, List, TYPE_CHECKING
 
 from src.human_behavior import human_behavior
+from src.config_models import AIConfig  # Canonical AIConfig
 from .llm_client import UnifiedLLMClient
 from .memory import ConversationMemory
 from .state_analyzer import StateAnalyzer, StateStorage, ConversationState, AnalysisResult
@@ -33,55 +33,6 @@ if TYPE_CHECKING:
     from src.database import Database
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class AIConfig:
-    """Configuration for AI conversation handler."""
-    llm_provider: str = "groq"
-    llm_model: str = "llama-3.3-70b-versatile"
-    persona_file: str = "personas/default.txt"
-    mode: str = "auto"  # "auto" | "suggest" | "manual"
-    reply_delay_seconds: tuple = (3, 8)  # (min, max) random delay
-    context_window_messages: int = 24
-    weaviate_host: str = "localhost"
-    weaviate_port: int = 8081  # Use 8081 since 8080 is web app
-    use_weaviate: bool = True
-    knowledge_files: list = field(default_factory=list)
-
-    # State analyzer settings
-    use_state_analyzer: bool = True  # Enable two-level phase system
-    prompts_dir: str = "prompts"
-    states_dir: str = "data/conversation_states"
-
-    # Self-correcting system settings (disabled - replaced by playground testing)
-    use_self_correction: bool = False
-    enable_contact_learning: bool = False
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AIConfig":
-        """Create from dictionary."""
-        delay = data.get("reply_delay_seconds", [3, 8])
-        if isinstance(delay, list):
-            delay = tuple(delay)
-
-        return cls(
-            llm_provider=data.get("llm_provider", "groq"),
-            llm_model=data.get("llm_model", "llama-3.3-70b-versatile"),
-            persona_file=data.get("persona_file", "personas/default.txt"),
-            mode=data.get("mode", "auto"),
-            reply_delay_seconds=delay,
-            context_window_messages=data.get("context_window_messages", 24),
-            weaviate_host=data.get("weaviate_host", "localhost"),
-            weaviate_port=data.get("weaviate_port", 8081),
-            use_weaviate=data.get("use_weaviate", True),
-            knowledge_files=data.get("knowledge_files", []),
-            use_state_analyzer=data.get("use_state_analyzer", True),
-            prompts_dir=data.get("prompts_dir", "prompts"),
-            states_dir=data.get("states_dir", "data/conversation_states"),
-            use_self_correction=data.get("use_self_correction", False),
-            enable_contact_learning=data.get("enable_contact_learning", False),
-        )
 
 
 class AIConversationHandler:

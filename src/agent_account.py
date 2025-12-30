@@ -64,35 +64,35 @@ class AgentAccount:
 
             if not await self.client.is_user_authorized():
                 if not self.phone:
-                    logger.error(f"Агент {self.session_name}: Требуется номер телефона для первого входа")
+                    logger.error(f"Agent {self.session_name}: Phone number required for first login")
                     return False
 
-                logger.info(f"Агент {self.session_name}: Начинается аутентификация...")
+                logger.info(f"Agent {self.session_name}: Starting authentication...")
                 await self.client.send_code_request(self.phone)
-                logger.info(f"Агент {self.session_name}: Код отправлен на {self.phone}")
+                logger.info(f"Agent {self.session_name}: Code sent to {self.phone}")
 
                 # Запросит код в терминале
                 await self.client.start(phone=self.phone)
 
             self._is_connected = True
-            # Сохраняем event loop в котором подключились
+            # Save the event loop where we connected
             self._connected_loop = asyncio.get_running_loop()
             me = await self.client.get_me()
-            username = f"@{me.username}" if me.username else "без username"
-            logger.info(f"Агент {self.session_name} подключен: {me.first_name} ({username})")
+            username = f"@{me.username}" if me.username else "no username"
+            logger.info(f"Agent {self.session_name} connected: {me.first_name} ({username})")
 
-            # Важно: запросить updates чтобы получать сообщения
+            # Important: request updates to receive messages
             try:
                 await self.client.catch_up()
-                logger.debug(f"Агент {self.session_name}: catch_up выполнен")
+                logger.debug(f"Agent {self.session_name}: catch_up completed")
             except Exception as e:
-                logger.warning(f"Агент {self.session_name}: catch_up ошибка: {e}")
+                logger.warning(f"Agent {self.session_name}: catch_up error: {e}")
 
             return True
 
         except errors.AuthKeyDuplicatedError:
-            # Сессия используется с другого IP - нужно пересоздать
-            logger.error(f"Агент {self.session_name}: AuthKeyDuplicatedError - сессия повреждена, удаляем")
+            # Session used from different IP - need to recreate
+            logger.error(f"Agent {self.session_name}: AuthKeyDuplicatedError - session corrupted, deleting")
             delete_session_file(self.session_name)
             self._is_connected = False
             self.last_connect_error = "Session corrupted (AuthKeyDuplicated). Re-add the agent."
@@ -102,24 +102,24 @@ class AgentAccount:
             error_str = str(e)
             error_lower = error_str.lower()
             if "database is locked" in error_lower:
-                logger.warning(f"Агент {self.session_name}: Сессия заблокирована другим процессом")
+                logger.warning(f"Agent {self.session_name}: Session locked by another process")
                 self.last_connect_error = "Session file locked by another process"
             elif "all available options" in error_lower or "resendcoderequest" in error_lower:
-                logger.error(f"Агент {self.session_name}: Ошибка подключения: {e}")
+                logger.error(f"Agent {self.session_name}: Connection error: {e}")
                 self.last_connect_error = "Telegram rate-limited code requests. Wait 30-60 minutes."
             else:
-                logger.error(f"Агент {self.session_name}: Ошибка подключения: {e}")
+                logger.error(f"Agent {self.session_name}: Connection error: {e}")
                 self.last_connect_error = error_str
             self._is_connected = False
             return False
     
     async def disconnect(self) -> None:
-        """Отключение от Telegram"""
+        """Disconnect from Telegram"""
         if self.client:
             await self.client.disconnect()
             self._is_connected = False
             self._connected_loop = None
-            logger.info(f"Агент {self.session_name} отключен")
+            logger.info(f"Agent {self.session_name} disconnected")
 
     def is_valid_loop(self) -> bool:
         """
@@ -165,11 +165,11 @@ class AgentAccount:
             True если сообщение отправлено успешно
         """
         if not self._is_connected or not self.client:
-            logger.error(f"Агент {self.session_name}: Не подключен")
+            logger.error(f"Agent {self.session_name}: Not connected")
             return False
 
         if not self.is_available():
-            logger.warning(f"Агент {self.session_name}: Недоступен (FloodWait)")
+            logger.warning(f"Agent {self.session_name}: Unavailable (FloodWait)")
             return False
 
         # Проверяем что мы в правильном event loop
@@ -185,47 +185,47 @@ class AgentAccount:
             # If InputPeerUser is passed, resolve the entity ourselves
             # because access_hash is session-specific (bot's hash won't work for agent)
             if isinstance(user, InputPeerUser):
-                logger.debug(f"Агент {self.session_name}: InputPeerUser получен, резолвим user_id={user.user_id}")
+                logger.debug(f"Agent {self.session_name}: InputPeerUser received, resolving user_id={user.user_id}")
                 try:
                     # Try to get entity by user_id using agent's own client
                     target = await self.client.get_entity(user.user_id)
-                    logger.debug(f"Агент {self.session_name}: Успешно резолвили в {target}")
+                    logger.debug(f"Agent {self.session_name}: Successfully resolved to {target}")
                 except Exception as resolve_err:
-                    logger.debug(f"Агент {self.session_name}: Не удалось резолвить: {resolve_err}")
+                    logger.debug(f"Agent {self.session_name}: Failed to resolve: {resolve_err}")
                     # Fall back to the original InputPeerUser
                     target = user
 
             await self.client.send_message(target, text)
-            logger.info(f"Агент {self.session_name}: Сообщение отправлено {user}")
+            logger.info(f"Agent {self.session_name}: Message sent to {user}")
             return True
 
         except errors.FloodWaitError as e:
-            logger.warning(f"Агент {self.session_name}: FloodWait {e.seconds} секунд")
+            logger.warning(f"Agent {self.session_name}: FloodWait {e.seconds} seconds")
             self.handle_flood_wait(e.seconds)
             return False
 
         except errors.PeerFloodError:
             # Spam limitation from Telegram - treat as 1 hour block
-            logger.warning(f"Агент {self.session_name}: PeerFlood (spam limitation), блокировка на 1 час")
+            logger.warning(f"Agent {self.session_name}: PeerFlood (spam limitation), blocked for 1 hour")
             self.handle_flood_wait(3600)  # 1 hour
             return False
 
         except errors.UserIsBlockedError:
-            logger.error(f"Агент {self.session_name}: Пользователь {user} заблокировал аккаунт")
+            logger.error(f"Agent {self.session_name}: User {user} blocked the account")
             return False
 
         except errors.UserPrivacyRestrictedError:
-            logger.error(f"Агент {self.session_name}: Нельзя написать {user} из-за настроек приватности")
+            logger.error(f"Agent {self.session_name}: Cannot message {user} due to privacy settings")
             return False
 
         except Exception as e:
             error_str = str(e).lower()
             # Check for spam-related errors in exception message
             if "spam" in error_str or "flood" in error_str or "limit" in error_str:
-                logger.warning(f"Агент {self.session_name}: Возможное ограничение спама: {e}")
+                logger.warning(f"Agent {self.session_name}: Possible spam limitation: {e}")
                 self.handle_flood_wait(1800)  # 30 min
                 return False
-            logger.error(f"Агент {self.session_name}: Ошибка отправки {user}: {e}")
+            logger.error(f"Agent {self.session_name}: Error sending to {user}: {e}")
             return False
     
     @property
@@ -293,7 +293,7 @@ class AgentAccount:
             await self.client.get_me()
             return True
         except Exception as e:
-            logger.warning(f"Агент {self.session_name}: health check failed: {e}")
+            logger.warning(f"Agent {self.session_name}: health check failed: {e}")
             self._is_connected = False
             return False
 

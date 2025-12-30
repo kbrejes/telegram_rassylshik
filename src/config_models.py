@@ -30,17 +30,32 @@ class AgentConfig:
 
 @dataclass
 class AIConfig:
-    """Конфигурация AI для разговоров"""
+    """Configuration for AI conversation handler.
+
+    This is the canonical AIConfig used throughout the codebase.
+    """
+    # LLM settings
     llm_provider: str = "groq"  # "groq" | "ollama" | "openai"
     llm_model: str = "llama-3.3-70b-versatile"
     persona_file: str = "personas/default.txt"
     mode: str = "auto"  # "auto" | "suggest" | "manual"
     reply_delay_seconds: List[int] = field(default_factory=lambda: [3, 8])
-    context_window_messages: int = 12
+    context_window_messages: int = 24
+
+    # Weaviate (vector memory)
     weaviate_host: str = "localhost"
     weaviate_port: int = 8080
     use_weaviate: bool = True
     knowledge_files: List[str] = field(default_factory=list)
+
+    # State analyzer settings
+    use_state_analyzer: bool = True
+    prompts_dir: str = "prompts"
+    states_dir: str = "data/conversation_states"
+
+    # Self-correcting system (disabled - replaced by playground testing)
+    use_self_correction: bool = False
+    enable_contact_learning: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -48,28 +63,48 @@ class AIConfig:
             'llm_model': self.llm_model,
             'persona_file': self.persona_file,
             'mode': self.mode,
-            'reply_delay_seconds': self.reply_delay_seconds,
+            'reply_delay_seconds': list(self.reply_delay_seconds),
             'context_window_messages': self.context_window_messages,
             'weaviate_host': self.weaviate_host,
             'weaviate_port': self.weaviate_port,
             'use_weaviate': self.use_weaviate,
             'knowledge_files': self.knowledge_files,
+            'use_state_analyzer': self.use_state_analyzer,
+            'prompts_dir': self.prompts_dir,
+            'states_dir': self.states_dir,
+            'use_self_correction': self.use_self_correction,
+            'enable_contact_learning': self.enable_contact_learning,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> 'AIConfig':
+        # Handle both list and tuple for reply_delay_seconds
+        delay = data.get('reply_delay_seconds', [3, 8])
+        if isinstance(delay, tuple):
+            delay = list(delay)
+
         return cls(
             llm_provider=data.get('llm_provider', 'groq'),
             llm_model=data.get('llm_model', 'llama-3.3-70b-versatile'),
             persona_file=data.get('persona_file', 'personas/default.txt'),
             mode=data.get('mode', 'auto'),
-            reply_delay_seconds=data.get('reply_delay_seconds', [3, 8]),
-            context_window_messages=data.get('context_window_messages', 12),
+            reply_delay_seconds=delay,
+            context_window_messages=data.get('context_window_messages', 24),
             weaviate_host=data.get('weaviate_host', 'localhost'),
             weaviate_port=data.get('weaviate_port', 8080),
             use_weaviate=data.get('use_weaviate', True),
             knowledge_files=data.get('knowledge_files', []),
+            use_state_analyzer=data.get('use_state_analyzer', True),
+            prompts_dir=data.get('prompts_dir', 'prompts'),
+            states_dir=data.get('states_dir', 'data/conversation_states'),
+            use_self_correction=data.get('use_self_correction', False),
+            enable_contact_learning=data.get('enable_contact_learning', False),
         )
+
+    @property
+    def reply_delay_tuple(self) -> tuple:
+        """Return reply_delay_seconds as tuple for backwards compatibility."""
+        return tuple(self.reply_delay_seconds)
 
 
 @dataclass

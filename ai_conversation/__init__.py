@@ -18,7 +18,8 @@ Phases:
 
 from .llm_client import UnifiedLLMClient, LLMProviderConfig
 from .memory import ConversationMemory
-from .handler import AIConversationHandler, AIHandlerPool, AIConfig
+from .handler import AIConversationHandler, AIHandlerPool
+from src.config_models import AIConfig  # Canonical AIConfig from config_models
 from .state_analyzer import StateAnalyzer, StateStorage, ConversationState, AnalysisResult
 from .phase_prompts import PhasePromptBuilder, ensure_prompts_directory
 from .edge_cases import edge_case_handler, EdgeCaseHandler, EdgeCaseResult

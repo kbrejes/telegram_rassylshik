@@ -17,7 +17,7 @@ from src.connection_status import status_manager
 from src.database import db
 from src.human_behavior import human_behavior
 from src.message_queue import message_queue
-from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig as AIHandlerConfig
+from ai_conversation import AIConversationHandler, AIHandlerPool, AIConfig
 from src.config_manager import ChannelConfig
 
 if TYPE_CHECKING:
@@ -273,7 +273,7 @@ class CRMHandler:
     ):
         """Инициализация AI handler для канала (atomic version)"""
         try:
-            ai_config = AIHandlerConfig.from_dict(channel.ai_config.to_dict())
+            ai_config = AIConfig.from_dict(channel.ai_config.to_dict())
             start_time = time.time()
             ai_handler = await ai_handler_pool.get_or_create(
                 channel_id=channel.id,

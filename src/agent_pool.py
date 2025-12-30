@@ -11,6 +11,10 @@ from src.agent_account import AgentAccount
 from src.config_manager import AgentConfig
 from src.connection_status import status_manager
 from src.human_behavior import human_behavior
+from src.constants import (
+    HEALTH_CHECK_INTERVAL_SECONDS,
+    DEFAULT_MAX_RETRIES,
+)
 from utils.retry import calculate_backoff, format_wait_time
 
 logger = logging.getLogger(__name__)
@@ -30,7 +34,7 @@ def set_main_thread():
     """Установить текущий поток как главный (вызывается при старте бота)"""
     global _main_thread_id
     _main_thread_id = threading.current_thread().ident
-    logger.info(f"Главный поток бота установлен: {_main_thread_id}")
+    logger.info(f"Main bot thread set: {_main_thread_id}")
 
 
 def is_main_thread() -> bool:
@@ -58,7 +62,7 @@ async def get_or_create_agent(session_name: str, phone: str, allow_create: bool 
         if session_name in _global_agents:
             agent = _global_agents[session_name]
             if agent._is_connected:
-                logger.debug(f"Агент {session_name} уже подключен, переиспользуем")
+                logger.debug(f"Agent {session_name} already connected, reusing")
                 return agent
             else:
                 # Агент был отключен - удаляем из реестра
@@ -66,7 +70,7 @@ async def get_or_create_agent(session_name: str, phone: str, allow_create: bool 
 
         # Проверяем, можем ли мы создавать нового агента
         if not allow_create:
-            logger.warning(f"Агент {session_name}: создание запрещено (allow_create=False)")
+            logger.warning(f"Agent {session_name}: creation not allowed (allow_create=False)")
             return None
 
         # Проверяем, находимся ли мы в главном потоке
@@ -116,10 +120,10 @@ async def get_or_create_agent(session_name: str, phone: str, allow_create: bool 
         except Exception as e:
             # Если ошибка "database is locked" - возможно другой процесс уже подключил
             if "database is locked" in str(e):
-                logger.warning(f"Агент {session_name}: database is locked - уже используется")
+                logger.warning(f"Agent {session_name}: database is locked - already in use")
                 status_manager.update_agent_status(session_name, "error", phone, error="Database locked")
             else:
-                logger.error(f"Агент {session_name}: ошибка подключения: {e}")
+                logger.error(f"Agent {session_name}: connection error: {e}")
                 status_manager.update_agent_status(session_name, "error", phone, error=str(e))
             return None
 
@@ -147,10 +151,10 @@ async def disconnect_all_global_agents() -> int:
                 status_manager.update_agent_status(session_name, "disconnected")
                 count += 1
             except Exception as e:
-                logger.error(f"Ошибка отключения агента {session_name}: {e}")
+                logger.error(f"Error disconnecting agent {session_name}: {e}")
                 status_manager.update_agent_status(session_name, "error", error=str(e))
         _global_agents.clear()
-        logger.info("Все глобальные агенты отключены")
+        logger.info("All global agents disconnected")
     return count
 
 
@@ -176,7 +180,7 @@ class AgentPool:
         Returns:
             True если хотя бы один агент подключился успешно
         """
-        logger.info(f"Инициализация пула из {len(self.agent_configs)} агентов...")
+        logger.info(f"Initializing pool with {len(self.agent_configs)} agents...")
 
         connected_count = 0
         for i, config in enumerate(self.agent_configs):
@@ -188,15 +192,15 @@ class AgentPool:
                     if agent not in self.agents:
                         self.agents.append(agent)
                     connected_count += 1
-                    logger.info(f"  ✅ Агент {i+1}/{len(self.agent_configs)} подключен: {config.session_name}")
+                    logger.info(f"  ✅ Agent {i+1}/{len(self.agent_configs)} connected: {config.session_name}")
                 else:
-                    logger.error(f"  ❌ Агент {i+1}/{len(self.agent_configs)} не подключился: {config.session_name}")
+                    logger.error(f"  ❌ Agent {i+1}/{len(self.agent_configs)} failed to connect: {config.session_name}")
 
             except Exception as e:
-                logger.error(f"  ❌ Ошибка подключения агента {config.session_name}: {e}")
+                logger.error(f"  ❌ Error connecting agent {config.session_name}: {e}")
 
         self._is_initialized = True
-        logger.info(f"📊 Пул инициализирован: {connected_count}/{len(self.agent_configs)} агентов активны")
+        logger.info(f"Pool initialized: {connected_count}/{len(self.agent_configs)} agents active")
 
         return connected_count > 0
     
@@ -223,22 +227,22 @@ class AgentPool:
 
         if not available_agents:
             if exclude_set:
-                logger.warning(f"Все агенты недоступны или уже попробованы ({len(exclude_set)} исключено)")
+                logger.warning(f"All agents unavailable or already tried ({len(exclude_set)} excluded)")
             else:
-                logger.warning("Все агенты недоступны (FloodWait)")
+                logger.warning("All agents unavailable (FloodWait)")
             return None
 
         # Выбираем агента с наименьшим временем ожидания
         best_agent = min(available_agents, key=lambda a: a.flood_wait_until or 0)
 
-        logger.debug(f"Выбран агент: {best_agent.session_name}")
+        logger.debug(f"Selected agent: {best_agent.session_name}")
         return best_agent
     
     async def send_message(
         self,
         user: Union[str, int, InputPeerUser, Any],
         text: str,
-        max_retries: int = 3,
+        max_retries: int = DEFAULT_MAX_RETRIES,
         contact_id: Optional[int] = None,
         simulate_human: bool = True
     ) -> bool:
@@ -283,22 +287,22 @@ class AgentPool:
 
                 success = await agent.send_message(user, text)
                 if success:
-                    logger.info(f"Сообщение отправлено через агента {agent.session_name}")
+                    logger.info(f"Message sent via agent {agent.session_name}")
                     return True
                 else:
-                    logger.warning(f"Агент {agent.session_name} не смог отправить, пробуем следующего")
+                    logger.warning(f"Agent {agent.session_name} failed to send, trying next")
 
             except Exception as e:
-                logger.error(f"Ошибка отправки через агента {agent.session_name}: {e}")
+                logger.error(f"Error sending via agent {agent.session_name}: {e}")
 
             # Небольшая задержка перед следующей попыткой
             if attempt < max_retries - 1:
                 await asyncio.sleep(0.5)
 
-        logger.error(f"Не удалось отправить сообщение после {len(tried_agents)} агентов")
+        logger.error(f"Failed to send message after trying {len(tried_agents)} agents")
         return False
 
-    async def periodic_health_check(self, interval: float = 300.0) -> None:
+    async def periodic_health_check(self, interval: float = HEALTH_CHECK_INTERVAL_SECONDS) -> None:
         """
         Фоновая задача для периодической проверки здоровья агентов
         с автоматическим переподключением.
@@ -306,7 +310,7 @@ class AgentPool:
         Args:
             interval: Интервал проверки в секундах (по умолчанию 5 минут)
         """
-        logger.info(f"Запуск периодической проверки агентов каждые {format_wait_time(int(interval))}")
+        logger.info(f"Starting periodic agent health check every {format_wait_time(int(interval))}")
         while True:
             await asyncio.sleep(interval)
 
@@ -319,7 +323,7 @@ class AgentPool:
             for i, agent in enumerate(self.agents):
                 if not await agent.health_check():
                     unhealthy_count += 1
-                    logger.warning(f"Агент {agent.session_name} недоступен, попытка переподключения...")
+                    logger.warning(f"Agent {agent.session_name} unavailable, attempting reconnection...")
 
                     # Попытка переподключения
                     try:
@@ -332,11 +336,11 @@ class AgentPool:
                         # Пробуем подключиться заново
                         if await agent.connect():
                             reconnected_count += 1
-                            logger.info(f"Агент {agent.session_name} успешно переподключен")
+                            logger.info(f"Agent {agent.session_name} reconnected successfully")
                         else:
-                            logger.error(f"Агент {agent.session_name} не удалось переподключить")
+                            logger.error(f"Agent {agent.session_name} failed to reconnect")
                     except Exception as e:
-                        logger.error(f"Ошибка переподключения агента {agent.session_name}: {e}")
+                        logger.error(f"Error reconnecting agent {agent.session_name}: {e}")
 
             if unhealthy_count > 0:
                 logger.warning(
@@ -385,7 +389,7 @@ class AgentPool:
         НЕ отключает агентов т.к. они могут использоваться другими каналами.
         Для полного отключения используйте disconnect_all_global_agents().
         """
-        logger.info(f"Очистка пула агентов ({len(self.agents)} агентов)")
+        logger.info(f"Clearing agent pool ({len(self.agents)} agents)")
         # Не отключаем агентов - они в глобальном реестре и могут использоваться другими каналами
         self.agents.clear()
         self._is_initialized = False
