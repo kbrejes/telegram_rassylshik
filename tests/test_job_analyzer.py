@@ -1,92 +1,19 @@
-"""Tests for JobAnalyzer."""
+"""Tests for JobAnalyzer.
+
+The primary filtering criteria is: has personal telegram contact.
+Salary and paid ad checks are no longer the main filters.
+"""
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from src.job_analyzer import JobAnalyzer, JobAnalysisResult
 
 
-class TestJobAnalyzerRegex:
-    """Test regex-based fallback analysis."""
+class TestJobAnalyzerContactExtraction:
+    """Test contact extraction - the main filtering criteria."""
 
     @pytest.fixture
     def analyzer(self):
         return JobAnalyzer(providers_config={}, min_salary_rub=70_000)
-
-    def test_salary_extraction_rub_simple(self, analyzer):
-        """Test salary extraction in rubles - simple format."""
-        text = "Зарплата: 150000 руб/мес"
-        result = analyzer._extract_salary_regex(text)
-        assert result == 150000
-
-    def test_salary_extraction_rub_with_spaces(self, analyzer):
-        """Test salary extraction with spaces."""
-        text = "Оплата 150 000 рублей в месяц"
-        result = analyzer._extract_salary_regex(text)
-        assert result == 150000
-
-    def test_salary_extraction_rub_from_keyword(self, analyzer):
-        """Test salary extraction from 'от' keyword."""
-        text = "от 120000 руб"
-        result = analyzer._extract_salary_regex(text)
-        assert result == 120000
-
-    def test_salary_extraction_usd(self, analyzer):
-        """Test salary extraction in dollars."""
-        text = "Salary: $2000/month"
-        result = analyzer._extract_salary_regex(text)
-        assert result == 200000  # 2000 * 100
-
-    def test_salary_extraction_usd_after_amount(self, analyzer):
-        """Test salary with $ after amount."""
-        text = "Оплата 1500$ в месяц"
-        result = analyzer._extract_salary_regex(text)
-        assert result == 150000
-
-    def test_salary_extraction_none(self, analyzer):
-        """Test when no salary found."""
-        text = "Ищем разработчика на проект"
-        result = analyzer._extract_salary_regex(text)
-        assert result is None
-
-    def test_paid_ad_detection_reklama(self, analyzer):
-        """Test paid advertisement detection - 'реклама'."""
-        text = "Реклама. Курс по заработку от 100000 рублей!"
-        result = analyzer._analyze_with_regex(text)
-        assert not result.is_real_job
-        assert not result.is_relevant
-
-    def test_paid_ad_detection_mlm(self, analyzer):
-        """Test MLM detection."""
-        text = "Приглашаем в сетевой маркетинг! Заработок без вложений!"
-        result = analyzer._analyze_with_regex(text)
-        assert not result.is_real_job
-
-    def test_paid_ad_detection_easy_money(self, analyzer):
-        """Test easy money detection."""
-        text = "Легкие деньги! Работа 2 часа в день!"
-        result = analyzer._analyze_with_regex(text)
-        assert not result.is_real_job
-
-    def test_real_job_passes(self, analyzer):
-        """Test that real job ad passes."""
-        text = """
-        Ищем Senior Python разработчика
-        Зарплата: 200000 руб
-        Требования: Python, Django, PostgreSQL
-        Писать: @hr_manager
-        """
-        result = analyzer._analyze_with_regex(text)
-        assert result.is_real_job
-        assert result.is_salary_ok
-        assert result.is_relevant
-
-    def test_low_salary_rejection(self, analyzer):
-        """Test rejection of low salary jobs."""
-        text = "Вакансия: менеджер. Зарплата 50000 руб"
-        result = analyzer._analyze_with_regex(text)
-        assert result.is_real_job  # It's a real job
-        assert not result.is_salary_ok  # But salary too low
-        assert not result.is_relevant
-        assert "too low" in result.rejection_reason.lower()
 
     def test_contact_extraction_simple(self, analyzer):
         """Test contact username extraction."""
@@ -118,11 +45,101 @@ class TestJobAnalyzerRegex:
         result = analyzer._extract_contact_regex(text)
         assert result is None
 
+
+class TestJobAnalyzerRegex:
+    """Test regex-based fallback analysis."""
+
+    @pytest.fixture
+    def analyzer(self):
+        return JobAnalyzer(providers_config={}, min_salary_rub=70_000)
+
+    def test_vacancy_with_contact_passes(self, analyzer):
+        """Test that vacancy with personal contact passes."""
+        text = """
+        Ищем Senior Python разработчика
+        Зарплата: 200000 руб
+        Требования: Python, Django, PostgreSQL
+        Писать: @hr_manager
+        """
+        result = analyzer._analyze_with_regex(text)
+        assert result.is_relevant
+        assert result.contact_username == "@hr_manager"
+
+    def test_vacancy_without_contact_rejected(self, analyzer):
+        """Test that vacancy without personal contact is rejected."""
+        text = """
+        Ищем Senior Python разработчика
+        Зарплата: 200000 руб
+        Откликнуться: https://forms.google.com/apply
+        """
+        result = analyzer._analyze_with_regex(text)
+        assert not result.is_relevant
+        assert "No personal Telegram contact" in result.rejection_reason
+
+    def test_vacancy_with_bot_only_rejected(self, analyzer):
+        """Test that vacancy with only bot contact is rejected."""
+        text = """
+        Ищем разработчика
+        Для отклика пишите: @hiring_bot
+        """
+        result = analyzer._analyze_with_regex(text)
+        assert not result.is_relevant
+        assert "bot" in result.rejection_reason.lower()
+
+    def test_vacancy_low_salary_with_contact_passes(self, analyzer):
+        """Test that vacancy with low salary but contact still passes.
+
+        Salary is no longer a filtering criteria.
+        """
+        text = "Вакансия: менеджер. Зарплата 30000 руб. Писать: @hr_test"
+        result = analyzer._analyze_with_regex(text)
+        assert result.is_relevant  # Passes because has contact
+        assert result.contact_username == "@hr_test"
+
+    def test_paid_ad_with_contact_passes(self, analyzer):
+        """Test that even paid ads pass if they have a personal contact.
+
+        The goal is to extract contacts, not filter paid ads.
+        """
+        text = "Реклама! Заработок от 100000 рублей! Писать: @hr_offer"
+        result = analyzer._analyze_with_regex(text)
+        assert result.is_relevant  # Passes because has contact
+        assert result.contact_username == "@hr_offer"
+
     def test_fallback_flag_set(self, analyzer):
         """Test that fallback flag is set in regex analysis."""
         text = "Вакансия Python разработчик, 150000 руб, @hr_test"
         result = analyzer._analyze_with_regex(text)
         assert result.used_fallback is True
+
+
+class TestJobAnalyzerBotDetection:
+    """Test bot username detection."""
+
+    @pytest.fixture
+    def analyzer(self):
+        return JobAnalyzer(providers_config={}, min_salary_rub=70_000)
+
+    def test_detect_bot_from_tme_link(self, analyzer):
+        """Test bot detection from t.me link."""
+        text = "Откликнуться через бота: t.me/hiring_bot"
+        contact, contact_type, bot_username = analyzer.detect_contact_type(text)
+        assert contact_type == "bot"
+        assert bot_username == "@hiring_bot"
+
+    def test_detect_bot_from_username(self, analyzer):
+        """Test bot detection from @username."""
+        text = "Писать боту @support_bot"
+        contact, contact_type, bot_username = analyzer.detect_contact_type(text)
+        assert contact_type == "bot"
+        assert bot_username == "@support_bot"
+
+    def test_personal_contact_preferred_over_bot(self, analyzer):
+        """Test that personal contact is extracted when both present."""
+        text = "Бот @apply_bot. HR контакт: @maria_hr"
+        # The _extract_contact_regex should find @maria_hr
+        result = analyzer._extract_contact_regex(text)
+        assert result == "@maria_hr"
 
 
 class TestJobAnalyzerLLM:
@@ -136,80 +153,67 @@ class TestJobAnalyzerLLM:
         return analyzer
 
     @pytest.mark.asyncio
-    async def test_llm_analysis_success(self, analyzer):
-        """Test successful LLM analysis."""
+    async def test_llm_analysis_with_contact(self, analyzer):
+        """Test LLM analysis when contact is found."""
         mock_response = '''
         {
-            "is_real_job": true,
-            "is_paid_ad": false,
-            "salary_monthly_rub": 120000,
             "contact_username": "@hr_test",
-            "summary": "Real job posting for Python developer"
+            "reason": "Found personal contact for job application"
         }
         '''
 
         analyzer.llm.achat = AsyncMock(return_value=mock_response)
-        result = await analyzer.analyze("Test job posting")
+        result = await analyzer.analyze("Test job posting with @hr_test")
 
         assert result.is_relevant
         assert result.contact_username == "@hr_test"
-        assert result.salary_monthly_rub == 120000
         assert result.used_fallback is False
 
     @pytest.mark.asyncio
-    async def test_llm_detects_paid_ad(self, analyzer):
-        """Test LLM detection of paid advertisement."""
+    async def test_llm_analysis_no_contact(self, analyzer):
+        """Test LLM analysis when no contact found."""
         mock_response = '''
         {
-            "is_real_job": false,
-            "is_paid_ad": true,
-            "paid_ad_reason": "This is a course promotion, not a job",
-            "salary_monthly_rub": null,
             "contact_username": null,
-            "summary": "Paid advertisement for online course"
+            "reason": "No personal Telegram contact found"
         }
         '''
 
         analyzer.llm.achat = AsyncMock(return_value=mock_response)
-        result = await analyzer.analyze("Курс по заработку!")
+        result = await analyzer.analyze("Vacancy without contact")
 
         assert not result.is_relevant
-        assert not result.is_real_job
-        assert "course" in result.rejection_reason.lower()
+        assert result.contact_username is None
+        assert "No personal Telegram contact" in result.rejection_reason
 
     @pytest.mark.asyncio
-    async def test_llm_low_salary_rejection(self, analyzer):
-        """Test LLM rejection of low salary."""
+    async def test_llm_detects_bot_contact(self, analyzer):
+        """Test that LLM-extracted bot contacts are rejected."""
         mock_response = '''
         {
-            "is_real_job": true,
-            "is_paid_ad": false,
-            "salary_monthly_rub": 50000,
-            "contact_username": "@hr_cheap",
-            "summary": "Real job but low salary"
+            "contact_username": "@hiring_bot",
+            "reason": "Found bot for applications"
         }
         '''
 
         analyzer.llm.achat = AsyncMock(return_value=mock_response)
-        result = await analyzer.analyze("Вакансия с низкой зп")
+        result = await analyzer.analyze("Apply via @hiring_bot")
 
         assert not result.is_relevant
-        assert result.is_real_job  # It IS a real job
-        assert not result.is_salary_ok  # But salary is low
-        assert result.salary_monthly_rub == 50000
-        assert "too low" in result.rejection_reason.lower()
+        assert result.contact_type == "bot"
+        assert "bot" in result.rejection_reason.lower()
 
     @pytest.mark.asyncio
     async def test_llm_fallback_on_error(self, analyzer):
         """Test fallback to regex when LLM fails."""
         analyzer.llm.achat = AsyncMock(side_effect=Exception("LLM error"))
 
-        text = "Вакансия: разработчик @dev_contact 100000 руб"
+        text = "Вакансия: разработчик @hr_anna 100000 руб"
         result = await analyzer.analyze(text)
 
         assert result.used_fallback
-        assert result.contact_username == "@dev_contact"
-        assert result.is_relevant  # 100k > 70k threshold
+        assert result.contact_username == "@hr_anna"
+        assert result.is_relevant
 
     @pytest.mark.asyncio
     async def test_llm_malformed_json_fallback(self, analyzer):
@@ -223,17 +227,15 @@ class TestJobAnalyzerLLM:
         # Should fallback to regex
         assert result.used_fallback
         assert result.is_relevant
+        assert result.contact_username == "@recruiter"
 
     @pytest.mark.asyncio
     async def test_contact_normalization(self, analyzer):
         """Test that contact is normalized with @ prefix."""
         mock_response = '''
         {
-            "is_real_job": true,
-            "is_paid_ad": false,
-            "salary_monthly_rub": 150000,
             "contact_username": "hr_without_at",
-            "summary": "Real job"
+            "reason": "Found contact"
         }
         '''
 
@@ -247,31 +249,38 @@ class TestJobAnalyzerLLM:
 class TestJobAnalysisResult:
     """Test JobAnalysisResult dataclass."""
 
-    def test_relevant_when_both_true(self):
-        """Test is_relevant is True when both conditions met."""
+    def test_relevant_when_has_contact(self):
+        """Test is_relevant is True when has personal contact."""
         result = JobAnalysisResult(
             is_real_job=True,
             is_salary_ok=True,
             is_relevant=True,
+            contact_username="@hr_test",
+            contact_type="user",
         )
         assert result.is_relevant
 
-    def test_not_relevant_when_paid_ad(self):
-        """Test is_relevant is False for paid ads."""
+    def test_not_relevant_when_no_contact(self):
+        """Test is_relevant is False when no contact."""
         result = JobAnalysisResult(
-            is_real_job=False,
+            is_real_job=True,
             is_salary_ok=True,
             is_relevant=False,
-            rejection_reason="Paid advertisement"
+            contact_username=None,
+            contact_type="none",
+            rejection_reason="No personal Telegram contact found"
         )
         assert not result.is_relevant
 
-    def test_not_relevant_when_low_salary(self):
-        """Test is_relevant is False for low salary."""
+    def test_not_relevant_when_bot_contact(self):
+        """Test is_relevant is False for bot contact."""
         result = JobAnalysisResult(
             is_real_job=True,
-            is_salary_ok=False,
+            is_salary_ok=True,
             is_relevant=False,
-            rejection_reason="Salary too low"
+            contact_username=None,
+            contact_type="bot",
+            bot_username="@hiring_bot",
+            rejection_reason="Only bot contact found"
         )
         assert not result.is_relevant

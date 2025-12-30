@@ -138,56 +138,47 @@ class JobAnalyzer:
 
     def _get_default_system_prompt(self) -> str:
         """Get the hardcoded default system prompt."""
-        return f"""You are a job posting analyzer. Analyze Russian/English job ads.
+        return """You are a telegram contact extractor. Your ONLY task is to find a personal Telegram username (@username) in job postings.
 
-Your task:
-1. Determine if this is a REAL job vacancy or a PAID ADVERTISEMENT
-2. Extract salary and convert to monthly RUB (minimum acceptable: {{min_salary}} RUB)
-3. Find the Telegram contact username for applying
+RULES:
+1. Look for @username of a PERSON (HR manager, recruiter, hiring manager) - someone you can write to apply for the job
+2. The contact is usually near words: "писать", "резюме", "связь", "контакт", "HR", "обращаться", "откликнуться", "написать", "отклик", "телеграм"
 
-Signs of PAID ADVERTISEMENT (reject these):
-- "Реклама", "Партнерский материал", "На правах рекламы"
-- Promotes a course, training, or info-product
-- "Заработок от X рублей" without specific job duties
-- MLM/pyramid scheme indicators
-- Too good to be true offers (easy money, no skills needed)
-- Recruiting for network marketing or similar schemes
+IGNORE and DO NOT return:
+- Channel/group usernames containing: job, jobs, work, vacancy, career, remote, marketing, smm, digital, channel, chat, group, news, hire, hiring, freelance, вакансии, работа
+- Bot usernames (ending with "bot" or "_bot")
+- t.me/ links to channels or groups (not personal profiles)
+- Any @username that doesn't look like a person's name
 
-CONTACT EXTRACTION RULES:
-- Look for @username of a PERSON (HR, recruiter, hiring manager) to contact for job applications
-- IGNORE channel/group usernames - these usually contain words like: job, jobs, work, career, vacancy, remote, junior, senior, dev, marketing, channel, chat, news, group, hire, hiring
-- Personal usernames usually look like real names: @ivan_petrov, @hr_anna, @recruiter_kate
-- The contact is usually near words: "писать", "резюме", "связь", "контакт", "HR", "обращаться", "откликнуться"
-- If no clear personal contact found, return null - DO NOT return channel usernames
-- If multiple usernames found, pick the one that looks like a person's name
+Personal usernames usually look like:
+- Real names: @ivan_petrov, @anna_hr, @recruiter_kate, @maria_hiring
+- Name + role: @hr_anna, @ceo_john, @pm_alex
+- Short names: @Ritttka1, @seohr, @kbrejes
 
-Respond ONLY with valid JSON, no other text.""".replace("{min_salary}", str(self.min_salary_rub))
+If NO personal contact found, return null.
+If MULTIPLE usernames found, pick the one that looks most like a person's real name or HR contact.
+
+Respond ONLY with valid JSON, no other text."""
 
     def _build_prompt(self, text: str) -> str:
-        return f'''Analyze this job posting:
+        return f'''Extract the personal Telegram contact from this job posting:
 
 ---
 {text[:2000]}
 ---
 
-Respond in JSON format:
+JSON response:
 {{
-    "is_real_job": true/false,
-    "is_paid_ad": true/false,
-    "paid_ad_reason": "reason if paid ad, else null",
-
-    "salary_amount": number or null,
-    "salary_currency": "RUB" | "USD" | "EUR" | null,
-    "salary_period": "month" | "hour" | "day" | "project" | null,
-    "salary_monthly_rub": number or null,
-
     "contact_username": "@username" or null,
-
-    "summary": "1-sentence analysis"
+    "reason": "brief explanation of why this contact was chosen or why no contact found"
 }}'''
 
     def _parse_llm_response(self, response: str, original_text: str) -> JobAnalysisResult:
-        """Parse LLM JSON response."""
+        """Parse LLM JSON response.
+
+        The primary filtering criteria is: has personal telegram contact.
+        Salary and paid ad checks are secondary/optional.
+        """
         try:
             # Extract JSON from response
             json_match = re.search(r'\{[\s\S]*\}', response)
@@ -196,75 +187,74 @@ Respond in JSON format:
 
             data = json.loads(json_match.group())
 
-            is_real_job = data.get("is_real_job", True) and not data.get("is_paid_ad", False)
-            salary_monthly = data.get("salary_monthly_rub")
-
-            # Validate salary (skip if using custom prompt - user controls filtering)
-            is_salary_ok = True
-            if not self._is_using_custom_prompt() and salary_monthly is not None:
-                is_salary_ok = salary_monthly >= self.min_salary_rub
-
-            # Build rejection reason
-            rejection_reason = None
-            if not is_real_job:
-                rejection_reason = data.get("paid_ad_reason", "Paid advertisement")
-            elif not is_salary_ok:
-                rejection_reason = f"Salary too low: {salary_monthly} RUB/month (min: {self.min_salary_rub})"
-
-            # Normalize contact
+            # Normalize contact from LLM
             contact = data.get("contact_username")
             if contact and not contact.startswith("@"):
                 contact = f"@{contact}"
 
-            # Detect contact type (user vs bot)
-            _, contact_type, bot_username = self.detect_contact_type(original_text)
+            # Check if LLM-extracted contact is a bot
+            is_bot_contact = False
+            if contact:
+                contact_lower = contact.lower()
+                if contact_lower.endswith('bot') or '_bot' in contact_lower:
+                    is_bot_contact = True
+                    logger.info(f"[JobAnalyzer] LLM extracted bot username: {contact}")
 
-            # If LLM found a contact but we detected a bot, use bot
-            if contact_type == "bot" and bot_username:
-                contact = None  # Don't use LLM contact if it's a bot scenario
+            # Detect bot from original text (fallback check)
+            _, text_contact_type, bot_username = self.detect_contact_type(original_text)
+
+            # Determine final contact type
+            if is_bot_contact:
+                contact_type = "bot"
+                bot_username = contact
+                contact = None  # Don't use bot as personal contact
+            elif contact:
+                contact_type = "user"
+            elif text_contact_type == "bot":
+                contact_type = "bot"
+            else:
+                contact_type = "none"
+
+            # PRIMARY CRITERIA: Has personal telegram contact
+            has_personal_contact = contact is not None and contact_type == "user"
+
+            # Build result - is_relevant based on having personal contact
+            rejection_reason = None
+            if not has_personal_contact:
+                if contact_type == "bot":
+                    rejection_reason = f"Only bot contact found: {bot_username}"
+                else:
+                    rejection_reason = data.get("reason", "No personal Telegram contact found")
 
             result = JobAnalysisResult(
-                is_real_job=is_real_job,
-                is_salary_ok=is_salary_ok,
-                is_relevant=is_real_job and is_salary_ok,
+                is_real_job=True,  # We don't check this anymore
+                is_salary_ok=True,  # We don't check salary anymore
+                is_relevant=has_personal_contact,  # ONLY criteria: has personal TG contact
                 contact_username=contact,
                 contact_type=contact_type,
                 bot_username=bot_username,
-                salary_monthly_rub=salary_monthly,
+                salary_monthly_rub=None,  # Not extracting salary
                 rejection_reason=rejection_reason,
-                analysis_summary=data.get("summary", ""),
+                analysis_summary=data.get("reason", ""),
                 used_fallback=False,
             )
 
-            # Check if TG contact is required but not found
-            if self.require_tg_contact and not result.contact_username and result.contact_type != "bot":
-                logger.info(f"[JobAnalyzer] Rejecting vacancy: require_tg_contact=True but no TG contact found")
-                result = JobAnalysisResult(
-                    is_real_job=result.is_real_job,
-                    is_salary_ok=result.is_salary_ok,
-                    is_relevant=False,  # Mark as not relevant
-                    contact_username=result.contact_username,
-                    contact_type=result.contact_type,
-                    bot_username=result.bot_username,
-                    salary_monthly_rub=result.salary_monthly_rub,
-                    rejection_reason="No Telegram contact found (required by config)",
-                    analysis_summary=result.analysis_summary,
-                    used_fallback=result.used_fallback,
-                )
-
-            # Log when vacancy passes but has no TG contact
-            if result.is_relevant and not result.contact_username:
-                logger.warning(f"[JobAnalyzer] Vacancy PASSED but NO TG contact extracted. Type={contact_type}, Bot={bot_username}")
+            if result.is_relevant:
+                logger.info(f"[JobAnalyzer] Vacancy PASSED - personal contact: {contact}")
+            else:
+                logger.info(f"[JobAnalyzer] Vacancy REJECTED - {rejection_reason}")
 
             return result
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning(f"[JobAnalyzer] Failed to parse LLM response: {e}")
-            # Partial parse - try to at least get contact
+            # Fallback to regex
             contact = self._extract_contact_from_response(response)
             result = self._analyze_with_regex(original_text)
-            if contact and result.contact_type == "user":
+            if contact and not contact.lower().endswith('bot'):
                 result.contact_username = contact
+                result.contact_type = "user"
+                result.is_relevant = True
             return result
 
     def _extract_contact_from_response(self, response: str) -> Optional[str]:
@@ -273,56 +263,42 @@ Respond in JSON format:
         return match.group(1) if match else None
 
     def _analyze_with_regex(self, text: str) -> JobAnalysisResult:
-        """Fallback regex-based analysis."""
-        text_lower = text.lower()
+        """Fallback regex-based analysis.
 
-        # Paid ad detection
-        ad_patterns = [
-            r'реклама', r'партн[её]рский материал', r'на правах рекламы',
-            r'инфопродукт', r'инфо-продукт',
-            r'mlm', r'сетевой маркетинг', r'пирамид',
-            r'лёгкие деньги', r'легкие деньги', r'легкий заработок',
-            r'без опыта.{0,20}от \d+.{0,10}руб',  # "без опыта от 100000 руб" - suspicious
-        ]
-        is_paid_ad = any(re.search(p, text_lower) for p in ad_patterns)
-
-        # Salary extraction (skip validation if using custom prompt)
-        salary = self._extract_salary_regex(text)
-        if self._is_using_custom_prompt():
-            is_salary_ok = True
-        else:
-            is_salary_ok = salary is None or salary >= self.min_salary_rub
-
+        Uses the same criteria as LLM: has personal telegram contact.
+        """
         # Contact extraction with bot detection
         contact, contact_type, bot_username = self.detect_contact_type(text)
 
+        # PRIMARY CRITERIA: Has personal telegram contact
+        has_personal_contact = contact is not None and contact_type == "user"
+
         rejection_reason = None
-        if is_paid_ad:
-            rejection_reason = "Detected as paid advertisement (regex)"
-        elif salary and not is_salary_ok:
-            rejection_reason = f"Salary too low: {salary} RUB/month (min: {self.min_salary_rub})"
+        if not has_personal_contact:
+            if contact_type == "bot":
+                rejection_reason = f"Only bot contact found: {bot_username}"
+            else:
+                rejection_reason = "No personal Telegram contact found (regex)"
 
-        # Check if TG contact is required but not found
-        has_valid_contact = contact is not None or contact_type == "bot"
-        is_relevant = not is_paid_ad and is_salary_ok
-
-        if self.require_tg_contact and not has_valid_contact and is_relevant:
-            logger.info(f"[JobAnalyzer] Rejecting vacancy (regex): require_tg_contact=True but no TG contact found")
-            is_relevant = False
-            rejection_reason = "No Telegram contact found (required by config)"
-
-        return JobAnalysisResult(
-            is_real_job=not is_paid_ad,
-            is_salary_ok=is_salary_ok,
-            is_relevant=is_relevant,
+        result = JobAnalysisResult(
+            is_real_job=True,  # We don't check this anymore
+            is_salary_ok=True,  # We don't check salary anymore
+            is_relevant=has_personal_contact,  # ONLY criteria: has personal TG contact
             contact_username=contact,
             contact_type=contact_type,
             bot_username=bot_username,
-            salary_monthly_rub=salary,
+            salary_monthly_rub=None,  # Not extracting salary
             rejection_reason=rejection_reason,
             analysis_summary="Analyzed with regex fallback",
             used_fallback=True,
         )
+
+        if result.is_relevant:
+            logger.info(f"[JobAnalyzer] (regex) Vacancy PASSED - personal contact: {contact}")
+        else:
+            logger.info(f"[JobAnalyzer] (regex) Vacancy REJECTED - {rejection_reason}")
+
+        return result
 
     def _extract_salary_regex(self, text: str) -> Optional[int]:
         """Extract and normalize salary using regex."""
