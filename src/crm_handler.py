@@ -128,27 +128,28 @@ class CRMHandler:
             if not agent_pool:
                 continue
 
-            primary_agent = agent_pool.get_available_agent()
-            if not primary_agent:
-                continue
-
             group_id = conv_manager.group_id
+            entity_found = False
 
-            try:
-                # Try to get entity - should work now that agent is in group
-                entity = await primary_agent.client.get_entity(group_id)
-                logger.info(f"  ✅ {channel_id}: CRM group accessible (title: {getattr(entity, 'title', 'N/A')})")
-                status_manager.update_crm_status(channel_id, group_id, True)
-            except Exception as e:
-                # Try getting dialogs first to refresh cache
+            # Try ALL agents in the pool, not just primary
+            for agent in agent_pool.agents:
+                if entity_found:
+                    break
                 try:
-                    await primary_agent.client.get_dialogs(limit=100)
-                    entity = await primary_agent.client.get_entity(group_id)
-                    logger.info(f"  ✅ {channel_id}: CRM group accessible after dialog refresh")
+                    entity = await agent.client.get_entity(group_id)
+                    logger.info(f"  ✅ {channel_id}: CRM accessible via {agent.session_name} (title: {getattr(entity, 'title', 'N/A')})")
                     status_manager.update_crm_status(channel_id, group_id, True)
-                except Exception as e2:
-                    logger.warning(f"  ❌ {channel_id}: Still can't access CRM group: {e2}")
-                    status_manager.update_crm_status(channel_id, group_id, False, str(e2))
+
+                    # Update ConversationManager to use this agent's client
+                    conv_manager.client = agent.client
+                    entity_found = True
+                except Exception as e:
+                    logger.debug(f"  Agent {agent.session_name} can't access CRM: {e}")
+                    continue
+
+            if not entity_found:
+                logger.warning(f"  ❌ {channel_id}: No agent can access CRM group {group_id}")
+                status_manager.update_crm_status(channel_id, group_id, False, "No agent has access")
 
     async def _setup_channel_crm(self, channel: ChannelConfig):
         """Настройка CRM для одного канала (legacy wrapper)"""
