@@ -562,7 +562,8 @@
         }
 
         function checkBrandingChanges() {
-            if (!currentBranding) return true; // First time save
+            // If branding hasn't loaded yet or is empty, always allow save
+            if (!currentBranding || !currentBranding.icon) return true;
 
             const current = {
                 icon: selectedIcon,
@@ -573,12 +574,16 @@
                 gradientTo: normalizeColorValue(document.getElementById('gradient-to').value)
             };
 
-            return current.icon !== currentBranding.icon ||
-                   current.customIconUrl !== currentBranding.customIconUrl ||
+            // Compare each field
+            const hasChanges = current.icon !== currentBranding.icon ||
+                   current.customIconUrl !== (currentBranding.customIconUrl || '') ||
                    current.appName !== currentBranding.appName ||
                    current.tagline !== currentBranding.tagline ||
                    current.gradientFrom !== currentBranding.gradientFrom ||
                    current.gradientTo !== currentBranding.gradientTo;
+
+            console.log('Branding changes check:', { current, saved: currentBranding, hasChanges });
+            return hasChanges;
         }
 
         async function resetToDefaults() {
