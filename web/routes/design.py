@@ -125,9 +125,10 @@ def parse_css_variables(css_content: str) -> Dict[str, Any]:
             var_type = "text"
             if var_value.startswith('#') or var_value.startswith('rgb') or var_value.startswith('hsl'):
                 var_type = "color"
-            elif 'rem' in var_value or 'px' in var_value or 'em' in var_value:
+            elif re.search(r'\d(rem|px|em|%)(\s|$|;)', var_value):
+                # Match actual CSS units (e.g., "0.5rem", "10px") not substrings like "system"
                 var_type = "size"
-            elif 'ms' in var_value:
+            elif re.search(r'\dms(\s|$|;)', var_value):
                 var_type = "duration"
 
             current_section["variables"].append({
