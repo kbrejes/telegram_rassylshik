@@ -1,4 +1,5 @@
 """HTML страницы"""
+import json
 from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse
@@ -13,6 +14,30 @@ router = APIRouter()
 
 BASE_DIR = Path(__file__).parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+# Default branding values
+DEFAULT_BRANDING = {
+    "icon": "lightning",
+    "customIconUrl": "",
+    "appName": "Job Notification",
+    "tagline": "Bot Dashboard",
+    "gradientFrom": "#8b5cf6",
+    "gradientTo": "#9333ea"
+}
+
+def get_branding() -> dict:
+    """Load branding from JSON file or return defaults"""
+    branding_path = BASE_DIR / "static" / "branding.json"
+    try:
+        if branding_path.exists():
+            with open(branding_path) as f:
+                return {**DEFAULT_BRANDING, **json.load(f)}
+    except Exception:
+        pass
+    return DEFAULT_BRANDING
+
+# Add branding as a global template variable
+templates.env.globals["branding"] = get_branding
 
 
 @router.get("/")
