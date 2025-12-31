@@ -247,6 +247,7 @@
                     // Show cached data immediately
                     currentVacancy = cachedVacancy.vacancy;
                     currentContactId = cachedVacancy.vacancy.contact_id;
+                    currentContactUsername = cachedVacancy.vacancy.contact_username;
                     recentVacancies = cachedRecent.filter(v => v.has_messages || v.contact_name || v.contact_username);
                     renderVacancy(cachedVacancy.vacancy);
                     renderContactCircles();
