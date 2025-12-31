@@ -202,6 +202,10 @@ async def update_design_tokens(request: DesignTokensUpdate):
         if not DESIGN_TOKENS_PATH.exists():
             return {"success": False, "error": "Design tokens file not found"}
 
+        # Log what we're receiving
+        for var_name, value in request.tokens.items():
+            logger.info(f"Updating token {var_name} = {repr(value)}")
+
         css_content = DESIGN_TOKENS_PATH.read_text()
         updated_content = update_css_variables(css_content, request.tokens)
 
