@@ -18,11 +18,22 @@ templates = Jinja2Templates(directory="web/templates")
 
 # Path to design tokens CSS
 DESIGN_TOKENS_PATH = Path(__file__).parent.parent / "static" / "design-tokens.css"
+BRANDING_PATH = Path(__file__).parent.parent / "static" / "branding.json"
 
 
 class DesignTokensUpdate(BaseModel):
     """Request body for updating design tokens."""
     tokens: Dict[str, str]
+
+
+class BrandingUpdate(BaseModel):
+    """Request body for updating branding."""
+    icon: str = "lightning"
+    customIconUrl: str = ""
+    appName: str = "Job Notification"
+    tagline: str = "Bot Dashboard"
+    gradientFrom: str = "#8b5cf6"
+    gradientTo: str = "#9333ea"
 
 
 def parse_css_variables(css_content: str) -> Dict[str, Any]:
@@ -197,4 +208,49 @@ async def reset_design_tokens():
 
     except Exception as e:
         logger.error(f"Error resetting design tokens: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ==================== Branding API ====================
+
+@router.get("/api/design/branding")
+async def get_branding():
+    """Get branding settings."""
+    import json
+    try:
+        if not BRANDING_PATH.exists():
+            # Return defaults
+            return {
+                "success": True,
+                "branding": {
+                    "icon": "lightning",
+                    "customIconUrl": "",
+                    "appName": "Job Notification",
+                    "tagline": "Bot Dashboard",
+                    "gradientFrom": "#8b5cf6",
+                    "gradientTo": "#9333ea"
+                }
+            }
+
+        branding = json.loads(BRANDING_PATH.read_text())
+        return {"success": True, "branding": branding}
+
+    except Exception as e:
+        logger.error(f"Error reading branding: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.put("/api/design/branding")
+async def update_branding(request: BrandingUpdate):
+    """Update branding settings."""
+    import json
+    try:
+        branding = request.dict()
+        BRANDING_PATH.write_text(json.dumps(branding, indent=4))
+
+        logger.info(f"Updated branding: icon={request.icon}, appName={request.appName}")
+        return {"success": True}
+
+    except Exception as e:
+        logger.error(f"Error updating branding: {e}")
         return {"success": False, "error": str(e)}

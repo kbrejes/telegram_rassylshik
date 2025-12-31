@@ -42,9 +42,88 @@
 
                 <!-- Main content -->
                 <div id="content" class="hidden max-w-4xl mx-auto space-y-6">
+                    <!-- Branding Section -->
+                    <div class="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Branding</h3>
+                        </div>
+                        <div class="p-6 space-y-6">
+                            <!-- Logo Preview -->
+                            <div class="flex items-center gap-4">
+                                <div id="logo-preview" class="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600">
+                                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p id="preview-app-name" class="font-semibold text-gray-900 dark:text-white">Job Notification</p>
+                                    <p id="preview-tagline" class="text-sm text-gray-500">Bot Dashboard</p>
+                                </div>
+                            </div>
+
+                            <!-- Icon Picker -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Logo Icon</label>
+                                <div class="grid grid-cols-6 sm:grid-cols-8 gap-2" id="icon-picker">
+                                    <!-- Icons will be populated by JS -->
+                                </div>
+                            </div>
+
+                            <!-- Custom Icon URL -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Or use custom image URL</label>
+                                <input type="text" id="custom-icon-url" placeholder="https://example.com/logo.png"
+                                    class="w-full px-3 py-2 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white text-sm border-0 focus:ring-2 focus:ring-accent outline-none"
+                                    oninput="updateBrandingPreview()">
+                            </div>
+
+                            <!-- App Name & Tagline -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">App Name</label>
+                                    <input type="text" id="app-name" value="Job Notification"
+                                        class="w-full px-3 py-2 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white text-sm border-0 focus:ring-2 focus:ring-accent outline-none"
+                                        oninput="updateBrandingPreview()">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tagline</label>
+                                    <input type="text" id="tagline" value="Bot Dashboard"
+                                        class="w-full px-3 py-2 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white text-sm border-0 focus:ring-2 focus:ring-accent outline-none"
+                                        oninput="updateBrandingPreview()">
+                                </div>
+                            </div>
+
+                            <!-- Gradient Colors -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gradient From</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="color" id="gradient-from-picker" value="#8b5cf6"
+                                            class="w-10 h-10 rounded-lg cursor-pointer border-0 p-0"
+                                            onchange="document.getElementById('gradient-from').value = this.value; updateBrandingPreview()">
+                                        <input type="text" id="gradient-from" value="#8b5cf6"
+                                            class="flex-1 px-3 py-2 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white text-sm font-mono border-0 focus:ring-2 focus:ring-accent outline-none"
+                                            oninput="updateBrandingPreview()">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gradient To</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="color" id="gradient-to-picker" value="#9333ea"
+                                            class="w-10 h-10 rounded-lg cursor-pointer border-0 p-0"
+                                            onchange="document.getElementById('gradient-to').value = this.value; updateBrandingPreview()">
+                                        <input type="text" id="gradient-to" value="#9333ea"
+                                            class="flex-1 px-3 py-2 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white text-sm font-mono border-0 focus:ring-2 focus:ring-accent outline-none"
+                                            oninput="updateBrandingPreview()">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Live Preview Card -->
                     <div class="bg-white dark:bg-dark-800 rounded-xl p-6 border border-gray-200 dark:border-dark-700">
-                        <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Live Preview</h2>
+                        <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Color Preview</h2>
                         <div class="flex flex-wrap gap-4">
                             <button class="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover transition">
                                 Primary Button
@@ -77,6 +156,28 @@
     <script>
         let originalTokens = {};
         let pendingChanges = {};
+        let currentBranding = {};
+        let selectedIcon = 'lightning';
+
+        // Available icons for the picker
+        const availableIcons = {
+            lightning: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>',
+            briefcase: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>',
+            bell: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>',
+            chat: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>',
+            robot: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>',
+            sparkles: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>',
+            cube: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>',
+            fire: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"/>',
+            star: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>',
+            heart: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>',
+            globe: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
+            code: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>',
+            terminal: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>',
+            users: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>',
+            rocket: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>',
+            chip: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>'
+        };
 
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('sidebar-open');
@@ -244,19 +345,135 @@
             });
         }
 
-        async function loadTokens() {
+        // ==================== Branding Functions ====================
+
+        function renderIconPicker() {
+            const container = document.getElementById('icon-picker');
+            container.innerHTML = Object.entries(availableIcons).map(([name, path]) => `
+                <button type="button" onclick="selectIcon('${name}')"
+                    class="icon-btn p-2 rounded-lg border-2 transition-all ${selectedIcon === name ? 'border-accent bg-accent/10' : 'border-gray-200 dark:border-dark-600 hover:border-accent/50'}"
+                    title="${name}">
+                    <svg class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        ${path}
+                    </svg>
+                </button>
+            `).join('');
+        }
+
+        function selectIcon(iconName) {
+            selectedIcon = iconName;
+            document.getElementById('custom-icon-url').value = '';  // Clear custom URL
+            renderIconPicker();
+            updateBrandingPreview();
+        }
+
+        function updateBrandingPreview() {
+            const customUrl = document.getElementById('custom-icon-url').value.trim();
+            const appName = document.getElementById('app-name').value;
+            const tagline = document.getElementById('tagline').value;
+            const gradientFrom = normalizeColorValue(document.getElementById('gradient-from').value);
+            const gradientTo = normalizeColorValue(document.getElementById('gradient-to').value);
+
+            // Update preview text
+            document.getElementById('preview-app-name').textContent = appName;
+            document.getElementById('preview-tagline').textContent = tagline;
+
+            // Update preview logo
+            const logoPreview = document.getElementById('logo-preview');
+            logoPreview.style.background = `linear-gradient(to bottom right, ${gradientFrom}, ${gradientTo})`;
+
+            if (customUrl) {
+                logoPreview.innerHTML = `<img src="${customUrl}" class="w-7 h-7 object-contain" onerror="this.style.display='none'">`;
+            } else if (availableIcons[selectedIcon]) {
+                logoPreview.innerHTML = `
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        ${availableIcons[selectedIcon]}
+                    </svg>
+                `;
+            }
+
+            // Sync color pickers
+            if (gradientFrom.match(/^#[0-9A-Fa-f]{6}$/)) {
+                document.getElementById('gradient-from-picker').value = gradientFrom;
+            }
+            if (gradientTo.match(/^#[0-9A-Fa-f]{6}$/)) {
+                document.getElementById('gradient-to-picker').value = gradientTo;
+            }
+        }
+
+        async function loadBranding() {
             try {
-                const response = await fetch('/api/design/tokens');
+                const response = await fetch('/api/design/branding');
                 const data = await response.json();
 
+                if (data.success && data.branding) {
+                    currentBranding = data.branding;
+                    selectedIcon = data.branding.icon || 'lightning';
+
+                    document.getElementById('custom-icon-url').value = data.branding.customIconUrl || '';
+                    document.getElementById('app-name').value = data.branding.appName || 'Job Notification';
+                    document.getElementById('tagline').value = data.branding.tagline || 'Bot Dashboard';
+                    document.getElementById('gradient-from').value = data.branding.gradientFrom || '#8b5cf6';
+                    document.getElementById('gradient-to').value = data.branding.gradientTo || '#9333ea';
+
+                    renderIconPicker();
+                    updateBrandingPreview();
+                }
+            } catch (error) {
+                console.error('Error loading branding:', error);
+            }
+        }
+
+        async function saveBranding() {
+            const branding = {
+                icon: selectedIcon,
+                customIconUrl: document.getElementById('custom-icon-url').value.trim(),
+                appName: document.getElementById('app-name').value,
+                tagline: document.getElementById('tagline').value,
+                gradientFrom: normalizeColorValue(document.getElementById('gradient-from').value),
+                gradientTo: normalizeColorValue(document.getElementById('gradient-to').value)
+            };
+
+            try {
+                const response = await fetch('/api/design/branding', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(branding)
+                });
+
+                const data = await response.json();
                 if (!data.success) {
                     throw new Error(data.error);
+                }
+
+                currentBranding = branding;
+                return true;
+            } catch (error) {
+                console.error('Error saving branding:', error);
+                throw error;
+            }
+        }
+
+        // ==================== Load Functions ====================
+
+        async function loadTokens() {
+            try {
+                const [tokensRes, brandingRes] = await Promise.all([
+                    fetch('/api/design/tokens'),
+                    fetch('/api/design/branding')
+                ]);
+
+                const tokensData = await tokensRes.json();
+
+                if (!tokensData.success) {
+                    throw new Error(tokensData.error);
                 }
 
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('content').classList.remove('hidden');
 
-                renderTokens(data);
+                renderTokens(tokensData);
+                await loadBranding();
             } catch (error) {
                 console.error('Error loading tokens:', error);
                 document.getElementById('loading').innerHTML = `
@@ -269,7 +486,10 @@
         }
 
         async function saveAllChanges() {
-            if (Object.keys(pendingChanges).length === 0) {
+            const hasTokenChanges = Object.keys(pendingChanges).length > 0;
+            const hasBrandingChanges = checkBrandingChanges();
+
+            if (!hasTokenChanges && !hasBrandingChanges) {
                 showToast('No changes to save', 'info');
                 return;
             }
@@ -279,36 +499,73 @@
             status.textContent = 'Saving...';
 
             try {
-                const response = await fetch('/api/design/tokens', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tokens: pendingChanges })
-                });
+                let savedCount = 0;
 
-                const data = await response.json();
+                // Save tokens if changed
+                if (hasTokenChanges) {
+                    const response = await fetch('/api/design/tokens', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tokens: pendingChanges })
+                    });
 
-                if (!data.success) {
-                    throw new Error(data.error);
+                    const data = await response.json();
+
+                    if (!data.success) {
+                        throw new Error(data.error);
+                    }
+
+                    // Update original tokens with saved values
+                    Object.assign(originalTokens, pendingChanges);
+                    pendingChanges = {};
+                    savedCount += data.updated;
+
+                    // Remove change indicators
+                    document.querySelectorAll('[data-var]').forEach(input => {
+                        input.classList.remove('ring-2', 'ring-accent');
+                    });
                 }
 
-                // Update original tokens with saved values
-                Object.assign(originalTokens, pendingChanges);
-                pendingChanges = {};
-
-                // Remove change indicators
-                document.querySelectorAll('[data-var]').forEach(input => {
-                    input.classList.remove('ring-2', 'ring-accent');
-                });
+                // Save branding if changed
+                if (hasBrandingChanges) {
+                    await saveBranding();
+                    savedCount++;
+                }
 
                 status.textContent = 'Saved!';
                 setTimeout(() => status.classList.add('hidden'), 2000);
 
-                showToast(`Saved ${data.updated} design tokens`);
+                const message = hasTokenChanges && hasBrandingChanges
+                    ? `Saved ${savedCount} tokens + branding`
+                    : hasBrandingChanges
+                        ? 'Saved branding settings'
+                        : `Saved ${savedCount} design tokens`;
+                showToast(message);
             } catch (error) {
                 console.error('Error saving:', error);
                 status.classList.add('hidden');
                 showToast(`Failed to save: ${error.message}`, 'error');
             }
+        }
+
+        function checkBrandingChanges() {
+            if (!currentBranding) return true; // First time save
+
+            const current = {
+                icon: selectedIcon,
+                customIconUrl: document.getElementById('custom-icon-url').value.trim(),
+                appName: document.getElementById('app-name').value,
+                tagline: document.getElementById('tagline').value,
+                gradientFrom: normalizeColorValue(document.getElementById('gradient-from').value),
+                gradientTo: normalizeColorValue(document.getElementById('gradient-to').value)
+            };
+
+            return current.icon !== currentBranding.icon ||
+                   current.customIconUrl !== currentBranding.customIconUrl ||
+                   current.appName !== currentBranding.appName ||
+                   current.tagline !== currentBranding.tagline ||
+                   current.gradientFrom !== currentBranding.gradientFrom ||
+                   current.gradientTo !== currentBranding.gradientTo;
         }
 
         async function resetToDefaults() {
