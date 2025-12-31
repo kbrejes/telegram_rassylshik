@@ -191,6 +191,7 @@
         let currentVacancyId = {{ vacancy_id }};
         let currentVacancy = null;
         let currentContactId = null;
+        let currentContactUsername = null;  // Fallback when no contact_id (no CRM topic yet)
         let currentAgentSession = null;
         let agentsStatus = {};
         let recentVacancies = [];
@@ -276,6 +277,7 @@
 
                 currentVacancy = vacancyData.vacancy;
                 currentContactId = vacancyData.vacancy.contact_id;
+                currentContactUsername = vacancyData.vacancy.contact_username;
 
                 if (recentData.success) {
                     recentVacancies = recentData.vacancies.filter(v => v.has_messages || v.contact_name || v.contact_username);
@@ -525,8 +527,8 @@
                     }
 
                     // Show chat input if we have a contact to message
-                    // (currentContactId is set from vacancy data in loadVacancy)
-                    if (currentContactId) {
+                    // Either contact_id (from CRM topic) or contact_username (from vacancy)
+                    if (currentContactId || currentContactUsername) {
                         document.getElementById('chat-input-container').classList.remove('hidden');
                         loadAgents();
                     }
@@ -616,7 +618,8 @@
             const input = document.getElementById('chat-message-input');
             const agentSelector = document.getElementById('agent-selector');
             const message = input?.value?.trim();
-            if (!message || !currentContactId) return;
+            // Need either contact_id or contact_username to send
+            if (!message || (!currentContactId && !currentContactUsername)) return;
 
             const selectedAgent = agentSelector?.value || null;
 
@@ -643,7 +646,12 @@
             messageLog.scrollTop = messageLog.scrollHeight;
 
             try {
-                const requestBody = { contact_id: currentContactId, message };
+                // Use contact_id if available, otherwise use username
+                const requestBody = {
+                    contact_id: currentContactId,
+                    contact_username: currentContactUsername,
+                    message
+                };
                 if (selectedAgent) {
                     requestBody.agent_session = selectedAgent;
                 }

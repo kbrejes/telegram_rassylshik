@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(gcloud:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(sqlite3:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "Bash(npm:*)",
+      "Bash(pip:*)",
+      "Bash(pytest:*)",
+      "Bash(tail:*)",
+      "Bash(head:*)",
+      "Bash(grep:*)",
+      "Bash(echo:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*:*)",
+      "Bash(sudo rm -rf:*)"
+    ]
+  }
+}

@@ -270,7 +270,8 @@ async def get_vacancy_messages(vacancy_id: int):
 
 
 class SendMessageRequest(BaseModel):
-    contact_id: str
+    contact_id: Optional[str] = None  # Telegram user ID (if CRM topic exists)
+    contact_username: Optional[str] = None  # @username (fallback when no CRM topic)
     message: str
     agent_session: Optional[str] = None  # Optional: manually select agent
 
@@ -281,11 +282,18 @@ async def send_crm_message(request: SendMessageRequest):
     try:
         from src.command_queue import command_queue
 
+        # Need either contact_id or contact_username
+        if not request.contact_id and not request.contact_username:
+            return {"success": False, "error": "No contact to message (missing contact_id and username)"}
+
         # Add command to queue for bot to process
         command_data = {
-            "contact_id": request.contact_id,
             "message": request.message
         }
+        if request.contact_id:
+            command_data["contact_id"] = request.contact_id
+        if request.contact_username:
+            command_data["contact_username"] = request.contact_username
         if request.agent_session:
             command_data["agent_session"] = request.agent_session
 

@@ -212,37 +212,48 @@ class CommandHandler:
 
         Args:
             target: Dict with keys:
-                - contact_id: Telegram user ID to send to
+                - contact_id: Telegram user ID to send to (if CRM topic exists)
+                - contact_username: @username (fallback when no CRM topic)
                 - message: Message text
                 - agent_session: (optional) Specific agent session to use
         """
-        contact_id = int(target.get("contact_id"))
+        contact_id_str = target.get("contact_id")
+        contact_id = int(contact_id_str) if contact_id_str else None
+        contact_username = target.get("contact_username")
         message = target.get("message", "")
         requested_agent_session = target.get("agent_session")  # Optional manual selection
 
-        if not contact_id or not message:
-            raise ValueError("contact_id and message are required")
+        if not message:
+            raise ValueError("message is required")
 
-        # Find which channel has this contact
-        channel_id = self.bot.crm.contact_to_channel.get(contact_id)
-        if not channel_id:
-            # Try to find in conversation managers
-            for ch_id, conv_manager in self.bot.crm.conversation_managers.items():
-                if contact_id in conv_manager._topic_cache:
-                    channel_id = ch_id
-                    self.bot.crm.contact_to_channel[contact_id] = channel_id
-                    break
+        if not contact_id and not contact_username:
+            raise ValueError("contact_id or contact_username is required")
 
+        # Find which channel has this contact (or use first available for username-only)
+        channel_id = None
+        if contact_id:
+            channel_id = self.bot.crm.contact_to_channel.get(contact_id)
+            if not channel_id:
+                # Try to find in conversation managers
+                for ch_id, conv_manager in self.bot.crm.conversation_managers.items():
+                    if contact_id in conv_manager._topic_cache:
+                        channel_id = ch_id
+                        self.bot.crm.contact_to_channel[contact_id] = channel_id
+                        break
+
+        # If still no channel, use first available agent pool (for username-only sends)
         if not channel_id:
-            raise ValueError(f"No channel found for contact {contact_id}")
+            if self.bot.crm.agent_pools:
+                channel_id = next(iter(self.bot.crm.agent_pools.keys()))
+            else:
+                raise ValueError("No agent pools available")
 
         conv_manager = self.bot.crm.conversation_managers.get(channel_id)
-        if not conv_manager:
-            raise ValueError(f"No conversation manager for channel {channel_id}")
+        # conv_manager may be None for username-only sends (no CRM topic yet)
 
-        topic_id = conv_manager.get_topic_id(contact_id)
-        if not topic_id:
-            raise ValueError(f"No topic found for contact {contact_id}")
+        topic_id = None
+        if conv_manager and contact_id:
+            topic_id = conv_manager.get_topic_id(contact_id)
 
         # Get agent pool
         agent_pool = self.bot.crm.agent_pools.get(channel_id)
@@ -271,7 +282,7 @@ class CommandHandler:
             else:
                 raise ValueError(f"Agent {requested_agent_session} not found in pool")
 
-        if not agent:
+        if not agent and topic_id:
             # Try previously assigned agent for this topic
             assigned_agent = self.bot.crm.topic_to_agent.get(topic_id)
             if assigned_agent and assigned_agent.is_available():
@@ -295,15 +306,19 @@ class CommandHandler:
 
         logger.info(f"Using agent {agent.session_name} ({agent_source}) to send message")
 
-        # Record in AI context
-        ai_handler = self.bot.crm.ai_handlers.get(channel_id)
-        if ai_handler:
-            ai_handler.add_operator_message(contact_id, message)
+        # Determine send target: contact_id or username
+        send_target = contact_id if contact_id else contact_username
+
+        # Record in AI context (only if we have contact_id)
+        if contact_id:
+            ai_handler = self.bot.crm.ai_handlers.get(channel_id)
+            if ai_handler:
+                ai_handler.add_operator_message(contact_id, message)
 
         # Send message to contact with proper error handling
         try:
-            sent_message = await agent.client.send_message(contact_id, message)
-            if sent_message:
+            sent_message = await agent.client.send_message(send_target, message)
+            if sent_message and conv_manager and contact_id:
                 conv_manager.mark_agent_sent_message(sent_message.id)
 
         except telethon_errors.FloodWaitError as e:
@@ -333,20 +348,21 @@ class CommandHandler:
                 raise ValueError(f"Agent rate limited: {e}")
             raise
 
-        # Mirror to CRM topic
-        try:
-            operator_msg = f"👤 **Operator:**\n\n{message}"
-            topic_sent = await agent.client.send_message(
-                entity=conv_manager.group_id,
-                message=operator_msg,
-                reply_to=topic_id
-            )
-            if topic_sent:
-                conv_manager.save_message_to_topic(topic_sent.id, topic_id)
-        except Exception as e:
-            logger.warning(f"Failed to mirror operator message to CRM topic: {e}")
+        # Mirror to CRM topic (only if we have a topic)
+        if conv_manager and topic_id:
+            try:
+                operator_msg = f"👤 **Operator:**\n\n{message}"
+                topic_sent = await agent.client.send_message(
+                    entity=conv_manager.group_id,
+                    message=operator_msg,
+                    reply_to=topic_id
+                )
+                if topic_sent:
+                    conv_manager.save_message_to_topic(topic_sent.id, topic_id)
+            except Exception as e:
+                logger.warning(f"Failed to mirror operator message to CRM topic: {e}")
 
-        logger.info(f"Sent CRM message to contact {contact_id} via {agent.session_name}")
+        logger.info(f"Sent message to {send_target} via {agent.session_name}")
 
     def _find_agent_by_session(self, agent_pool, session_name: str) -> Optional[AgentAccount]:
         """Find an agent in the pool by session name."""
