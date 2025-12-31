@@ -125,6 +125,8 @@ def parse_css_variables(css_content: str) -> Dict[str, Any]:
             var_type = "text"
             if var_value.startswith('#') or var_value.startswith('rgb') or var_value.startswith('hsl'):
                 var_type = "color"
+            elif var_name.startswith('--font-') and ('serif' in var_value or 'mono' in var_value):
+                var_type = "font"
             elif re.search(r'\d(rem|px|em|%)(\s|$|;)', var_value):
                 # Match actual CSS units (e.g., "0.5rem", "10px") not substrings like "system"
                 var_type = "size"
