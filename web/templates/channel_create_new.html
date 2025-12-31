@@ -103,7 +103,7 @@
                             <div class="flex gap-2 mt-3">
                                 <input type="text" id="new_template_name" placeholder="Template name"
                                     class="flex-1 px-4 py-2 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent outline-none">
-                                <button onclick="saveTemplate()" class="px-4 py-2 rounded-lg bg-accent text-white hover:bg-violet-600 transition">
+                                <button onclick="saveTemplate()" class="px-4 py-2 rounded-lg bg-accent text-white hover:bg-accent-hover transition">
                                     Save
                                 </button>
                             </div>
@@ -233,7 +233,7 @@
                     Cancel
                 </button>
                 <button onclick="processAgentAuth()" id="agent_auth_btn"
-                    class="flex-1 px-4 py-3 rounded-lg bg-accent text-white hover:bg-violet-600 transition">
+                    class="flex-1 px-4 py-3 rounded-lg bg-accent text-white hover:bg-accent-hover transition">
                     Get Code
                 </button>
             </div>
@@ -324,7 +324,7 @@
 
                 html += `
                     <div class="p-4 rounded-lg border-2 cursor-pointer transition-all ${isSelected
-                        ? 'border-accent bg-violet-50 dark:bg-violet-900/20'
+                        ? 'border-accent bg-accent/10'
                         : 'border-gray-200 dark:border-dark-600 hover:border-accent'}"
                          onclick="toggleAgent('${agent.session_name}')">
                         <div class="flex items-center justify-between">
@@ -385,7 +385,7 @@
                 const isSelected = selectedTemplateId === t.id;
                 html += `
                     <div class="p-3 rounded-lg border cursor-pointer transition-all ${isSelected
-                        ? 'border-accent bg-violet-50 dark:bg-violet-900/20'
+                        ? 'border-accent bg-accent/10'
                         : 'border-gray-200 dark:border-dark-600 hover:border-accent'}"
                          onclick="selectTemplate('${t.id}')">
                         <div class="font-medium text-gray-900 dark:text-white text-sm">${isSelected ? '&check; ' : ''}${t.name}</div>

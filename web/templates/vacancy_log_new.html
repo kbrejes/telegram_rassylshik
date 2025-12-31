@@ -95,7 +95,7 @@
 
                 <!-- Filter Buttons -->
                 <div class="flex flex-wrap gap-2 mb-4">
-                    <button class="filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-violet-100 dark:bg-accent/20 text-violet-700 dark:text-accent" data-filter="all" onclick="setFilter('all')">All</button>
+                    <button class="filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-accent/20 text-accent" data-filter="all" onclick="setFilter('all')">All</button>
                     <button class="filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600" data-filter="passed" onclick="setFilter('passed')">Passed</button>
                     <button class="filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600" data-filter="filtered" onclick="setFilter('filtered')">Filtered</button>
                 </div>
@@ -178,7 +178,7 @@
             currentOffset = 0;
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 if (btn.dataset.filter === filter) {
-                    btn.className = 'filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-violet-100 dark:bg-accent/20 text-violet-700 dark:text-accent';
+                    btn.className = 'filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-accent/20 text-accent';
                 } else {
                     btn.className = 'filter-btn px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-600';
                 }
@@ -301,7 +301,7 @@
                             <!-- Chat input area -->
                             <div class="flex items-center gap-2 p-2 border-t border-gray-200 dark:border-dark-700 bg-gray-50 dark:bg-dark-800">
                                 <input type="text" id="modal-chat-input" placeholder="Type a message..." class="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-dark-600 rounded-lg bg-white dark:bg-dark-700 text-gray-900 dark:text-white placeholder-gray-400" />
-                                <button onclick="sendModalMessage()" class="px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
+                                <button onclick="sendModalMessage()" class="px-3 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
                                 </button>
                             </div>
@@ -393,10 +393,10 @@
                         <div class="mb-3 ${msg.is_agent ? 'text-right' : ''}">
                             <div class="inline-block max-w-[85%] px-3 py-2 rounded-lg text-sm ${
                                 msg.is_agent
-                                    ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-900 dark:text-violet-200'
+                                    ? 'bg-accent/20 text-accent'
                                     : 'bg-white dark:bg-dark-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-dark-600'
                             }">
-                                <div class="text-xs font-medium mb-1 ${msg.is_agent ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'}">${escapeHtml(msg.sender_name)}</div>
+                                <div class="text-xs font-medium mb-1 ${msg.is_agent ? 'text-accent' : 'text-gray-500 dark:text-gray-400'}">${escapeHtml(msg.sender_name)}</div>
                                 <div class="whitespace-pre-wrap">${escapeHtml(msg.text)}</div>
                             </div>
                         </div>
@@ -451,7 +451,7 @@
             const container = document.getElementById('modal-chat-messages');
             container.innerHTML += `
                 <div class="mb-3 text-right">
-                    <div class="inline-block max-w-[85%] px-3 py-2 rounded-lg text-sm bg-violet-100 dark:bg-violet-900/30 text-violet-900 dark:text-violet-200">
+                    <div class="inline-block max-w-[85%] px-3 py-2 rounded-lg text-sm bg-accent/20 text-accent">
                         <div class="whitespace-pre-wrap">${escapeHtml(message)}</div>
                     </div>
                 </div>
@@ -505,7 +505,7 @@
         function updatePromptStatus() {
             const status = document.getElementById('prompt-status');
             status.textContent = isCustomPrompt ? 'Custom prompt' : 'Default prompt';
-            status.className = isCustomPrompt ? 'ml-auto text-xs text-violet-600 dark:text-accent' : 'ml-auto text-xs text-gray-500 dark:text-gray-400';
+            status.className = isCustomPrompt ? 'ml-auto text-xs text-accent' : 'ml-auto text-xs text-gray-500 dark:text-gray-400';
         }
 
         async function saveFilterPrompt() {
