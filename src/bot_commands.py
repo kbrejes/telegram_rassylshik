@@ -7,9 +7,12 @@ health checks, send messages, etc.)
 import asyncio
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Any, Callable, Awaitable, Tuple
+from typing import TYPE_CHECKING, Dict, Any, Callable, Awaitable, Tuple, Optional
+
+from telethon import errors as telethon_errors
 
 from src.agent_pool import get_or_create_agent, get_existing_agent, disconnect_all_global_agents
+from src.agent_account import AgentAccount
 from src.connection_status import status_manager
 from src.command_queue import command_queue
 from src.session_config import get_agent_session_path, SESSIONS_DIR
@@ -205,9 +208,17 @@ class CommandHandler:
         logger.info("Health check completed")
 
     async def send_crm_message(self, target: dict) -> None:
-        """Send a message to a CRM contact from web interface"""
+        """Send a message to a CRM contact from web interface.
+
+        Args:
+            target: Dict with keys:
+                - contact_id: Telegram user ID to send to
+                - message: Message text
+                - agent_session: (optional) Specific agent session to use
+        """
         contact_id = int(target.get("contact_id"))
         message = target.get("message", "")
+        requested_agent_session = target.get("agent_session")  # Optional manual selection
 
         if not contact_id or not message:
             raise ValueError("contact_id and message are required")
@@ -233,27 +244,94 @@ class CommandHandler:
         if not topic_id:
             raise ValueError(f"No topic found for contact {contact_id}")
 
-        # Get an available agent
+        # Get agent pool
         agent_pool = self.bot.crm.agent_pools.get(channel_id)
         if not agent_pool:
             raise ValueError(f"No agent pool for channel {channel_id}")
 
-        agent = self.bot.crm.topic_to_agent.get(topic_id)
+        # Select agent with priority:
+        # 1. Manually requested agent (if specified and available)
+        # 2. Previously assigned agent for this topic (if available)
+        # 3. Any available agent from pool
+        agent: Optional[AgentAccount] = None
+        agent_source = ""
+
+        if requested_agent_session:
+            # User manually selected an agent
+            agent = self._find_agent_by_session(agent_pool, requested_agent_session)
+            if agent:
+                if agent.is_available():
+                    agent_source = "manual"
+                else:
+                    remaining = agent.flood_wait_remaining
+                    raise ValueError(
+                        f"Agent {requested_agent_session} is in flood wait "
+                        f"({remaining}s remaining). Please select another agent."
+                    )
+            else:
+                raise ValueError(f"Agent {requested_agent_session} not found in pool")
+
         if not agent:
+            # Try previously assigned agent for this topic
+            assigned_agent = self.bot.crm.topic_to_agent.get(topic_id)
+            if assigned_agent and assigned_agent.is_available():
+                agent = assigned_agent
+                agent_source = "assigned"
+
+        if not agent:
+            # Fall back to any available agent
             agent = agent_pool.get_available_agent()
+            if agent:
+                agent_source = "pool"
 
         if not agent or not agent.client:
+            # Provide helpful error message about blocked agents
+            blocked_agents = self._get_blocked_agents_info(agent_pool)
+            if blocked_agents:
+                raise ValueError(
+                    f"No available agent. Blocked agents: {blocked_agents}"
+                )
             raise ValueError("No available agent to send message")
+
+        logger.info(f"Using agent {agent.session_name} ({agent_source}) to send message")
 
         # Record in AI context
         ai_handler = self.bot.crm.ai_handlers.get(channel_id)
         if ai_handler:
             ai_handler.add_operator_message(contact_id, message)
 
-        # Send message to contact
-        sent_message = await agent.client.send_message(contact_id, message)
-        if sent_message:
-            conv_manager.mark_agent_sent_message(sent_message.id)
+        # Send message to contact with proper error handling
+        try:
+            sent_message = await agent.client.send_message(contact_id, message)
+            if sent_message:
+                conv_manager.mark_agent_sent_message(sent_message.id)
+
+        except telethon_errors.FloodWaitError as e:
+            agent.handle_flood_wait(e.seconds)
+            raise ValueError(
+                f"Agent {agent.session_name} hit flood wait ({e.seconds}s). "
+                "Please try with another agent."
+            )
+
+        except telethon_errors.PeerFloodError:
+            agent.handle_flood_wait(3600)  # 1 hour block
+            raise ValueError(
+                f"Agent {agent.session_name} is spam-limited. "
+                "Please try with another agent."
+            )
+
+        except telethon_errors.UserIsBlockedError:
+            raise ValueError("User has blocked this agent. Cannot send message.")
+
+        except telethon_errors.InputUserDeactivatedError:
+            raise ValueError("User account is deactivated.")
+
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "flood" in error_msg or "spam" in error_msg:
+                agent.handle_flood_wait(1800)  # 30 min default
+                raise ValueError(f"Agent rate limited: {e}")
+            raise
 
         # Mirror to CRM topic
         try:
@@ -268,4 +346,20 @@ class CommandHandler:
         except Exception as e:
             logger.warning(f"Failed to mirror operator message to CRM topic: {e}")
 
-        logger.info(f"Sent CRM message to contact {contact_id} from web interface")
+        logger.info(f"Sent CRM message to contact {contact_id} via {agent.session_name}")
+
+    def _find_agent_by_session(self, agent_pool, session_name: str) -> Optional[AgentAccount]:
+        """Find an agent in the pool by session name."""
+        for agent in agent_pool.agents:
+            if agent.session_name == session_name:
+                return agent
+        return None
+
+    def _get_blocked_agents_info(self, agent_pool) -> str:
+        """Get info about blocked agents for error message."""
+        blocked = []
+        for agent in agent_pool.agents:
+            if not agent.is_available():
+                remaining = agent.flood_wait_remaining
+                blocked.append(f"{agent.session_name} ({remaining}s)")
+        return ", ".join(blocked) if blocked else ""

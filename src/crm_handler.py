@@ -310,26 +310,31 @@ class CRMHandler:
             channel_id: str,
             resolved_user_id: Optional[int] = None,
             _resolved_access_hash: Optional[int] = None
-        ) -> bool:
+        ) -> Optional[bool]:
             """Callback for message queue to send messages.
+
+            Returns:
+                True: Message sent successfully
+                False: Send attempted but failed (counts toward retry limit)
+                None: No agent available, skip this cycle (doesn't count as retry)
 
             Note: _resolved_access_hash kept for API compatibility but not used.
             """
             agent_pool = self.agent_pools.get(channel_id)
             if not agent_pool:
                 logger.warning(f"[QUEUE] No agent pool for channel {channel_id}")
-                return False
+                return False  # Configuration error, count as failure
 
             # Check if any agent is available
             available_agent = agent_pool.get_available_agent()
             if not available_agent:
-                logger.debug(f"[QUEUE] No available agents for channel {channel_id}")
-                return False
+                logger.debug(f"[QUEUE] No available agents for channel {channel_id} - will retry later")
+                return None  # No agent available - don't count as retry
 
             # Always use username/contact string for agents
             # (access_hash from bot is session-specific and won't work for agents)
             target: Any = contact
-            logger.info(f"[QUEUE] Using contact {contact} (resolved_id={resolved_user_id})")
+            logger.info(f"[QUEUE] Attempting to send to {contact} (resolved_id={resolved_user_id})")
 
             try:
                 success = await agent_pool.send_message(
@@ -337,10 +342,10 @@ class CRMHandler:
                     text,
                     max_retries=len(agent_pool.agents) if agent_pool.agents else 1
                 )
-                return success
+                return success  # True or False based on actual send result
             except Exception as e:
                 logger.error(f"[QUEUE] Error sending queued message: {e}")
-                return False
+                return False  # Actual error, count as failure
 
         message_queue.set_send_callback(send_callback)
         message_queue.start_retry_task()

@@ -18,6 +18,12 @@ from src.constants import (
 
 logger = logging.getLogger(__name__)
 
+# Send callback return values:
+# - True: Message sent successfully
+# - False: Send attempted but failed (counts toward retry limit)
+# - None: No agent available, skip this cycle (does NOT count toward retry limit)
+SendResult = Optional[bool]
+
 
 @dataclass
 class QueuedMessage:
@@ -54,18 +60,21 @@ class MessageQueue:
         self._queue: Dict[str, QueuedMessage] = {}  # key -> message
         self._lock = asyncio.Lock()
         self._retry_task: Optional[asyncio.Task] = None
-        # Callback signature: (contact, text, channel_id, user_id, access_hash) -> bool
-        self._send_callback: Optional[Callable[[str, str, str, Optional[int], Optional[int]], Awaitable[bool]]] = None
+        # Callback signature: (contact, text, channel_id, user_id, access_hash) -> SendResult
+        # Returns: True=success, False=failed (retry), None=no agent (skip, don't count)
+        self._send_callback: Optional[Callable[[str, str, str, Optional[int], Optional[int]], Awaitable[SendResult]]] = None
 
     def set_send_callback(
         self,
-        callback: Callable[[str, str, str, Optional[int], Optional[int]], Awaitable[bool]]
+        callback: Callable[[str, str, str, Optional[int], Optional[int]], Awaitable[SendResult]]
     ) -> None:
         """
         Set the callback for sending messages.
 
         Args:
-            callback: async function(contact, text, channel_id, user_id, access_hash) -> bool
+            callback: async function(contact, text, channel_id, user_id, access_hash) -> SendResult
+                      Returns True on success, False on failure (counts retry),
+                      None if no agent available (skips, doesn't count retry)
         """
         self._send_callback = callback
 
@@ -175,6 +184,7 @@ class MessageQueue:
         successful = 0
         failed = 0
         dropped = 0
+        skipped = 0
 
         for msg in messages:
             # Skip if too many retries
@@ -185,13 +195,14 @@ class MessageQueue:
                         dropped += 1
                         logger.warning(
                             f"[QUEUE] Dropped message for {msg.contact} "
-                            f"(max retries exceeded)"
+                            f"(max retries exceeded: {msg.retry_count})"
                         )
                 continue
 
             try:
                 # Attempt to send (with resolved user info if available)
-                success = await self._send_callback(
+                # Returns: True=success, False=failed, None=no agent available
+                result = await self._send_callback(
                     msg.contact,
                     msg.text,
                     msg.channel_id,
@@ -199,7 +210,7 @@ class MessageQueue:
                     msg.resolved_access_hash
                 )
 
-                if success:
+                if result is True:
                     # Remove from queue
                     async with self._lock:
                         if msg.key in self._queue:
@@ -208,12 +219,22 @@ class MessageQueue:
                     logger.info(
                         f"[QUEUE] Successfully sent queued message to {msg.contact}"
                     )
+                elif result is None:
+                    # No agent available - skip this cycle, don't count as retry
+                    skipped += 1
+                    logger.debug(
+                        f"[QUEUE] Skipped {msg.contact} - no agents available"
+                    )
                 else:
-                    # Increment retry count
+                    # result is False - actual send failure, increment retry count
                     async with self._lock:
                         if msg.key in self._queue:
                             self._queue[msg.key].retry_count += 1
                     failed += 1
+                    logger.warning(
+                        f"[QUEUE] Failed to send to {msg.contact} "
+                        f"(retry {msg.retry_count + 1}/{self.MAX_RETRIES})"
+                    )
 
             except Exception as e:
                 # Update error and retry count
@@ -229,10 +250,10 @@ class MessageQueue:
             # Small delay between messages to avoid rate limits
             await asyncio.sleep(2)
 
-        if successful > 0 or failed > 0 or dropped > 0:
+        if successful > 0 or failed > 0 or dropped > 0 or skipped > 0:
             logger.info(
                 f"[QUEUE] Processed: {successful} sent, {failed} failed, "
-                f"{dropped} dropped"
+                f"{skipped} skipped (no agents), {dropped} dropped"
             )
 
     async def _retry_loop(self) -> None:

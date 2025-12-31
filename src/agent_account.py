@@ -233,6 +233,11 @@ class AgentAccount:
         """Time until which FloodWait is active (for AgentPool compatibility)"""
         return self._flood_tracker.flood_wait_until
 
+    @property
+    def flood_wait_remaining(self) -> int:
+        """Remaining seconds of flood wait block."""
+        return self._flood_tracker.remaining_seconds
+
     def is_available(self) -> bool:
         """
         Check agent availability for sending messages

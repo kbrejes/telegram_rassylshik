@@ -272,6 +272,7 @@ async def get_vacancy_messages(vacancy_id: int):
 class SendMessageRequest(BaseModel):
     contact_id: str
     message: str
+    agent_session: Optional[str] = None  # Optional: manually select agent
 
 
 @router.post("/send-message")
@@ -281,10 +282,14 @@ async def send_crm_message(request: SendMessageRequest):
         from src.command_queue import command_queue
 
         # Add command to queue for bot to process
-        command_id = command_queue.add_command("send_crm_message", {
+        command_data = {
             "contact_id": request.contact_id,
             "message": request.message
-        })
+        }
+        if request.agent_session:
+            command_data["agent_session"] = request.agent_session
+
+        command_id = command_queue.add_command("send_crm_message", command_data)
 
         # Wait briefly for command to be processed
         import asyncio
@@ -302,6 +307,58 @@ async def send_crm_message(request: SendMessageRequest):
     except Exception as e:
         logger.error(f"Error sending CRM message: {e}")
         return {"success": False, "error": str(e)}
+
+
+@router.get("/agents-for-contact/{contact_id}")
+async def get_agents_for_contact(contact_id: int):
+    """Get available agents for sending messages to a contact.
+
+    Returns list of agents with their status (available, blocked, flood wait time).
+    """
+    try:
+        from src.connection_status import status_manager
+        import time
+
+        # Get all agent statuses
+        status = status_manager.get_all_status()
+        agents_status = status.get("agents", {})
+
+        agents = []
+        for session_name, agent_info in agents_status.items():
+            if agent_info.get("status") not in ["connected"]:
+                continue
+
+            flood_wait_until = agent_info.get("flood_wait_until")
+            is_available = True
+            flood_wait_remaining = 0
+
+            if flood_wait_until:
+                remaining = int(flood_wait_until - time.time())
+                if remaining > 0:
+                    is_available = False
+                    flood_wait_remaining = remaining
+
+            user_info = agent_info.get("user_info", {})
+            display_name = user_info.get("first_name", session_name)
+            if user_info.get("username"):
+                display_name = f"{display_name} (@{user_info.get('username')})"
+
+            agents.append({
+                "session_name": session_name,
+                "display_name": display_name,
+                "is_available": is_available,
+                "flood_wait_remaining": flood_wait_remaining,
+                "status": "available" if is_available else f"blocked ({flood_wait_remaining}s)"
+            })
+
+        # Sort: available first, then by name
+        agents.sort(key=lambda a: (not a["is_available"], a["display_name"]))
+
+        return {"success": True, "agents": agents}
+
+    except Exception as e:
+        logger.error(f"Error getting agents for contact: {e}")
+        return {"success": False, "error": str(e), "agents": []}
 
 
 @router.get("/{vacancy_id}/conversation")
