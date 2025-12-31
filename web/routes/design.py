@@ -2,6 +2,7 @@
 Design settings routes - manage design tokens via web UI.
 """
 import re
+import json
 import logging
 from pathlib import Path
 from fastapi import APIRouter, Request
@@ -19,6 +20,29 @@ templates = Jinja2Templates(directory="web/templates")
 # Path to design tokens CSS
 DESIGN_TOKENS_PATH = Path(__file__).parent.parent / "static" / "design-tokens.css"
 BRANDING_PATH = Path(__file__).parent.parent / "static" / "branding.json"
+
+# Default branding values
+DEFAULT_BRANDING = {
+    "icon": "lightning",
+    "customIconUrl": "",
+    "appName": "Job Notification",
+    "tagline": "Bot Dashboard",
+    "gradientFrom": "#8b5cf6",
+    "gradientTo": "#9333ea"
+}
+
+def get_branding() -> dict:
+    """Load branding from JSON file or return defaults"""
+    try:
+        if BRANDING_PATH.exists():
+            with open(BRANDING_PATH) as f:
+                return {**DEFAULT_BRANDING, **json.load(f)}
+    except Exception:
+        pass
+    return DEFAULT_BRANDING
+
+# Add branding as a global template variable
+templates.env.globals["branding"] = get_branding
 
 
 class DesignTokensUpdate(BaseModel):
