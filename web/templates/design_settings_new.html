@@ -380,6 +380,38 @@
             updateBrandingPreview();
         }
 
+        function updateSidebarBranding(branding) {
+            // Update sidebar gradient
+            const logoBg = document.getElementById('sidebar-logo-bg');
+            if (logoBg) {
+                logoBg.style.background = `linear-gradient(to bottom right, ${branding.gradientFrom}, ${branding.gradientTo})`;
+            }
+
+            // Update sidebar icon
+            const iconSvg = document.getElementById('sidebar-logo-icon');
+            const customImg = document.getElementById('sidebar-logo-custom');
+
+            if (branding.customIconUrl) {
+                if (iconSvg) iconSvg.style.display = 'none';
+                if (customImg) {
+                    customImg.src = branding.customIconUrl;
+                    customImg.style.display = 'block';
+                }
+            } else if (availableIcons[branding.icon]) {
+                if (customImg) customImg.style.display = 'none';
+                if (iconSvg) {
+                    iconSvg.innerHTML = availableIcons[branding.icon];
+                    iconSvg.style.display = 'block';
+                }
+            }
+
+            // Update sidebar text
+            const appName = document.getElementById('sidebar-app-name');
+            const tagline = document.getElementById('sidebar-tagline');
+            if (appName) appName.textContent = branding.appName;
+            if (tagline) tagline.textContent = branding.tagline;
+        }
+
         function updateBrandingPreview() {
             const customUrl = document.getElementById('custom-icon-url').value.trim();
             const appName = document.getElementById('app-name').value;
@@ -406,6 +438,15 @@
             }
 
             // Sync color pickers
+            updateSidebarBranding({
+                icon: selectedIcon,
+                customIconUrl: customUrl,
+                appName: appName,
+                tagline: tagline,
+                gradientFrom: gradientFrom,
+                gradientTo: gradientTo
+            });
+
             if (gradientFrom.match(/^#[0-9A-Fa-f]{6}$/)) {
                 document.getElementById('gradient-from-picker').value = gradientFrom;
             }
@@ -460,6 +501,10 @@
                 }
 
                 currentBranding = branding;
+
+                // Update sidebar immediately after save
+                updateSidebarBranding(branding);
+
                 return true;
             } catch (error) {
                 console.error('Error saving branding:', error);
