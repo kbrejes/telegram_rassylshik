@@ -356,6 +356,7 @@
                 if (cachedVacancy) {
                     currentVacancy = cachedVacancy.vacancy;
                     currentContactId = cachedVacancy.vacancy.contact_id;
+                    currentContactUsername = cachedVacancy.vacancy.contact_username;
                     renderVacancy(cachedVacancy.vacancy);
                 }
 
@@ -366,6 +367,7 @@
                     AppCache.set(`vacancy_${newId}`, data, 60000);
                     currentVacancy = data.vacancy;
                     currentContactId = data.vacancy.contact_id;
+                    currentContactUsername = data.vacancy.contact_username;
                     renderVacancy(data.vacancy);
                 }
 
@@ -567,7 +569,8 @@
         let availableAgents = [];
 
         async function loadAgents() {
-            if (!currentContactId) return;
+            // Need either contact_id or username to send messages
+            if (!currentContactId && !currentContactUsername) return;
 
             const selector = document.getElementById('agent-selector');
             const refreshIcon = document.getElementById('refresh-agents-icon');
@@ -576,7 +579,8 @@
             refreshIcon?.classList.add('animate-spin');
 
             try {
-                const response = await fetch(`/api/vacancies/agents-for-contact/${currentContactId}`);
+                // Use general agents endpoint (doesn't require contact_id)
+                const response = await fetch('/api/vacancies/agents');
                 const data = await response.json();
 
                 if (data.success && data.agents) {

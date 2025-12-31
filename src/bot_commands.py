@@ -309,6 +309,10 @@ class CommandHandler:
         # Determine send target: contact_id or username
         send_target = contact_id if contact_id else contact_username
 
+        # Normalize username (add @ prefix if missing)
+        if isinstance(send_target, str) and not send_target.startswith('@'):
+            send_target = f"@{send_target}"
+
         # Record in AI context (only if we have contact_id)
         if contact_id:
             ai_handler = self.bot.crm.ai_handlers.get(channel_id)

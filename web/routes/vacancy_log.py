@@ -299,9 +299,9 @@ async def send_crm_message(request: SendMessageRequest):
 
         command_id = command_queue.add_command("send_crm_message", command_data)
 
-        # Wait briefly for command to be processed
+        # Wait for command to be processed (15 seconds timeout)
         import asyncio
-        for _ in range(10):  # Wait up to 5 seconds
+        for _ in range(30):  # Wait up to 15 seconds
             await asyncio.sleep(0.5)
             cmd = command_queue.get_command_status(command_id)
             if cmd and cmd.status in ["completed", "failed"]:
@@ -317,12 +317,27 @@ async def send_crm_message(request: SendMessageRequest):
         return {"success": False, "error": str(e)}
 
 
+@router.get("/agents")
+async def get_all_agents():
+    """Get all available agents for sending messages.
+
+    Returns list of agents with their status (available, blocked, flood wait time).
+    """
+    return await _get_agents_list()
+
+
 @router.get("/agents-for-contact/{contact_id}")
 async def get_agents_for_contact(contact_id: int):
     """Get available agents for sending messages to a contact.
 
     Returns list of agents with their status (available, blocked, flood wait time).
+    Note: Currently returns all agents, contact_id reserved for future channel filtering.
     """
+    return await _get_agents_list()
+
+
+async def _get_agents_list():
+    """Internal helper to get agent list."""
     try:
         from src.connection_status import status_manager
         import time
