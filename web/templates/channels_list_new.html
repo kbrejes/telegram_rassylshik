@@ -4,54 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Notification Bot</title>
-    <!-- Alpine.js for reactivity -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Client-side caching for faster navigation -->
+    {% include 'partials/design_system.html' %}
     <script src="/static/js/cache.js"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        sidebar: {
-                            DEFAULT: 'hsl(240 5.9% 10%)',
-                            foreground: 'hsl(240 4.8% 95.9%)',
-                            accent: 'hsl(240 3.7% 15.9%)',
-                            border: 'hsl(240 3.7% 15.9%)',
-                        },
-                        accent: '#8b5cf6',
-                        dark: {
-                            950: '#09090b',
-                            900: '#0c0c0f',
-                            850: '#111114',
-                            800: '#18181b',
-                            700: '#27272a',
-                            600: '#3f3f46',
-                        }
-                    },
-                    boxShadow: {
-                        'glow': '0 0 15px rgba(139, 92, 246, 0.15)',
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Page-specific Tailwind components -->
     <style type="text/tailwindcss">
-        @layer utilities {
-            .scrollbar-thin::-webkit-scrollbar {
-                width: 6px;
-            }
-            .scrollbar-thin::-webkit-scrollbar-track {
-                background: transparent;
-            }
-            .scrollbar-thin::-webkit-scrollbar-thumb {
-                background: #374151;
-                border-radius: 3px;
-            }
-        }
         @layer components {
             .sort-btn-active {
                 @apply bg-white text-gray-900;

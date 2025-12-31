@@ -1,0 +1,150 @@
+{#
+    Global Design System
+
+    Include this in the <head> of every template:
+    {% include 'partials/design_system.html' %}
+
+    To change the design globally, edit:
+    - /static/design-tokens.css (colors, fonts, spacing, etc.)
+    - This file (Tailwind config structure)
+#}
+
+<!-- Design Tokens (CSS Variables) -->
+<link rel="stylesheet" href="/static/design-tokens.css">
+
+<!-- Alpine.js for interactivity -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Tailwind Configuration -->
+<script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                colors: {
+                    // Brand colors from CSS variables
+                    accent: {
+                        DEFAULT: 'var(--color-accent)',
+                        hover: 'var(--color-accent-hover)',
+                        light: 'var(--color-accent-light)',
+                    },
+
+                    // Semantic colors
+                    success: {
+                        DEFAULT: 'var(--color-success)',
+                        light: 'var(--color-success-light)',
+                    },
+                    warning: {
+                        DEFAULT: 'var(--color-warning)',
+                        light: 'var(--color-warning-light)',
+                    },
+                    error: {
+                        DEFAULT: 'var(--color-error)',
+                        light: 'var(--color-error-light)',
+                    },
+                    info: 'var(--color-info)',
+
+                    // Dark theme palette
+                    dark: {
+                        950: 'var(--dark-950)',
+                        900: 'var(--dark-900)',
+                        850: 'var(--dark-850)',
+                        800: 'var(--dark-800)',
+                        700: 'var(--dark-700)',
+                        600: 'var(--dark-600)',
+                        500: 'var(--dark-500)',
+                        400: 'var(--dark-400)',
+                        300: 'var(--dark-300)',
+                        200: 'var(--dark-200)',
+                        100: 'var(--dark-100)',
+                        50: 'var(--dark-50)',
+                    },
+
+                    // Sidebar
+                    sidebar: {
+                        DEFAULT: 'var(--sidebar-bg)',
+                        foreground: 'var(--sidebar-fg)',
+                        accent: 'var(--sidebar-accent)',
+                        border: 'var(--sidebar-border)',
+                    },
+                },
+
+                fontFamily: {
+                    sans: 'var(--font-sans)',
+                    mono: 'var(--font-mono)',
+                },
+
+                fontSize: {
+                    xs: 'var(--text-xs)',
+                    sm: 'var(--text-sm)',
+                    base: 'var(--text-base)',
+                    lg: 'var(--text-lg)',
+                    xl: 'var(--text-xl)',
+                    '2xl': 'var(--text-2xl)',
+                    '3xl': 'var(--text-3xl)',
+                },
+
+                borderRadius: {
+                    sm: 'var(--radius-sm)',
+                    DEFAULT: 'var(--radius-md)',
+                    md: 'var(--radius-md)',
+                    lg: 'var(--radius-lg)',
+                    xl: 'var(--radius-xl)',
+                    '2xl': 'var(--radius-2xl)',
+                },
+
+                boxShadow: {
+                    sm: 'var(--shadow-sm)',
+                    DEFAULT: 'var(--shadow-md)',
+                    md: 'var(--shadow-md)',
+                    lg: 'var(--shadow-lg)',
+                    xl: 'var(--shadow-xl)',
+                },
+
+                transitionDuration: {
+                    fast: 'var(--transition-fast)',
+                    normal: 'var(--transition-normal)',
+                    slow: 'var(--transition-slow)',
+                },
+
+                zIndex: {
+                    dropdown: 'var(--z-dropdown)',
+                    sticky: 'var(--z-sticky)',
+                    modal: 'var(--z-modal)',
+                    tooltip: 'var(--z-tooltip)',
+                    toast: 'var(--z-toast)',
+                },
+            }
+        }
+    }
+</script>
+
+<!-- Global Tailwind Utilities -->
+<style type="text/tailwindcss">
+    @layer utilities {
+        /* Custom scrollbar */
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 3px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background: #4b5563;
+        }
+    }
+</style>
+
+<!-- Dark mode initialization (prevents flash) -->
+<script>
+    if (localStorage.getItem('darkMode') === 'true') {
+        document.documentElement.classList.add('dark');
+    }
+</script>
