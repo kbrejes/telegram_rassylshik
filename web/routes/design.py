@@ -158,8 +158,9 @@ def update_css_variables(css_content: str, updates: Dict[str, str]) -> str:
 
     for var_name, new_value in updates.items():
         # Pattern to match the variable and preserve the comment
+        # Use [^;]* (zero or more) to handle empty values
         pattern = re.compile(
-            rf'({re.escape(var_name)}):\s*[^;]+;(\s*/\*[^*]*\*/)?',
+            rf'({re.escape(var_name)}):\s*[^;]*;(\s*/\*[^*]*\*/)?',
             re.MULTILINE
         )
 
