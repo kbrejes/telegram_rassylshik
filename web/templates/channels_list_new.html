@@ -373,11 +373,11 @@
         }
 
         // Show tooltip on hover (desktop)
-        function showTooltip(event, idx, type = 'text') {
+        function showTooltip(event, vacancyId, type = 'text') {
             if (window.innerWidth < 768) return; // Skip on mobile, use tap instead
 
             clearTimeout(tooltipTimeout);
-            const v = peekVacancies[idx];
+            const v = peekVacancies.find(vac => vac.id === vacancyId);
             if (!v) return;
 
             const tooltip = document.getElementById('vacancy-tooltip');
@@ -404,12 +404,12 @@
         let activeTooltipType = null;
 
         // Toggle tooltip on tap (mobile)
-        function toggleTooltip(event, idx, type = 'text') {
+        function toggleTooltip(event, vacancyId, type = 'text') {
             const tooltip = document.getElementById('vacancy-tooltip');
-            const tooltipKey = `${idx}-${type}`;
+            const tooltipKey = `${vacancyId}-${type}`;
 
             // If same tooltip is open, close it
-            if (activeTooltipIdx === idx && activeTooltipType === type && tooltip.classList.contains('show')) {
+            if (activeTooltipIdx === vacancyId && activeTooltipType === type && tooltip.classList.contains('show')) {
                 hideTooltip();
                 return;
             }
@@ -417,7 +417,7 @@
             // Close any open tooltip first
             document.querySelectorAll('.peek-icon').forEach(el => el.classList.remove('active'));
 
-            const v = peekVacancies[idx];
+            const v = peekVacancies.find(vac => vac.id === vacancyId);
             if (!v) return;
 
             tooltip.textContent = getTooltipContent(v, type);
@@ -434,7 +434,7 @@
             tooltip.classList.add('show');
 
             event.target.closest('.peek-icon').classList.add('active');
-            activeTooltipIdx = idx;
+            activeTooltipIdx = vacancyId;
             activeTooltipType = type;
         }
 
@@ -446,8 +446,8 @@
         });
 
         // Show vacancy preview modal (like /vacancy page)
-        function showVacancyModal(idx) {
-            const v = peekVacancies[idx];
+        function showVacancyModal(vacancyId) {
+            const v = peekVacancies.find(vac => vac.id === vacancyId);
             if (!v) return;
 
             const statusClass = v.is_relevant
@@ -722,7 +722,7 @@
                     let html = `<table class="w-full text-sm">
                         <tbody class="divide-y divide-gray-100 dark:divide-dark-700">`;
 
-                    channelVacancies.slice(0, 50).forEach((v, idx) => {
+                    channelVacancies.slice(0, 50).forEach((v) => {
                         const statusClass = v.is_relevant ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
                         const statusLabel = v.is_relevant ? 'Passed' : getFilteredLabel(v.ai_reason);
                         const time = formatTime(v.processed_at);
@@ -743,13 +743,13 @@
                                 </td>
                                 <td class="px-3 py-2 text-right">
                                     <div class="flex items-center justify-end gap-1.5">
-                                        <button class="peek-icon text-gray-400 dark:text-gray-500 p-1 hover:bg-gray-200 dark:hover:bg-dark-600 rounded" onclick="event.stopPropagation(); showVacancyModal(${idx})" title="Preview">
+                                        <button class="peek-icon text-gray-400 dark:text-gray-500 p-1 hover:bg-gray-200 dark:hover:bg-dark-600 rounded" onclick="event.stopPropagation(); showVacancyModal(${v.id})" title="Preview">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                                             </svg>
                                         </button>
-                                        <button class="peek-icon status-badge px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}" onclick="event.stopPropagation(); toggleTooltip(event, ${idx}, 'reason')" onmouseenter="showTooltip(event, ${idx}, 'reason')" onmouseleave="hideTooltip()">${statusLabel}</button>
+                                        <button class="peek-icon status-badge px-2 py-0.5 text-xs font-medium rounded-full ${statusClass}" onclick="event.stopPropagation(); toggleTooltip(event, ${v.id}, 'reason')" onmouseenter="showTooltip(event, ${v.id}, 'reason')" onmouseleave="hideTooltip()">${statusLabel}</button>
                                         <span class="w-1.5 h-1.5 rounded-full ${ledClass}"></span>
                                     </div>
                                 </td>
