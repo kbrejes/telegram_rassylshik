@@ -266,11 +266,22 @@ async def get_branding():
 
 @router.put("/api/design/branding")
 async def update_branding(request: BrandingUpdate):
-    """Update branding settings."""
+    """Update branding settings and sync gradient colors to CSS tokens."""
     import json
     try:
         branding = request.dict()
         BRANDING_PATH.write_text(json.dumps(branding, indent=4))
+
+        # Also sync gradient colors to CSS design tokens so buttons use the same colors
+        if DESIGN_TOKENS_PATH.exists():
+            css_content = DESIGN_TOKENS_PATH.read_text()
+            gradient_updates = {
+                "--color-gradient-from": request.gradientFrom,
+                "--color-gradient-to": request.gradientTo
+            }
+            updated_css = update_css_variables(css_content, gradient_updates)
+            DESIGN_TOKENS_PATH.write_text(updated_css)
+            logger.info(f"Synced gradient colors to design tokens")
 
         logger.info(f"Updated branding: icon={request.icon}, appName={request.appName}")
         return {"success": True}
