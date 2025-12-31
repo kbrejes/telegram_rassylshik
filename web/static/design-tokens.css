@@ -10,6 +10,8 @@
     --color-accent: #8b5cf6;           /* Violet - primary brand color */
     --color-accent-hover: #7c3aed;     /* Darker violet for hover states */
     --color-accent-light: #a78bfa;     /* Lighter violet for dark mode */
+    --color-gradient-from: #8b5cf6;    /* Gradient start color */
+    --color-gradient-to: #9333ea;      /* Gradient end color */
 
     /* ========== SEMANTIC COLORS ========== */
     --color-success: #22c55e;          /* Green - success states */
