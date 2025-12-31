@@ -103,7 +103,33 @@
             document.documentElement.style.setProperty(varName, value);
         }
 
-        function handleInputChange(varName, value) {
+        function normalizeColorValue(value) {
+            // If it looks like a hex color without #, add it
+            const trimmed = value.trim();
+            if (/^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{6}$/.test(trimmed)) {
+                return '#' + trimmed;
+            }
+            return trimmed;
+        }
+
+        function handleInputChange(varName, value, isColorInput = false) {
+            // Normalize hex colors (add # if missing)
+            if (isColorInput) {
+                value = normalizeColorValue(value);
+                // Update the text input with normalized value
+                const input = document.querySelector(`[data-var="${varName}"]`);
+                if (input && input.value !== value) {
+                    input.value = value;
+                }
+                // Sync color picker if it's a valid hex
+                if (value.match(/^#[0-9A-Fa-f]{6}$/)) {
+                    const colorPicker = input?.parentElement?.querySelector('input[type="color"]');
+                    if (colorPicker) {
+                        colorPicker.value = value;
+                    }
+                }
+            }
+
             pendingChanges[varName] = value;
             applyLivePreview(varName, value);
 
@@ -135,8 +161,9 @@
                         data-var="${variable.name}"
                         value="${variable.value}"
                         class="flex-1 px-3 py-2 rounded-lg bg-gray-100 dark:bg-dark-700 text-gray-900 dark:text-white text-sm font-mono border-0 focus:ring-2 focus:ring-accent outline-none"
-                        onchange="handleInputChange('${variable.name}', this.value)"
-                        oninput="handleInputChange('${variable.name}', this.value)">
+                        onchange="handleInputChange('${variable.name}', this.value, true)"
+                        onblur="handleInputChange('${variable.name}', this.value, true)"
+                        placeholder="#1BA8EB or 1BA8EB">
                 </div>
             `;
         }
@@ -146,7 +173,7 @@
             if (textInput) {
                 textInput.value = hexValue;
             }
-            handleInputChange(varName, hexValue);
+            handleInputChange(varName, hexValue, true);
         }
 
         function createSizeInput(variable) {
